@@ -24,6 +24,14 @@ When the loaded cart already belongs to a customer, the current context customer
 
 Every guarded mutation requires the previous `stateVersion`. The guard rebuilds a fresh server-authoritative checkout state and blocks a stale version before the mutation handler is entered. A stale result contains the current server state so the transport layer can return a recoverable conflict response.
 
+### Per-cart serialization
+
+`CheckoutCartMutex` serializes mutation critical sections with the database server's connection-owned advisory lock. The lock name is scoped by a hash of database name/table prefix plus cart ID, so separate PrestaShop installations on one database server do not intentionally contend.
+
+Lock acquisition and release use Doctrine DBAL positional parameters (`GET_LOCK(?, ?)` / `RELEASE_LOCK(?)`). A timeout or acquisition error fails closed: the mutation callback is not run. Release always occurs in `finally`; when `RELEASE_LOCK` fails or reports that the lock was not released, the DBAL connection is closed as a final connection-owned lock release attempt.
+
+This mechanism works across PHP workers/web nodes that share the database server and does not require a custom lock table.
+
 ### Monetary tampering
 
 The state factory has no browser monetary inputs. Cart/totals fingerprints are derived from PrestaShop Core checksums and `Cart::getOrderTotal()` results.
@@ -39,17 +47,17 @@ The state factory has no browser monetary inputs. Cart/totals fingerprints are d
 | Forged carrier | Not implemented yet | Validate against current server delivery options before selection |
 | Forged payment option | Not implemented yet | Validate against current `PaymentOptionsFinder` output |
 | Stale browser state | Guard implemented | Return conflict/recovery response and prevent stale mutation |
-| Concurrent same-state writes | Not fully solved yet | Add per-cart request serialization before mutation endpoints are production-enabled |
+| Concurrent same-state writes | Per-cart mutex implemented | All mutation execution must occur inside the mutex |
 | XSS | No custom checkout rendering yet | Context-aware escaping and no untrusted raw HTML outside trusted hook/module output |
-| SQL/injection | No module SQL in current state/guard path | Parameterize any future SQL; justify direct SQL |
+| SQL/injection | Parameterized advisory-lock SQL only | Parameterize any future SQL; justify direct SQL |
 | Duplicate order submission | Not implemented yet | Final-submit idempotency/order guard is a release blocker |
 | Payment tampering | Not implemented yet | Recompute server state and use PrestaShop payment option/order validation flow |
 
-## Important concurrency note
+## Concurrency ordering rule
 
-A state token prevents an already-stale request from entering a handler, but two concurrent mutations can both begin from the same valid state before either writes. Therefore stale-state checking alone is not sufficient serialization. Mutation endpoints must not be considered production-ready until a per-cart serialization strategy is implemented and tested.
+The stale-state check and the mutation must run inside the same per-cart critical section. Checking state before acquiring the mutex would reintroduce the race: two requests could both validate the same old state and then serialize only the writes. Future mutation orchestration must therefore acquire the cart mutex first, rebuild/validate state second, mutate third, then rebuild the response state before releasing the lock.
 
-The official PrestaShop `ps_onepagecheckout` module currently serializes AJAX work per cart with a database advisory lock. Our implementation will verify the safest cross-version mechanism before adopting a lock; correctness takes priority over silently proceeding through a known race window.
+Read-only refreshes do not need this mutex unless they must provide a snapshot guaranteed not to overlap a mutation.
 
 ## Logging rules
 

@@ -19,3 +19,8 @@ services:
 
   Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator: ~
   Jzvikas\OnePageCheckout\Security\CheckoutMutationGuard: ~
+
+  Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutex:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+      $timeoutSeconds: 5

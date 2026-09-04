@@ -90,6 +90,12 @@ See `ADR-0003-prestashop-checkout-state-adapter.md`.
 
 The client cart ID is never used to load a cart. Address/carrier/payment authorization remains operation-specific and must run after this generic gate. See `docs/SECURITY.md`.
 
+## Per-cart mutation serialization
+
+`CheckoutCartMutex` uses MySQL/MariaDB connection-owned advisory locks through PrestaShop's Doctrine DBAL connection. Queries use bound parameters and the mutex fails closed when acquisition is unavailable. A mutation orchestrator must acquire this mutex before evaluating `CheckoutMutationGuard`; the state check and write therefore occur in one critical section.
+
+The lock scope includes database name/table prefix and cart ID, allowing separate shops/installations on the same database server to avoid accidental lock-name collision. No custom table or Core override is required.
+
 ## Next application boundary
 
-The next milestone is per-cart request serialization plus a shared JSON controller/response mapper. This closes the simultaneous same-state write race before real customer/address/carrier/payment mutation handlers are enabled.
+The next milestone is a shared JSON mutation orchestrator/controller response mapper that enforces POST → mutex → security/state guard → operation handler → Core recalc/state rebuild → structured response ordering. After that, the first concrete address/customer mutation can be implemented without duplicating transport/security logic.
