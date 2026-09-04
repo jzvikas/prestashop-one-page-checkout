@@ -62,6 +62,18 @@ Disable forces the checkout feature flag off before disabling the module. Uninst
 
 No custom database table exists in this phase.
 
+## Server-authoritative checkout state
+
+The application layer under `src/Checkout` provides the transport-independent state contract used by future AJAX controllers:
+
+- `CheckoutState` validates and normalizes the server snapshot;
+- `CheckoutStateVersioner` creates an opaque canonical state token;
+- `StaleCheckoutStateGuard` rejects missing/outdated versions using constant-time comparison;
+- `CheckoutSectionDependencyResolver` maps mutations to every downstream section that must be rebuilt;
+- `CheckoutRefreshResult` and `CheckoutError` define the stable machine-readable response contract.
+
+This layer deliberately contains no prices supplied by a browser. Monetary truth remains in PrestaShop Core; future state adapters will fingerprint recalculated cart/totals data rather than trust submitted values. See `ADR-0002-server-authoritative-checkout-state.md`.
+
 ## Next application boundary
 
-The next layer is a server-authoritative checkout state model used by all later AJAX operations. It will define immutable state snapshots, dependency-driven section refreshes, state-version tokens and stale-response rejection before customer/address mutation endpoints are added.
+The next milestone is a PrestaShop state factory/adapter that builds `CheckoutState` from the current cart, customer, shop, language, currency, addresses, carrier, payment selection and Core-calculated cart/totals data. After that, focused AJAX mutation endpoints can share the stale-state guard and dependency graph.

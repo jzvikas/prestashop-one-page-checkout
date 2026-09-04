@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration-shell stage. Installation/lifecycle and version-specific hooks exist, but checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
+> Current status: safe integration-shell + server-state foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
 
 ## Runtime targets
 
@@ -23,7 +23,9 @@ The module detects and isolates the checkout integration path without blindly lo
 
 The module installs only the checkout hook needed by the current PrestaShop family. The checkout-flow flag is disabled by default and is forced off on module disable. At this stage both hook entry points preserve native checkout rather than exposing a partial custom flow.
 
-See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md` and `docs/ADR-0001-checkout-integration-strategy.md`.
+The application layer also has a canonical server-state version token, stale-state guard and conservative section dependency graph for future AJAX mutations.
+
+See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/ADR-0001-checkout-integration-strategy.md` and `docs/ADR-0002-server-authoritative-checkout-state.md`.
 
 ## Development setup
 
