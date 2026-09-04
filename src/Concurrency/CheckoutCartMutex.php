@@ -9,7 +9,7 @@ use Doctrine\DBAL\Connection;
 use InvalidArgumentException;
 use Throwable;
 
-final readonly class CheckoutCartMutex
+final readonly class CheckoutCartMutex implements CheckoutCartMutexInterface
 {
     private const MAX_TIMEOUT_SECONDS = 30;
 

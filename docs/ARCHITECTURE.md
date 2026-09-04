@@ -92,10 +92,25 @@ The client cart ID is never used to load a cart. Address/carrier/payment authori
 
 ## Per-cart mutation serialization
 
-`CheckoutCartMutex` uses MySQL/MariaDB connection-owned advisory locks through PrestaShop's Doctrine DBAL connection. Queries use bound parameters and the mutex fails closed when acquisition is unavailable. A mutation orchestrator must acquire this mutex before evaluating `CheckoutMutationGuard`; the state check and write therefore occur in one critical section.
+`CheckoutCartMutex` uses MySQL/MariaDB connection-owned advisory locks through PrestaShop's Doctrine DBAL connection. Queries use bound parameters and the mutex fails closed when acquisition is unavailable. A mutation orchestrator acquires this mutex before evaluating `CheckoutMutationGuard`; the state check and write therefore occur in one critical section.
 
 The lock scope includes database name/table prefix and cart ID, allowing separate shops/installations on the same database server to avoid accidental lock-name collision. No custom table or Core override is required.
 
+## Mutation orchestration
+
+`CheckoutMutationOrchestrator` defines one ordering for all future state-changing handlers:
+
+1. reject an invalid CSRF token cheaply before lock acquisition;
+2. acquire the server-side cart mutex;
+3. repeat the complete mutation guard inside the critical section;
+4. resolve all affected sections from `CheckoutSectionDependencyResolver`;
+5. execute the operation handler with guarded server state and the required section list;
+6. reject successful handler output that omitted any required section;
+7. rebuild the server-authoritative checkout state after the operation and issue the new state version;
+8. return the stable `CheckoutRefreshResult` contract before releasing the mutex.
+
+Unexpected handler/programming exceptions deliberately propagate to the future transport/controller boundary for safe server logging and generic customer errors. Lock contention is converted into a distinct busy result without executing the handler.
+
 ## Next application boundary
 
-The next milestone is a shared JSON mutation orchestrator/controller response mapper that enforces POST → mutex → security/state guard → operation handler → Core recalc/state rebuild → structured response ordering. After that, the first concrete address/customer mutation can be implemented without duplicating transport/security logic.
+The next milestone is a JSON/HTTP response mapper and thin shared module front-controller base. It will map security rejections, stale-state conflicts, lock contention and completed refresh results to stable HTTP/JSON responses without exposing stack traces. After that, the first concrete address/customer operation can be added.

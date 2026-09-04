@@ -24,3 +24,8 @@ services:
     arguments:
       $connection: '@doctrine.dbal.default_connection'
       $timeoutSeconds: 5
+
+  Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutexInterface:
+    alias: Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutex
+
+  Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
