@@ -76,4 +76,7 @@ assertSameValue(CheckoutIntegrationStrategy::Unsupported, $guarded->strategy, 'M
 $unsupported = (new CheckoutCapabilityDetector(new FakeRuntimeProbe('8.2.0', false, false, true)))->detect();
 assertSameValue(CheckoutIntegrationStrategy::Unsupported, $unsupported->strategy, 'PrestaShop before 9.0 is unsupported.');
 
+$futureMajor = (new CheckoutCapabilityDetector(new FakeRuntimeProbe('10.0.0', true, true, true)))->detect();
+assertSameValue(CheckoutIntegrationStrategy::Unsupported, $futureMajor->strategy, 'Unsupported future major versions must fail closed until explicitly verified.');
+
 fwrite(STDOUT, "Checkout capability smoke tests passed.\n");

@@ -31,5 +31,10 @@ jobs:
       - name: PHP syntax
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
 
-      - name: Capability smoke tests
-        run: php tests/Smoke/CheckoutCapabilityDetectorSmokeTest.php
+      - name: Smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in tests/Smoke/*Test.php; do
+            php "$test"
+          done

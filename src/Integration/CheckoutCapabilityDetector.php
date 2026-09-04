@@ -46,6 +46,10 @@ final readonly class CheckoutCapabilityDetector
         bool $providerHookAvailable,
         bool $checkoutRenderHookAvailable,
     ): CheckoutIntegrationStrategy {
+        if (version_compare($version, '9.0.0', '<') || version_compare($version, '10.0.0', '>=')) {
+            return CheckoutIntegrationStrategy::Unsupported;
+        }
+
         if (
             version_compare($version, '9.2.0', '>=')
             && $providerInterfaceAvailable
@@ -55,8 +59,7 @@ final readonly class CheckoutCapabilityDetector
         }
 
         if (
-            version_compare($version, '9.0.0', '>=')
-            && version_compare($version, '9.2.0', '<')
+            version_compare($version, '9.2.0', '<')
             && $checkoutRenderHookAvailable
         ) {
             return CheckoutIntegrationStrategy::CheckoutRenderHook;

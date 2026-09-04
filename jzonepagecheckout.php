@@ -13,6 +13,14 @@ if (is_file($autoload)) {
 
 final class JzOnePageCheckout extends Module
 {
+    public const CONFIG_CHECKOUT_ENABLED = 'JZOPC_CHECKOUT_ENABLED';
+
+    /**
+     * Fail closed until a version-specific checkout process/adapter is implemented and tested.
+     * Module installation and hook registration are safe before checkout takeover is enabled.
+     */
+    private const INTEGRATION_SHELL_READY = false;
+
     public function __construct()
     {
         $this->name = 'jzonepagecheckout';
@@ -38,5 +46,108 @@ final class JzOnePageCheckout extends Module
             [],
             'Modules.Jzonepagecheckout.Admin'
         );
+    }
+
+    public function isUsingNewTranslationSystem(): bool
+    {
+        return true;
+    }
+
+    public function install()
+    {
+        if (!$this->integrationClassesAvailable()) {
+            return false;
+        }
+
+        $hookPlan = \Jzvikas\OnePageCheckout\Integration\CheckoutHookPlan::forPrestaShopVersion((string) _PS_VERSION_);
+        if ($hookPlan->hooks === []) {
+            return false;
+        }
+
+        if (!parent::install()) {
+            return false;
+        }
+
+        if (!Configuration::updateValue(self::CONFIG_CHECKOUT_ENABLED, false)) {
+            parent::uninstall();
+
+            return false;
+        }
+
+        foreach ($hookPlan->hooks as $hookName) {
+            if ($this->registerHook($hookName)) {
+                continue;
+            }
+
+            Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
+            parent::uninstall();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    public function enable($force_all = false)
+    {
+        return parent::enable((bool) $force_all);
+    }
+
+    public function disable($force_all = false)
+    {
+        if (!Configuration::updateValue(self::CONFIG_CHECKOUT_ENABLED, false)) {
+            return false;
+        }
+
+        return parent::disable((bool) $force_all);
+    }
+
+    public function uninstall()
+    {
+        $configurationDeleted = Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
+
+        return $configurationDeleted && parent::uninstall();
+    }
+
+    public function hookActionCheckoutBuildProcess(array $params = []): mixed
+    {
+        if (!$this->canActivateCustomCheckout()) {
+            return null;
+        }
+
+        return null;
+    }
+
+    public function hookActionCheckoutRender(array $params = []): void
+    {
+        if (!$this->canActivateCustomCheckout()) {
+            return;
+        }
+    }
+
+    private function canActivateCustomCheckout(): bool
+    {
+        if (!$this->integrationClassesAvailable()) {
+            return false;
+        }
+
+        $detector = new \Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector(
+            new \Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe()
+        );
+        $policy = new \Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy();
+
+        return $policy->decide(
+            capabilities: $detector->detect(),
+            featureEnabled: (bool) Configuration::get(self::CONFIG_CHECKOUT_ENABLED),
+            integrationShellReady: self::INTEGRATION_SHELL_READY,
+        )->allowed;
+    }
+
+    private function integrationClassesAvailable(): bool
+    {
+        return class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutHookPlan::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe::class);
     }
 }
