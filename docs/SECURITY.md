@@ -42,6 +42,10 @@ This mechanism works across PHP workers/web nodes that share the database server
 
 The state factory has no browser monetary inputs. Cart/totals fingerprints are derived from PrestaShop Core checksums and `Cart::getOrderTotal()` results.
 
+### Rendering / XSS boundary
+
+Module-owned address, delivery and summary markup escapes ordinary presented strings according to HTML context. The delivery template intentionally renders only Core/module hook HTML (`displayCarrierExtraContent`, `displayBeforeCarrier`, `displayAfterCarrier`) without escaping; these values originate from PrestaShop's trusted hook execution boundary and are not browser-submitted HTML. New renderers must keep raw HTML boundaries explicit and must not widen them to request data or arbitrary stored customer input.
+
 ## Threat status
 
 | Threat | Current status | Release requirement |
@@ -50,11 +54,11 @@ The state factory has no browser monetary inputs. Cart/totals fingerprints are d
 | Cross-cart/cart takeover | Generic cart binding implemented | Never load submitted cart IDs in mutation handlers |
 | Customer mismatch | Generic guard implemented | Add resource ownership checks per handler |
 | Address IDOR | Selection/parser guard implemented | Concrete address endpoint must use orchestrator + selection service |
-| Forged carrier | Not implemented yet | Validate against current server delivery options before selection |
+| Forged carrier | Rendering uses current Core options; mutation authorization not implemented yet | Validate the submitted delivery-option key against the freshly generated server delivery options before selection |
 | Forged payment option | Not implemented yet | Validate against current `PaymentOptionsFinder` output |
 | Stale browser state | Guard implemented | Return conflict/recovery response and prevent stale mutation |
 | Concurrent same-state writes | Per-cart mutex implemented | All mutation execution must occur inside the mutex |
-| XSS | No custom checkout rendering yet | Context-aware escaping and no untrusted raw HTML outside trusted hook/module output |
+| XSS | Module-owned rendering escapes normal values; carrier hook HTML is an explicit trusted boundary | Keep raw hook/module HTML isolated; never render browser-controlled HTML with `nofilter` |
 | SQL/injection | Parameterized advisory-lock SQL only | Parameterize any future SQL; justify direct SQL |
 | Duplicate order submission | Not implemented yet | Final-submit idempotency/order guard is a release blocker |
 | Payment tampering | Not implemented yet | Recompute server state and use PrestaShop payment option/order validation flow |
