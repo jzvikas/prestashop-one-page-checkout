@@ -1,0 +1,11 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  Jzvikas\OnePageCheckout\:
+    resource: '../src/*'
+
+  Jzvikas\OnePageCheckout\Integration\RuntimeProbeInterface:
+    alias: Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe

@@ -1,0 +1,18 @@
+{
+  "name": "jzvikas/prestashop-one-page-checkout",
+  "description": "Production-grade One Page Checkout module for PrestaShop 9",
+  "type": "prestashop-module",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Jzvikas\\OnePageCheckout\\": "src/"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true
+  }
+}
