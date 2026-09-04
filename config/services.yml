@@ -16,3 +16,6 @@ services:
   Jzvikas\OnePageCheckout\Checkout\StaleCheckoutStateGuard: ~
   Jzvikas\OnePageCheckout\Checkout\CheckoutSectionDependencyResolver: ~
   Jzvikas\OnePageCheckout\Checkout\PrestaShopCheckoutStateFactory: ~
+
+  Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator: ~
+  Jzvikas\OnePageCheckout\Security\CheckoutMutationGuard: ~

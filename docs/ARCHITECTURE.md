@@ -84,6 +84,12 @@ The Symfony service configuration explicitly registers stateless services instea
 
 See `ADR-0003-prestashop-checkout-state-adapter.md`.
 
+## AJAX mutation security boundary
+
+`CheckoutMutationGuard` is the shared pre-handler gate for future state-changing AJAX operations. It validates the PrestaShop front-office CSRF token, asserts that the submitted cart ID matches the cart already loaded by the current session/context, verifies cart/customer binding, rebuilds the current server state and rejects stale state versions before a mutation handler can run.
+
+The client cart ID is never used to load a cart. Address/carrier/payment authorization remains operation-specific and must run after this generic gate. See `docs/SECURITY.md`.
+
 ## Next application boundary
 
-The next milestone is the shared AJAX transport/security shell: cart/session binding, CSRF validation, stale-state enforcement, structured JSON responses and a read-only refresh endpoint. Mutation-specific customer/address behavior should be added only after those cross-cutting guards are reusable and tested.
+The next milestone is per-cart request serialization plus a shared JSON controller/response mapper. This closes the simultaneous same-state write race before real customer/address/carrier/payment mutation handlers are enabled.
