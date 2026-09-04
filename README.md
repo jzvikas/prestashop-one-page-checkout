@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration-shell + server-state foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
+> Current status: safe integration-shell + server-authoritative state adapter. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
 
 ## Runtime targets
 
@@ -23,9 +23,9 @@ The module detects and isolates the checkout integration path without blindly lo
 
 The module installs only the checkout hook needed by the current PrestaShop family. The checkout-flow flag is disabled by default and is forced off on module disable. At this stage both hook entry points preserve native checkout rather than exposing a partial custom flow.
 
-The application layer also has a canonical server-state version token, stale-state guard and conservative section dependency graph for future AJAX mutations.
+The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` now builds that state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals; browser monetary values are not part of this state path.
 
-See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/ADR-0001-checkout-integration-strategy.md` and `docs/ADR-0002-server-authoritative-checkout-state.md`.
+See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/ADR-0001-checkout-integration-strategy.md`, `docs/ADR-0002-server-authoritative-checkout-state.md` and `docs/ADR-0003-prestashop-checkout-state-adapter.md`.
 
 ## Development setup
 
@@ -49,7 +49,8 @@ CI executes the same baseline on PHP 8.4.
 
 - no custom checkout process is returned yet on PrestaShop 9.2+;
 - the 9.0/9.1 render hook does not mutate the native checkout process yet;
-- no customer/address AJAX API, carrier/payment UI or final-submit flow exists yet;
+- no shared AJAX security/transport layer or customer/address mutation API exists yet;
+- no carrier/payment UI or final-submit flow exists yet;
 - Back Office flow activation UI is not implemented yet.
 
 These limitations are intentional safety gates, not production-ready claims.

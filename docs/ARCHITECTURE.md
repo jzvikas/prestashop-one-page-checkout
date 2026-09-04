@@ -72,8 +72,18 @@ The application layer under `src/Checkout` provides the transport-independent st
 - `CheckoutSectionDependencyResolver` maps mutations to every downstream section that must be rebuilt;
 - `CheckoutRefreshResult` and `CheckoutError` define the stable machine-readable response contract.
 
-This layer deliberately contains no prices supplied by a browser. Monetary truth remains in PrestaShop Core; future state adapters will fingerprint recalculated cart/totals data rather than trust submitted values. See `ADR-0002-server-authoritative-checkout-state.md`.
+This layer deliberately contains no prices supplied by a browser. Monetary truth remains in PrestaShop Core; server adapters fingerprint recalculated cart/totals data rather than trust submitted values. See `ADR-0002-server-authoritative-checkout-state.md`.
+
+## PrestaShop state adapter
+
+`PrestaShopCheckoutStateFactory` is the infrastructure bridge from a loaded PrestaShop `Context`/`Cart` into the application `CheckoutState` contract. It deliberately reads identity from the server-side cart, reuses Core `CartChecksum`/`AddressChecksum`, augments checkout-specific cart state that Core's checksum does not cover, and fingerprints only server-recalculated `Cart::getOrderTotal()` values.
+
+`CheckoutServerSelections` carries already server-validated payment/agreement selections into the snapshot. It is not a browser request DTO and contains no monetary values.
+
+The Symfony service configuration explicitly registers stateless services instead of auto-registering every class below `src/`, so enums/value objects with scalar constructors are not treated as services.
+
+See `ADR-0003-prestashop-checkout-state-adapter.md`.
 
 ## Next application boundary
 
-The next milestone is a PrestaShop state factory/adapter that builds `CheckoutState` from the current cart, customer, shop, language, currency, addresses, carrier, payment selection and Core-calculated cart/totals data. After that, focused AJAX mutation endpoints can share the stale-state guard and dependency graph.
+The next milestone is the shared AJAX transport/security shell: cart/session binding, CSRF validation, stale-state enforcement, structured JSON responses and a read-only refresh endpoint. Mutation-specific customer/address behavior should be added only after those cross-cutting guards are reusable and tested.
