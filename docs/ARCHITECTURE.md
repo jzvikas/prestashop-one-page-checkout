@@ -119,6 +119,14 @@ The abstract JSON controller owns no-store JSON headers, exception containment a
 
 Generic transport messages pass through the controller translation boundary. Operation-specific `CheckoutError` messages must already be translated by the handler/service that creates them.
 
+## Address selection boundary
+
+`CheckoutAddressSelectionParser` accepts a deliberately small request contract: optional delivery address, explicit same/separate invoice mode, and a required invoice address in separate mode. IDs are strict positive integers. Same-address mode rejects a client invoice ID and derives invoice identity on the server.
+
+`CheckoutAddressSelectionService` authorizes every address with Core `Customer::customerHasAddress` against the cart owner, rechecks the current delivery address before mirroring it to invoice, performs at most one cart save, is idempotent when nothing changed, and restores the in-memory cart address IDs if persistence reports failure.
+
+This service contains no rendering/transport logic and is intended to run only inside `CheckoutMutationOrchestrator`.
+
 ## Next application boundary
 
-The next milestone is the first concrete server-side checkout operation, starting with a low-risk read/identity/address boundary and reusable address ownership/input validation. The custom checkout still remains fail-closed until the version-specific checkout process and rendering layer are complete.
+The next milestone is the checkout section rendering layer required to turn address/customer/carrier mutations into complete `CheckoutMutationOutcome` responses. Rendering must preserve Core payment/carrier hook output and remain theme-independent before a concrete address endpoint is exposed.

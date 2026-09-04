@@ -20,6 +20,12 @@ State-changing requests are required to pass the PrestaShop front-office token v
 
 When the loaded cart already belongs to a customer, the current context customer ID must match the cart owner before a mutation may continue. Resource-specific authorization is still required for addresses and other customer-owned objects.
 
+### Address ownership / IDOR
+
+`CheckoutAddressSelectionService` authorizes every delivery/invoice address with Core `Customer::customerHasAddress(cart_customer_id, address_id)` before changing the cart. Same-address mode does not accept a client invoice ID; the server mirrors the already-authorized/current delivery address and rechecks its ownership. A cart without a checkout customer cannot select saved addresses.
+
+The request parser rejects malformed/non-positive IDs and requires an explicit invoice address when separate invoice mode is selected. The selection service is designed to execute only behind the generic mutation guard/orchestrator; the future endpoint remains responsible for using that pipeline.
+
 ### Stale checkout state
 
 Every guarded mutation requires the previous `stateVersion`. The guard rebuilds a fresh server-authoritative checkout state and blocks a stale version before the mutation handler is entered. A stale result contains the current server state so the transport layer can return a recoverable conflict response.
@@ -43,7 +49,7 @@ The state factory has no browser monetary inputs. Cart/totals fingerprints are d
 | CSRF | Guard implemented | Every mutation controller must use it |
 | Cross-cart/cart takeover | Generic cart binding implemented | Never load submitted cart IDs in mutation handlers |
 | Customer mismatch | Generic guard implemented | Add resource ownership checks per handler |
-| Address IDOR | Not implemented yet | Verify address belongs to current checkout customer before read/write/delete |
+| Address IDOR | Selection/parser guard implemented | Concrete address endpoint must use orchestrator + selection service |
 | Forged carrier | Not implemented yet | Validate against current server delivery options before selection |
 | Forged payment option | Not implemented yet | Validate against current `PaymentOptionsFinder` output |
 | Stale browser state | Guard implemented | Return conflict/recovery response and prevent stale mutation |
@@ -55,7 +61,7 @@ The state factory has no browser monetary inputs. Cart/totals fingerprints are d
 
 ## Concurrency ordering rule
 
-The stale-state check and the mutation must run inside the same per-cart critical section. Checking state before acquiring the mutex would reintroduce the race: two requests could both validate the same old state and then serialize only the writes. Future mutation orchestration must therefore acquire the cart mutex first, rebuild/validate state second, mutate third, then rebuild the response state before releasing the lock.
+The stale-state check and the mutation must run inside the same per-cart critical section. Checking state before acquiring the mutex would reintroduce the race: two requests could both validate the same old state and then serialize only the writes. Mutation orchestration therefore acquires the cart mutex first, rebuilds/validates state second, mutates third, then rebuilds the response state before releasing the lock.
 
 Read-only refreshes do not need this mutex unless they must provide a snapshot guaranteed not to overlap a mutation.
 

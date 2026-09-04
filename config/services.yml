@@ -17,6 +17,9 @@ services:
   Jzvikas\OnePageCheckout\Checkout\CheckoutSectionDependencyResolver: ~
   Jzvikas\OnePageCheckout\Checkout\PrestaShopCheckoutStateFactory: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionParser: ~
+  Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService: ~
+
   Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator: ~
   Jzvikas\OnePageCheckout\Security\CheckoutMutationGuard: ~
 

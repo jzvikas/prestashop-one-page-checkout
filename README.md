@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration-shell + server-authoritative state/guard/concurrency/orchestration/transport foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
+> Current status: safe integration-shell + server-authoritative state/security/concurrency/transport/address-domain foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
 
 ## Runtime targets
 
@@ -23,7 +23,7 @@ The module detects and isolates the checkout integration path without blindly lo
 
 The module installs only the checkout hook needed by the current PrestaShop family. The checkout-flow flag is disabled by default and is forced off on module disable. At this stage both hook entry points preserve native checkout rather than exposing a partial custom flow.
 
-The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals; browser monetary values are not part of this state path. `CheckoutMutationGuard` adds CSRF, cross-cart and cart/customer binding. `CheckoutCartMutex` serializes mutations per cart through parameterized database advisory locks. `CheckoutMutationOrchestrator` enforces lock/guard/mutation/fresh-state ordering and complete downstream section refreshes. The JSON transport layer provides stable status/error mapping and a final POST gate for mutation controllers.
+The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals; browser monetary values are not part of this state path. Generic mutation safety covers CSRF, cross-cart/customer binding, per-cart serialization and stale-state ordering. The JSON transport layer provides stable status/error mapping. Address selection now has strict request parsing and Core-backed ownership checks, but no public mutation endpoint is exposed before section rendering is ready.
 
 See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ADR-0001-checkout-integration-strategy.md`, `docs/ADR-0002-server-authoritative-checkout-state.md` and `docs/ADR-0003-prestashop-checkout-state-adapter.md`.
 
@@ -49,7 +49,7 @@ CI executes the same baseline on PHP 8.4.
 
 - no custom checkout process is returned yet on PrestaShop 9.2+;
 - the 9.0/9.1 render hook does not mutate the native checkout process yet;
-- no concrete customer/address/carrier/payment mutation endpoint or checkout rendering exists yet;
+- no checkout section rendering layer or public address/customer/carrier/payment mutation endpoint exists yet;
 - no final-submit flow exists yet;
 - Back Office flow activation UI is not implemented yet.
 
