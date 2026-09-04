@@ -29,3 +29,4 @@ services:
     alias: Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutex
 
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
+  Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper: ~

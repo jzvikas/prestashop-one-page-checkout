@@ -109,8 +109,16 @@ The lock scope includes database name/table prefix and cart ID, allowing separat
 7. rebuild the server-authoritative checkout state after the operation and issue the new state version;
 8. return the stable `CheckoutRefreshResult` contract before releasing the mutex.
 
-Unexpected handler/programming exceptions deliberately propagate to the future transport/controller boundary for safe server logging and generic customer errors. Lock contention is converted into a distinct busy result without executing the handler.
+Unexpected handler/programming exceptions deliberately propagate to the transport/controller boundary for safe server logging and generic customer errors. Lock contention is converted into a distinct busy result without executing the handler.
+
+## JSON/HTTP transport boundary
+
+`CheckoutMutationResponseMapper` maps application results to stable HTTP semantics: successful updates use 200, business validation failures 422, malformed cart binding 400, authorization/CSRF failures 403, and stale/busy conflicts 409. Stale responses contain only the fresh opaque state version, not the internal state payload. Busy/stale responses are marked retryable.
+
+The abstract JSON controller owns no-store JSON headers, exception containment and server-side contextual logging without returning exception details. The mutation controller subclass makes the POST gate final, so concrete mutation endpoints cannot bypass the method requirement accidentally.
+
+Generic transport messages pass through the controller translation boundary. Operation-specific `CheckoutError` messages must already be translated by the handler/service that creates them.
 
 ## Next application boundary
 
-The next milestone is a JSON/HTTP response mapper and thin shared module front-controller base. It will map security rejections, stale-state conflicts, lock contention and completed refresh results to stable HTTP/JSON responses without exposing stack traces. After that, the first concrete address/customer operation can be added.
+The next milestone is the first concrete server-side checkout operation, starting with a low-risk read/identity/address boundary and reusable address ownership/input validation. The custom checkout still remains fail-closed until the version-specific checkout process and rendering layer are complete.
