@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration-shell + server-authoritative state/security/concurrency/transport/address-domain + address/summary section-rendering foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
+> Current status: safe integration-shell + server-authoritative state/security/concurrency/transport/address-domain + address/delivery/summary section-rendering foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
 
 ## Runtime targets
 
@@ -25,7 +25,7 @@ The module installs only the checkout hook needed by the current PrestaShop fami
 
 The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals; browser monetary values are not part of this state path. Generic mutation safety covers CSRF, cross-cart/customer binding, per-cart serialization and stale-state ordering. The JSON transport layer provides stable status/error mapping. Address selection has strict request parsing and Core-backed ownership checks.
 
-A fail-closed checkout section renderer registry is in place. The order summary uses PrestaShop Core `CartPresenter`, preserving `actionPresentCart`. The address renderer builds its address book only from the cart-bound customer, rechecks Core address ownership, uses Core `AddressFormat::generateAddress()` for country-aware formatting, and renders module-owned escaped delivery/invoice choices. Remaining checkout sections are intentionally not exposed as fake placeholders; a mutation that requires an unimplemented section renderer fails instead of returning an incomplete UI.
+A fail-closed checkout section renderer registry is in place. The order summary uses PrestaShop Core `CartPresenter`, preserving `actionPresentCart`. The address renderer builds its address book only from the cart-bound customer, rechecks Core address ownership, uses Core `AddressFormat::generateAddress()` for country-aware formatting, and renders module-owned escaped delivery/invoice choices. The delivery renderer reuses the active Core `CheckoutSession` rather than rediscovering carriers itself, runs the native `actionCarrierProcess` lifecycle before reading options, preserves Core-generated `displayCarrierExtraContent`, and preserves `displayBeforeCarrier` / `displayAfterCarrier` hook output. Virtual carts emit no shipping section. Remaining checkout sections are intentionally not exposed as fake placeholders; a mutation that requires an unimplemented section renderer fails instead of returning an incomplete UI.
 
 See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ADR-0001-checkout-integration-strategy.md`, `docs/ADR-0002-server-authoritative-checkout-state.md` and `docs/ADR-0003-prestashop-checkout-state-adapter.md`.
 
@@ -51,7 +51,8 @@ CI executes the same baseline on PHP 8.4.
 
 - no custom checkout process is returned yet on PrestaShop 9.2+;
 - the 9.0/9.1 render hook does not mutate the native checkout process yet;
-- address and summary checkout sections have concrete renderers; identity/delivery/payment/agreement renderers are not implemented yet;
+- address, delivery and summary checkout sections have concrete renderers; identity/payment/agreement renderers are not implemented yet;
+- the current delivery presenter intentionally consumes the active Core `OrderController` checkout session; the common checkout-session adapter required for future module AJAX refresh controllers is not implemented yet;
 - address add/edit forms are not rendered yet; the current address section covers secure selection of existing saved addresses;
 - no public address/customer/carrier/payment mutation endpoint exists yet;
 - no full PrestaShop runtime/Smarty integration test is wired into CI yet;
