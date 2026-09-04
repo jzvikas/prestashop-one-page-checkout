@@ -127,6 +127,18 @@ Generic transport messages pass through the controller translation boundary. Ope
 
 This service contains no rendering/transport logic and is intended to run only inside `CheckoutMutationOrchestrator`.
 
+## Checkout section rendering
+
+`CheckoutSectionRendererRegistry` is the fail-closed rendering dispatcher for mutation outcomes. A requested section must have exactly one registered renderer; duplicate registrations or missing renderers raise an exception instead of allowing a successful mutation to return a partially refreshed checkout.
+
+Legacy/Core rendering dependencies are isolated behind `CheckoutCartPresenterInterface` and `CheckoutTemplateRendererInterface`. The production cart presenter mirrors the native OPC approach: it resets product-related cart presentation caches, uses PrestaShop Core `CartPresenter`, requests separated gifts, and eagerly resolves products/subtotals/totals before rendering. Because Core `CartPresenter` is used directly, `actionPresentCart` remains part of the presentation lifecycle.
+
+`SummarySectionRenderer` is the first concrete section renderer. It renders module-owned `sections/summary.tpl` markup through the `module:` Smarty resource so the checkout is not tied to Classic/Hummingbird DOM structure. The template is namespaced under `.jzopc-summary`, escapes presented labels/values and includes an `aria-live` summary region.
+
+Only the summary renderer exists today. Identity, addresses, delivery, payment and agreements remain intentionally unregistered until their implementations can preserve the relevant PrestaShop business rules and hook/module output. In particular, delivery/payment renderers must preserve `actionCarrierProcess`, `displayCarrierExtraContent`, `paymentOptions`, `actionPresentPaymentOptions`, payment additional information/forms and any required payment reinitialization lifecycle.
+
+The current smoke suite validates registry dispatch, duplicate detection and fail-closed behavior with isolated fakes. Full Smarty rendering and service-container wiring still require an actual PrestaShop runtime integration test; CI does not currently boot a PrestaShop installation and this limitation must not be confused with a passing integration test.
+
 ## Next application boundary
 
-The next milestone is the checkout section rendering layer required to turn address/customer/carrier mutations into complete `CheckoutMutationOutcome` responses. Rendering must preserve Core payment/carrier hook output and remain theme-independent before a concrete address endpoint is exposed.
+The next highest-priority milestone is to implement the remaining section renderers required by an address mutation, starting with addresses, delivery and payment while preserving Core/module hook output. Once the dependency set for `DeliveryAddressUpdated` can be rendered completely, the guarded address selection service can be exposed through a concrete mutation endpoint without violating the orchestrator's complete-refresh requirement.
