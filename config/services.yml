@@ -26,15 +26,20 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutAddressBookPresenter: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutAddressBookPresenterInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutAddressBookPresenter
+  Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutDeliveryOptionsPresenter: ~
+  Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutDeliveryOptionsPresenterInterface:
+    alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutDeliveryOptionsPresenter
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer
   Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer: ~
+  Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\SummarySectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry:
     arguments:
       $renderers:
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer'
+        - '@Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\SummarySectionRenderer'
 
   Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator: ~
