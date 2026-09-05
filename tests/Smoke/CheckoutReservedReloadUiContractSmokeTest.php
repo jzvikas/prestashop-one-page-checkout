@@ -25,7 +25,7 @@ assertReservedReloadUiContract(
     'checkout shell renderer must receive the authoritative finalization reservation store'
 );
 assertReservedReloadUiContract(
-    str_contains($renderer, "'jzopc_finalization_reserved' => $this->finalizationReservationStore->isActive($context)"),
+    str_contains($renderer, "'jzopc_finalization_reserved' => $" . "this->finalizationReservationStore->isActive($" . "context)"),
     'checkout shell must derive reservation state from server persistence at render time'
 );
 assertReservedReloadUiContract(
