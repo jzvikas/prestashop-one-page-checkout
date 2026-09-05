@@ -18,7 +18,9 @@ This matrix records what the repository currently implements and what has actual
 
 The module uses `actionCheckoutRender`. `LegacyCheckoutRenderAdapter` receives the Core process by reference, reuses the exact active `CheckoutSession`, and replaces only the checkout process with the module-built process.
 
-PrestaShop 9.0 installed-runtime coverage is still missing. PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run.
+The installed-runtime workflow now contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All four installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
+
+PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run.
 
 ### PrestaShop 9.2+
 
@@ -27,6 +29,12 @@ The module uses `actionCheckoutBuildProcess` only when the provider interface an
 An enabled native `ps_onepagecheckout` provider blocks this module's takeover. Core fallback remains untouched when no unique custom provider is active.
 
 The repository previously exercised installed-runtime capability/process behavior on PrestaShop 9.2.0-beta.1, including native-provider conflict detection. The latest checkout/finalization/BO deltas still require a fresh runtime/browser run.
+
+## Installed runtime contract baseline
+
+The current installed module contract requires module version `>=0.4.0`, matching the finalization-reservation schema baseline, and verifies both frontend media registration and the `actionValidateOrderAfter` successful-order cleanup hook. A source smoke contract locks the 9.0/9.1/9.2 workflow-family matrix so future version/test drift is caught before runtime evidence is interpreted.
+
+These source checks are not a substitute for executing the installed matrix.
 
 ## Themes
 
@@ -84,4 +92,4 @@ Still requiring real browser verification:
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. New PHP/JavaScript/smoke/runtime contracts are committed normally but are not described as passing until they actually execute. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The new PrestaShop 9.0.3 matrix job and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
