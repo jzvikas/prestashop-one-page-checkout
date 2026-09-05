@@ -94,6 +94,7 @@ $requiredFragments = [
     'data-jzopc-step="one-page-checkout"',
     'data-jzopc-checkout',
     'data-jzopc-section="addresses"',
+    'data-jzopc-section="delivery"',
     'data-jzopc-section="payment"',
     'data-jzopc-section="agreements"',
     'data-jzopc-section="summary"',
