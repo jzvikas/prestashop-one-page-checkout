@@ -28,6 +28,7 @@ final readonly class CheckoutSectionDependencyResolver
             CheckoutMutation::CarrierSelected => [
                 CheckoutSection::Delivery,
                 CheckoutSection::Payment,
+                CheckoutSection::Agreements,
                 CheckoutSection::Summary,
             ],
 
@@ -47,8 +48,6 @@ final readonly class CheckoutSectionDependencyResolver
             return $ordered;
         }
 
-        // A virtual checkout intentionally has no delivery section in the DOM. Returning an empty
-        // delivery fragment would violate the browser client's atomic replacement contract.
         return array_values(array_filter(
             $ordered,
             static fn (CheckoutSection $section): bool => $section !== CheckoutSection::Delivery,
