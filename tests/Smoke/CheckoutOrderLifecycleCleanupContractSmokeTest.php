@@ -21,7 +21,7 @@ foreach ([$module, $cleanup, $services, $upgrade] as $source) {
 }
 
 assertOrderCleanupContract(str_contains($module, 'hookActionValidateOrderAfter'), 'module must implement the Core post-order lifecycle hook');
-assertOrderCleanupContract(str_contains($module, "$params['cart'] ?? null"), 'post-order cleanup must use the Core hook cart payload');
+assertOrderCleanupContract(str_contains($module, "$" . "params['cart'] ?? null"), 'post-order cleanup must use the Core hook cart payload');
 assertOrderCleanupContract(str_contains($module, 'hasCreatedOrderForCart'), 'cleanup must verify a real Core order exists for the hook cart');
 assertOrderCleanupContract(str_contains($module, 'Order::getIdByCartId($cartId)'), 'cleanup must retain a Core DB fallback for valid order creation');
 assertOrderCleanupContract(str_contains($module, 'CheckoutOrderLifecycleCleanup::class'), 'module hook must delegate cleanup to a narrow service');
