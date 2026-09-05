@@ -7,6 +7,7 @@ class Context {}
 require_once dirname(__DIR__) . '/bootstrap.php';
 
 use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
+use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutPaymentOptionsPresenterInterface;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\PaymentSectionRenderer;
@@ -20,6 +21,7 @@ $presenter = new class implements CheckoutPaymentOptionsPresenterInterface {
             'paymentOptions' => [
                 'demo' => [[
                     'id' => 'payment-option-1',
+                    'module_name' => 'demo',
                     'call_to_action_text' => 'Demo',
                 ]],
             ],
@@ -43,7 +45,10 @@ $template = new class implements CheckoutTemplateRendererInterface {
 $renderer = new PaymentSectionRenderer($presenter, $template);
 assert($renderer->section() === CheckoutSection::Payment);
 assert($renderer->render($context) === '<payment>ok</payment>');
+assert(($template->variables['paymentOptions']['demo'][0]['jzopc_selected'] ?? null) === false);
+assert($renderer->renderWithSelections($context, new CheckoutServerSelections('demo:payment-option-1')) === '<payment>ok</payment>');
 assert($template->template === 'sections/payment.tpl');
 assert($template->variables['paymentOptions']['demo'][0]['id'] === 'payment-option-1');
+assert($template->variables['paymentOptions']['demo'][0]['jzopc_selected'] === true);
 
 echo "CheckoutPaymentSectionRenderingSmokeTest OK\n";

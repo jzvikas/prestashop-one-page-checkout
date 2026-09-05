@@ -7,6 +7,7 @@ class Context {}
 require_once dirname(__DIR__) . '/bootstrap.php';
 
 use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
+use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\AgreementsSectionRenderer;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutAgreementsPresenterInterface;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface;
@@ -31,9 +32,13 @@ $template = new class implements CheckoutTemplateRendererInterface {
 };
 
 $renderer = new AgreementsSectionRenderer($presenter, $template);
+$context = new Context();
 assert($renderer->section() === CheckoutSection::Agreements);
-assert($renderer->render(new Context()) === '<agreements>ok</agreements>');
+assert($renderer->render($context) === '<agreements>ok</agreements>');
+assert(($template->variables['approvedAgreementKeys'] ?? []) === []);
+assert($renderer->renderWithSelections($context, new CheckoutServerSelections(null, ['terms-and-conditions'])) === '<agreements>ok</agreements>');
 assert($template->template === 'sections/agreements.tpl');
 assert(isset($template->variables['conditions']['terms-and-conditions']));
+assert(($template->variables['approvedAgreementKeys']['terms-and-conditions'] ?? false) === true);
 
 echo "CheckoutAgreementsSectionRenderingSmokeTest OK\n";

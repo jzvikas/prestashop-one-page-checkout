@@ -13,6 +13,7 @@
             name="agreements[]"
             value="{$conditionKey|escape:'htmlall':'UTF-8'}"
             required
+            {if !empty($approvedAgreementKeys[$conditionKey])}checked{/if}
           >
           <label for="jzopc-agreement-{$conditionKey|escape:'htmlall':'UTF-8'}" class="jzopc-agreements__label">
             {* Core ConditionsToApproveFinder returns formatted shop/module terms HTML. *}

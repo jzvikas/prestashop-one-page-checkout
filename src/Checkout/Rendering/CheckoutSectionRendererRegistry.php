@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jzvikas\OnePageCheckout\Checkout\Rendering;
 
 use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
+use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 use LogicException;
 
 final class CheckoutSectionRendererRegistry
@@ -29,8 +30,11 @@ final class CheckoutSectionRendererRegistry
      * @param list<CheckoutSection> $sections
      * @return array<string,string>
      */
-    public function render(\Context $context, array $sections): array
-    {
+    public function render(
+        \Context $context,
+        array $sections,
+        ?CheckoutServerSelections $selections = null,
+    ): array {
         $rendered = [];
         foreach ($sections as $section) {
             $renderer = $this->renderers[$section->value] ?? null;
@@ -38,7 +42,9 @@ final class CheckoutSectionRendererRegistry
                 throw new LogicException(sprintf('No renderer registered for checkout section %s.', $section->value));
             }
 
-            $rendered[$section->value] = $renderer->render($context);
+            $rendered[$section->value] = $selections !== null && $renderer instanceof CheckoutStateAwareSectionRendererInterface
+                ? $renderer->renderWithSelections($context, $selections)
+                : $renderer->render($context);
         }
 
         return $rendered;

@@ -21,7 +21,7 @@
               name="payment-option"
               type="radio"
               required
-              {if $isFree}checked{/if}
+              {if !empty($option.jzopc_selected)}checked{/if}
             >
             <label for="{$option.id|escape:'html':'UTF-8'}">
               <span>{$option.call_to_action_text|default:''|escape:'html':'UTF-8'}</span>

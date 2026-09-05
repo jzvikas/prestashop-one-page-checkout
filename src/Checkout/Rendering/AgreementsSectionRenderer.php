@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Jzvikas\OnePageCheckout\Checkout\Rendering;
 
 use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
+use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 
-final readonly class AgreementsSectionRenderer implements CheckoutSectionRendererInterface
+final readonly class AgreementsSectionRenderer implements CheckoutStateAwareSectionRendererInterface
 {
     public function __construct(
         private CheckoutAgreementsPresenterInterface $agreementsPresenter,
@@ -21,10 +22,14 @@ final readonly class AgreementsSectionRenderer implements CheckoutSectionRendere
 
     public function render(\Context $context): string
     {
-        return $this->templateRenderer->render(
-            $context,
-            'sections/agreements.tpl',
-            $this->agreementsPresenter->present($context),
-        );
+        return $this->renderWithSelections($context, new CheckoutServerSelections());
+    }
+
+    public function renderWithSelections(\Context $context, CheckoutServerSelections $selections): string
+    {
+        $variables = $this->agreementsPresenter->present($context);
+        $variables['approvedAgreementKeys'] = array_fill_keys($selections->approvedAgreementKeys, true);
+
+        return $this->templateRenderer->render($context, 'sections/agreements.tpl', $variables);
     }
 }
