@@ -18,8 +18,9 @@ $requiredWorkflowFragments = [
     "ps_ref: '9.2.0-beta.1'",
     'Start Front Office HTTP server',
     'php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php',
+    'curl --fail --silent --show-error http://localhost:8080/',
     'Execute fail-closed Front Office HTTP contract',
-    'php tests/Runtime/FailClosedHttpContract.php http://127.0.0.1:8080',
+    'php tests/Runtime/FailClosedHttpContract.php http://localhost:8080',
 ];
 
 foreach ($requiredWorkflowFragments as $fragment) {
