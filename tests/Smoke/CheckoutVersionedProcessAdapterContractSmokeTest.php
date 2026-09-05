@@ -8,7 +8,7 @@ $builder = file_get_contents($root . '/src/Integration/CheckoutProcessBuilder.ph
 $step = file_get_contents($root . '/src/Integration/CheckoutShellStep.php');
 $legacy = file_get_contents($root . '/src/Integration/LegacyCheckoutRenderAdapter.php');
 $provider = file_get_contents($root . '/src/Integration/Provider/CheckoutProcessProvider.php');
-$services = file_get_contents($root . '/config/services.yml');
+$services = file_get_contents($root . '/config/common/services.yml');
 
 foreach ([$module, $builder, $step, $legacy, $provider, $services] as $source) {
     assert(is_string($source) && $source !== '');
