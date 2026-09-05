@@ -32,6 +32,36 @@ final class JzOnePageCheckoutIdentityModuleFrontController extends JzOnePageChec
             if ($freshCsrfToken === '') {
                 throw new RuntimeException('Checkout CSRF token is unavailable after identity mutation.');
             }
+
+            // Core Context::updateCustomer() can restore another non-ordered customer cart.
+            // That replacement cart was not the cart mutex acquired for this request, so the
+            // identity mutation deliberately does not persist/render module state for it.
+            // A full order-page reload establishes a new authoritative bootstrap instead.
+            $submittedCartId = isset($request['cartId']) && (is_int($request['cartId']) || is_string($request['cartId']))
+                ? (int) $request['cartId']
+                : 0;
+            $currentCartId = (int) ($this->context->cart->id ?? 0);
+            if ($submittedCartId > 0 && $currentCartId > 0 && $submittedCartId !== $currentCartId) {
+                $refreshResult = $result->refreshResult;
+                if ($refreshResult === null) {
+                    throw new RuntimeException('Completed identity cart transition has no checkout state.');
+                }
+
+                $redirect = (string) $this->context->link->getPageLink('order', true);
+                if ($redirect === '') {
+                    throw new RuntimeException('Checkout reload URL is unavailable after identity cart transition.');
+                }
+
+                return new CheckoutJsonResponse(200, [
+                    'success' => true,
+                    'stateVersion' => $refreshResult->stateVersion,
+                    'sections' => [],
+                    'errors' => [],
+                    'redirect' => $redirect,
+                    'retryable' => false,
+                    'csrfToken' => $freshCsrfToken,
+                ]);
+            }
         }
 
         return $mapper->map($result, $translate, $freshCsrfToken);
