@@ -6,6 +6,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Added
 
+- Controlled active Front Office HTTP fallback matrix and ADR-0029. After the normal production-closed HTTP contract, the runtime workflow creates a disposable `/tmp/jzopc-active-fixture*` and requires one Core-created cart/cookie session to survive persistence, shell-service, real Smarty missing-template and frontend asset-registration failures through Core native checkout, then recover to healthy OPC after each failure.
+- `InstrumentActiveCheckoutFailureFixture.php` plus strengthened active-fallback source contracts. Test-only marker checks are injected only into the disposable active copy, with opt-in `/tmp` restrictions, symlink rejection, exact source-anchor validation and production-source marker-free assertions.
 - `IntegrationFailureIsolationContract.php`, its installed-matrix wiring, source contract and ADR-0028. The runtime gate injects a test-local shell persistence-read failure without changing production readiness/configuration: PrestaShop 9.0/9.1 must retain the exact original Core checkout process/session, while the 9.2 provider path must consume already-prepared HTML without re-entering risky shell dependencies after provider selection.
 - Canonical `scripts/run-smoke-tests.sh` used by CI and documented local development. It forces `zend.assertions=1`, fails if the smoke directory resolves to zero test files, and prevents legacy PHP `assert()` checks from silently becoming no-ops under local/CI ini differences.
 - `CheckoutSmokeRunnerContractSmokeTest.php` locking the assertion-enabled canonical runner and preventing CI from drifting back to a duplicate smoke-loop implementation.
@@ -29,6 +31,9 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Changed
 
+- The general final-submit browser contract now asserts the current shared ambiguity-guard architecture: ordinary/binary post-activation exceptions must not auto-release their reservation, must emit the shared ambiguous-handoff lifecycle, and the microtask guard must freeze/suppress locked activation surfaces after controller cleanup.
+- The hardening branch now contains current `main` as an ancestor; the newer shared ambiguity-guard architecture remains authoritative while the security intent of main's earlier post-activation fail-closed commits is explicitly preserved by the updated source contract.
+- Active runtime workflow naming now reflects that the request-path contract covers the complete persistence/service/template/assets failure matrix rather than persistence alone.
 - Installed Smarty shell runtime coverage now requires a non-empty server-generated finalization URL targeting `finalize`, exactly one final-submit/status surface, and a fresh-cart server reservation marker of exactly `0`. This prevents the installed matrix from passing while the current final-submit bootstrap is incomplete.
 - Runtime-matrix source coverage now requires `IntegrationFailureIsolationContract.php` to exist, accept 9.0/9.1/9.2 explicitly and remain wired into the installed workflow.
 - CI smoke execution now delegates to `scripts/run-smoke-tests.sh` rather than maintaining an independent loop; the documented local command uses the same runner.
@@ -49,13 +54,16 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Installed runtime contracts now explicitly accept 9.0/9.1/9.2 families, with 9.0 and 9.1 sharing the legacy `actionCheckoutRender` path.
 - Removed stale exact `0.3.0` runtime assertion; the installed contract now requires at least the `0.4.0` finalization-schema baseline.
 - Installed runtime contract now verifies `actionValidateOrderAfter` successful-order cleanup hook registration.
-- Architecture/security documentation remains synchronized with the finalization, native payment handoff, successful-order cleanup and abandoned-selection cleanup already present in code.
+- Architecture/security documentation remains synchronized with the finalization, native payment handoff, successful-order cleanup, abandoned-selection cleanup and controlled active fallback verification already present in source/test wiring.
 
 ### Verification
 
+- The active failure instrumenter was syntax-checked locally and executed against a synthetic `/tmp/jzopc-active-fixture-static` layout. It inserted the service/template/assets marker checks at the exact expected anchors, and the three resulting instrumented PHP snippets passed syntax checks. This verifies the temporary patch mechanism only; it is not PrestaShop runtime/browser evidence.
+- A direct Git clone/source-suite run could not be performed in the current container because that environment cannot resolve `github.com`; no full local smoke/runtime result is claimed from that container.
 - The canonical smoke-runner mechanism was executed directly with local PHP 8.4.23: an enabled true assertion exits successfully, while an enabled false assertion raises `AssertionError` and returns a non-zero exit status. This verifies the runner's assertion-enablement mechanism only; it is not a claim that the full repository smoke suite executed in the current environment.
 - The new installed integration failure-isolation contract, strengthened installed Smarty finalization assertions and their 9.0/9.1/9.2 workflow execution are source-reviewed but unexecuted because GitHub is still creating no checks/statuses for the current branch.
-- Integration failure containment and its updated versioned-process/source contracts are source-reviewed but unexecuted while GitHub Actions runners are unavailable; DB/template/service/asset failure injection on real 9.0/9.1/9.2 request paths remains mandatory before fallback is considered proven.
+- The controlled active HTTP persistence/service/template/assets fallback matrix is source-reviewed and workflow-wired but unexecuted while GitHub Actions runners/checks are unavailable. It therefore is not yet proof that real 9.0/9.1/9.2 requests fall back and recover as designed.
+- Integration failure containment and its updated versioned-process/source contracts are source-reviewed but unexecuted while GitHub Actions runners are unavailable; the configured four-mode request-path matrix must actually pass before fallback is considered proven.
 - Locked activation-surface suppression and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real link-style binary and form-submit behavior remains a browser compatibility gate.
 - Live concurrent-tab reservation convergence and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real two-tab ordinary/binary/mutation behavior remains a browser gate rather than verified evidence.
 - Active-reservation reload locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real reload/back-navigation behavior remains a browser gate rather than verified evidence.
@@ -69,7 +77,9 @@ All notable repository changes are recorded here. Runtime/browser verification s
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
-- Installed failure injection exists only under `tests/Runtime`: it does not write activation configuration, modify/reflect the readiness constant, add debug endpoints, submit finalization actions or create orders.
+- The active test opens readiness only inside `/tmp/jzopc-active-fixture*` after the closed production HTTP contract. Production integration classes are asserted to contain no `.jzopc-runtime-failure-*` marker strings.
+- Temporary failure instrumentation refuses non-`/tmp` targets, symlink patch targets and ambiguous source anchors; every marker is removed through local and whole-test cleanup boundaries.
+- Installed failure injection exists only under `tests/Runtime`: it does not write production activation configuration, add debug endpoints, submit finalization actions or create orders.
 - Native-fallback containment only declines/prevents custom process takeover; it does not mutate cart state, release finalization reservations, submit payment or create orders. Exception messages and request/payment payloads are not added to fallback logs.
 - Locked event suppression is limited to a checkout already marked reserved/ambiguous and has no network/finalization/order side effects; unlocked third-party payment controls keep their native handlers.
 - Live reservation convergence consumes only the guarded server machine error and can cause only a local browser lock; it does not poll, release reservations, submit payment or create orders.
@@ -77,8 +87,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The ambiguity UI guard is defense in depth only and never sends finalization release, submits payment or creates orders; the DB reservation remains authoritative.
 - Browser-side release is intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
-- The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: test-runner/runtime-test coverage, eager integration fallback, reservation policy, effective DI TTL alignment, locked/live/reload UI safety, payment-handoff browser safety and documentation changes introduce no new schema/config/hook migration.
+- The active HTTP failure contract creates its cart through Core and does not create orders or call payment order-creation APIs; it only checks takeover/fallback/recovery behavior.
+- No module version bump: test-runner/runtime-test coverage, active failure instrumentation, eager integration fallback, reservation policy, effective DI TTL alignment, locked/live/reload UI safety, payment-handoff browser safety and documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
