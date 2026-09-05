@@ -57,6 +57,11 @@ $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
+// ModuleFrontController resolves its module from the same request parameter used by a real
+// /module/jzonepagecheckout/... request. Provide that routing fact explicitly in this CLI harness
+// before constructing the controller; no checkout/cart authority comes from this value.
+$_GET['module'] = 'jzonepagecheckout';
+
 // A real module front request initializes Controller::$container from buildContainer(). Use that
 // exact front-container bootstrap without running full init()/routing hooks, while deliberately
 // keeping a controller that has no getCheckoutSession() capability. This proves that the private
