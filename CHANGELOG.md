@@ -6,6 +6,9 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Added
 
+- `IntegrationFailureIsolationContract.php`, its installed-matrix wiring, source contract and ADR-0028. The runtime gate injects a test-local shell persistence-read failure without changing production readiness/configuration: PrestaShop 9.0/9.1 must retain the exact original Core checkout process/session, while the 9.2 provider path must consume already-prepared HTML without re-entering risky shell dependencies after provider selection.
+- Canonical `scripts/run-smoke-tests.sh` used by CI and documented local development. It forces `zend.assertions=1`, fails if the smoke directory resolves to zero test files, and prevents legacy PHP `assert()` checks from silently becoming no-ops under local/CI ini differences.
+- `CheckoutSmokeRunnerContractSmokeTest.php` locking the assertion-enabled canonical runner and preventing CI from drifting back to a duplicate smoke-loop implementation.
 - `CheckoutIntegrationFailureContainmentContractSmokeTest.php` and ADR-0027 covering eager shell preparation, request-local failure containment and Core native checkout fallback before version-specific process takeover.
 - `CheckoutReservationUiEventSuppressionContractSmokeTest.php` and ADR-0026 covering capture-phase suppression of link/form activation after a checkout reservation/ambiguity lock.
 - `CheckoutConcurrentFinalizationUiConvergenceContractSmokeTest.php` and ADR-0025 covering live same-cart reservation conflicts when another tab acquires finalization after the current page was rendered.
@@ -26,6 +29,9 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Changed
 
+- Installed Smarty shell runtime coverage now requires a non-empty server-generated finalization URL targeting `finalize`, exactly one final-submit/status surface, and a fresh-cart server reservation marker of exactly `0`. This prevents the installed matrix from passing while the current final-submit bootstrap is incomplete.
+- Runtime-matrix source coverage now requires `IntegrationFailureIsolationContract.php` to exist, accept 9.0/9.1/9.2 explicitly and remain wired into the installed workflow.
+- CI smoke execution now delegates to `scripts/run-smoke-tests.sh` rather than maintaining an independent loop; the documented local command uses the same runner.
 - Checkout shell composition now completes before version-specific process takeover. PrestaShop 9.0/9.1 keeps Core's original process reference until the replacement is fully prepared; PrestaShop 9.2+ returns no provider if preparation fails, allowing Core to build native checkout.
 - Required checkout asset, activation-policy and process-preparation failures now trip a request-local circuit breaker so later hooks in the same request cannot partially re-enable OPC takeover. Fallback logging is limited to stage, exception class and numeric shop/cart identifiers.
 - `CheckoutShellStep` now consumes already-prepared HTML while still rendering through Core `renderTemplate()`, preserving the checkout-step template hook without invoking risky DB/template/third-party shell composition after takeover.
@@ -47,20 +53,23 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Verification
 
-- Integration failure containment and its updated versioned-process/source contracts are source-reviewed but unexecuted while GitHub Actions quota is exhausted; DB/template/service/asset failure injection on real 9.0/9.1/9.2 runtimes remains mandatory before fallback is considered proven.
-- Locked activation-surface suppression and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real link-style binary and form-submit behavior remains a browser compatibility gate.
-- Live concurrent-tab reservation convergence and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real two-tab ordinary/binary/mutation behavior remains a browser gate rather than verified evidence.
-- Active-reservation reload locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real reload/back-navigation behavior remains a browser gate rather than verified evidence.
-- Effective 900-second DI wiring and its strengthened reservation-recovery smoke assertion are source-reviewed but unexecuted while GitHub Actions quota is exhausted; installed runtime behavior is not considered verified until the deferred matrix executes.
-- Ambiguous-handoff UI locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real DOM/event ordering and payment-handler behavior remain browser gates rather than verified evidence.
-- Native handoff ambiguity hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real ordinary/binary thrown-handler behavior remains a browser gate, not verified compatibility evidence.
-- Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
-- The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime evidence.
-- The new/updated 9.0 runtime and smoke contracts are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing compatibility evidence yet.
+- The canonical smoke-runner mechanism was executed directly with local PHP 8.4.23: an enabled true assertion exits successfully, while an enabled false assertion raises `AssertionError` and returns a non-zero exit status. This verifies the runner's assertion-enablement mechanism only; it is not a claim that the full repository smoke suite executed in the current environment.
+- The new installed integration failure-isolation contract, strengthened installed Smarty finalization assertions and their 9.0/9.1/9.2 workflow execution are source-reviewed but unexecuted because GitHub is still creating no checks/statuses for the current branch.
+- Integration failure containment and its updated versioned-process/source contracts are source-reviewed but unexecuted while GitHub Actions runners are unavailable; DB/template/service/asset failure injection on real 9.0/9.1/9.2 request paths remains mandatory before fallback is considered proven.
+- Locked activation-surface suppression and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real link-style binary and form-submit behavior remains a browser compatibility gate.
+- Live concurrent-tab reservation convergence and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real two-tab ordinary/binary/mutation behavior remains a browser gate rather than verified evidence.
+- Active-reservation reload locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real reload/back-navigation behavior remains a browser gate rather than verified evidence.
+- Effective 900-second DI wiring and its strengthened reservation-recovery smoke assertion are source-reviewed but unexecuted while GitHub Actions runners are unavailable; installed runtime behavior is not considered verified until the deferred matrix executes.
+- Ambiguous-handoff UI locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real DOM/event ordering and payment-handler behavior remain browser gates rather than verified evidence.
+- Native handoff ambiguity hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; real ordinary/binary thrown-handler behavior remains a browser gate, not verified compatibility evidence.
+- Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions runners are unavailable; they are not considered passing runtime/browser evidence.
+- The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions runners are unavailable; they are not considered passing runtime evidence.
+- The new/updated 9.0 runtime and smoke contracts are source-reviewed but unexecuted while GitHub Actions runners are unavailable; they are not considered passing compatibility evidence yet.
 
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
+- Installed failure injection exists only under `tests/Runtime`: it does not write activation configuration, modify/reflect the readiness constant, add debug endpoints, submit finalization actions or create orders.
 - Native-fallback containment only declines/prevents custom process takeover; it does not mutate cart state, release finalization reservations, submit payment or create orders. Exception messages and request/payment payloads are not added to fallback logs.
 - Locked event suppression is limited to a checkout already marked reserved/ambiguous and has no network/finalization/order side effects; unlocked third-party payment controls keep their native handlers.
 - Live reservation convergence consumes only the guarded server machine error and can cause only a local browser lock; it does not poll, release reservations, submit payment or create orders.
@@ -69,7 +78,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Browser-side release is intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: eager integration fallback, reservation policy, effective DI TTL alignment, locked/live/reload UI safety, payment-handoff browser safety, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
+- No module version bump: test-runner/runtime-test coverage, eager integration fallback, reservation policy, effective DI TTL alignment, locked/live/reload UI safety, payment-handoff browser safety and documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
