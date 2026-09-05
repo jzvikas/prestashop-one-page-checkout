@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 $builder = file_get_contents($root . '/tests/Runtime/build-active-checkout-fixture.sh');
+$instrumenter = file_get_contents($root . '/tests/Runtime/InstrumentActiveCheckoutFailureFixture.php');
 $setup = file_get_contents($root . '/tests/Runtime/PrepareActiveCheckoutHttpFixture.php');
 $http = file_get_contents($root . '/tests/Runtime/ActiveCheckoutFallbackHttpContract.php');
 $workflow = file_get_contents($root . '/.github/workflows/prestashop-runtime.yml');
 $module = file_get_contents($root . '/jzonepagecheckout.php');
+$shellRenderer = file_get_contents($root . '/src/Integration/CheckoutShellRenderer.php');
+$templateRenderer = file_get_contents($root . '/src/Checkout/Rendering/PrestaShopCheckoutTemplateRenderer.php');
+$assetRegistrar = file_get_contents($root . '/src/Integration/CheckoutFrontendAssetRegistrar.php');
 
 function assertActiveHttpFallbackRuntime(bool $condition, string $message): void
 {
@@ -17,7 +21,17 @@ function assertActiveHttpFallbackRuntime(bool $condition, string $message): void
     }
 }
 
-foreach ([$builder, $setup, $http, $workflow, $module] as $source) {
+foreach ([
+    $builder,
+    $instrumenter,
+    $setup,
+    $http,
+    $workflow,
+    $module,
+    $shellRenderer,
+    $templateRenderer,
+    $assetRegistrar,
+] as $source) {
     assertActiveHttpFallbackRuntime(
         is_string($source) && $source !== '',
         'active HTTP fallback runtime source must be readable',
@@ -30,6 +44,41 @@ assertActiveHttpFallbackRuntime(
         && str_contains($builder, 'private const INTEGRATION_SHELL_READY = false;')
         && str_contains($builder, 'private const INTEGRATION_SHELL_READY = true;'),
     'active checkout readiness may be opened only inside the explicit temporary runtime fixture',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($builder, 'InstrumentActiveCheckoutFailureFixture.php')
+        && str_contains($builder, "grep -Fq '.jzopc-runtime-failure-'")
+        && str_contains($builder, 'Source runtime code changed while instrumenting temporary fixture'),
+    'fixture builder must install failure instrumentation only after proving production runtime sources are marker-free',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($instrumenter, "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'")
+        && str_contains($instrumenter, "'/tmp/jzopc-active-fixture'")
+        && str_contains($instrumenter, 'is_link($path)')
+        && str_contains($instrumenter, 'substr_count($source, $patch[\'anchor\']) !== 1'),
+    'failure instrumenter must be opt-in, temporary-path-only, symlink-safe and fail closed on source anchor drift',
+);
+foreach ([
+    '.jzopc-runtime-failure-service',
+    '.jzopc-runtime-failure-template',
+    '.jzopc-runtime-failure-assets',
+] as $marker) {
+    assertActiveHttpFallbackRuntime(
+        str_contains($instrumenter, $marker) && str_contains($http, $marker),
+        sprintf('active failure matrix must wire marker %s through both instrumentation and request contract', $marker),
+    );
+    assertActiveHttpFallbackRuntime(
+        !str_contains($shellRenderer, $marker)
+            && !str_contains($templateRenderer, $marker)
+            && !str_contains($assetRegistrar, $marker),
+        sprintf('production runtime source must not contain test marker %s', $marker),
+    );
+}
+assertActiveHttpFallbackRuntime(
+    str_contains($instrumenter, "throw new \\RuntimeException('Injected active checkout shell service failure.')")
+        && str_contains($instrumenter, "__jzopc_runtime_missing_template__.tpl")
+        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset registration failure.')"),
+    'temporary fixture must inject service, real Smarty-template and asset-registration failures at their production boundaries',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
@@ -73,15 +122,24 @@ assertActiveHttpFallbackRuntime(
     str_contains($http, '$schema->uninstall()')
         && str_contains($http, '$schema->install()')
         && str_contains($http, "expectNativeFallback(\$fallback, 'Persistence-failure')")
-        && str_contains($http, "expectHealthyOpc(\$recovered, 'Recovered')"),
+        && str_contains($http, "expectHealthyOpc(\$recovered, 'Persistence-recovered')"),
     'HTTP contract must inject a real module persistence failure and prove request-local recovery on the same browser/cart',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($http, 'foreach ($failureMarkers as $mode => $markerPath)')
+        && str_contains($http, 'activateFailureMarker($markerPath, $fixtureRoot, $mode)')
+        && str_contains($http, "expectNativeFallback(\$modeFallback, ucfirst(\$mode) . '-failure')")
+        && str_contains($http, "expectHealthyOpc(\$modeRecovered, ucfirst(\$mode) . '-recovered')")
+        && str_contains($http, 'deactivateFailureMarker($markerPath, $mode)'),
+    'service/template/assets failures must each prove native fallback and same-cart recovery with marker cleanup',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($http, 'finally {')
         && str_contains($http, 'JzOnePageCheckout::CONFIG_CHECKOUT_ENABLED')
         && str_contains($http, 'false,')
-        && str_contains($http, '$product->delete()'),
-    'active fallback test must restore schema/config/product state through a cleanup boundary',
+        && str_contains($http, '$product->delete()')
+        && str_contains($http, 'Cleanup could not remove %s failure marker.'),
+    'active fallback test must restore markers/schema/config/product state through cleanup boundaries',
 );
 assertActiveHttpFallbackRuntime(
     !str_contains($setup, 'validateOrder(')
@@ -94,7 +152,7 @@ assertActiveHttpFallbackRuntime(
 
 $closedHttpPosition = strpos($workflow, 'Execute fail-closed Front Office HTTP contract');
 $activeBuildPosition = strpos($workflow, 'Build temporary active checkout fixture');
-$activeHttpPosition = strpos($workflow, 'Execute active checkout persistence fallback HTTP contract');
+$activeHttpPosition = strpos($workflow, 'Execute active checkout failure fallback HTTP contract');
 assertActiveHttpFallbackRuntime(
     $closedHttpPosition !== false
         && $activeBuildPosition !== false
