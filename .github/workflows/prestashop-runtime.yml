@@ -122,3 +122,9 @@ jobs:
             /tmp/prestashop \
             "${{ matrix.family }}" \
             "${{ matrix.native_opc }}"
+
+      - name: Execute Core process adapter contract
+        run: |
+          php tests/Runtime/CoreProcessAdapterContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}"
