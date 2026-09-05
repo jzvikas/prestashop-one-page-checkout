@@ -72,5 +72,12 @@ services:
   Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutexInterface:
     alias: Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutex
 
+  Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+
+  Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelectionsStoreInterface:
+    alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore
+
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
   Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper: ~

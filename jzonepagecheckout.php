@@ -68,7 +68,15 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
+        $schema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema();
+        if (!$schema->install()) {
+            parent::uninstall();
+
+            return false;
+        }
+
         if (!Configuration::updateValue(self::CONFIG_CHECKOUT_ENABLED, false)) {
+            $schema->uninstall();
             parent::uninstall();
 
             return false;
@@ -80,6 +88,7 @@ final class JzOnePageCheckout extends Module
             }
 
             Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
+            $schema->uninstall();
             parent::uninstall();
 
             return false;
@@ -104,9 +113,14 @@ final class JzOnePageCheckout extends Module
 
     public function uninstall()
     {
+        if (!class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)) {
+            return false;
+        }
+
+        $schemaDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema())->uninstall();
         $configurationDeleted = Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
 
-        return $configurationDeleted && parent::uninstall();
+        return $schemaDeleted && $configurationDeleted && parent::uninstall();
     }
 
     public function hookActionCheckoutBuildProcess(array $params = []): mixed
@@ -148,6 +162,7 @@ final class JzOnePageCheckout extends Module
         return class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutHookPlan::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy::class)
-            && class_exists(\Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe::class);
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class);
     }
 }
