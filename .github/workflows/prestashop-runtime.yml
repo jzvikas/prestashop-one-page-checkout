@@ -237,6 +237,12 @@ jobs:
           JZOPC_ACTIVE_FIXTURE_ROOT: /tmp/jzopc-active-fixture
         run: node active-checkout-browser-contract.mjs
 
+      - name: Execute active finalization preflight Chromium contract
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+        run: node finalization-preflight-browser-contract.mjs
+
       - name: Execute active checkout failure fallback HTTP contract
         run: |
           php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCheckoutFallbackHttpContract.php \
