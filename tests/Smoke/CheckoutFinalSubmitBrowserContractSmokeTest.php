@@ -72,9 +72,9 @@ assertFinalSubmitBrowserContract(str_contains($binary, "form.requestSubmit()"), 
 assertFinalSubmitBrowserContract(str_contains($binary, "'.js-payment-' + CSS.escape(moduleName)"), 'binary control discovery must follow Core js-payment-{module} container semantics');
 assertFinalSubmitBrowserContract(str_contains($binary, "finalSubmit.hidden = selected instanceof HTMLInputElement"), 'generic final button must be hidden while a binary payment option owns final activation');
 assertFinalSubmitBrowserContract(str_contains($binary, 'this.managedDisabledControls.set(control, control.disabled)'), 'agreement gating must preserve pre-existing payment-module disabled state');
-assertFinalSubmitBrowserContract(str_contains($binary, 'let handoffStarted = false;'), 'binary controller must track whether module-owned activation has begun');
-assertFinalSubmitBrowserContract(substr_count($binary, 'handoffStarted = true;') >= 2, 'binary click and submit replay must mark handoff started before invoking module code');
-assertFinalSubmitBrowserContract(str_contains($binary, 'if (handoffStarted) {'), 'binary throw recovery must distinguish post-activation uncertainty from safe pre-handoff failure');
+assertFinalSubmitBrowserContract(str_contains($binary, 'let nativeActivationStarted = false;'), 'binary controller must track whether module-owned native activation has begun');
+assertFinalSubmitBrowserContract(substr_count($binary, 'nativeActivationStarted = true;') >= 2, 'binary click and submit replay must mark native activation started before invoking module code');
+assertFinalSubmitBrowserContract(str_contains($binary, 'if (!nativeActivationStarted) {'), 'binary throw recovery must distinguish safe pre-activation failure from post-activation uncertainty');
 assertFinalSubmitBrowserContract(str_contains($binary, "jzopc:checkout:payment-handoff-ambiguous"), 'binary post-activation throw must publish the shared ambiguous-handoff lifecycle');
 assertFinalSubmitBrowserContract(!str_contains($binary, 'validateOrder('), 'binary browser adapter must never create the PrestaShop order itself');
 assertFinalSubmitBrowserContract(str_contains($assets, 'views/js/binary-payment-controller.js'), 'binary payment interception must be registered in the checkout asset set');
