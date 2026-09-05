@@ -62,9 +62,9 @@ $assertSame(
     'Delivery-address mutation must refresh every downstream dependent section.'
 );
 $assertSame(
-    ['delivery', 'payment', 'summary'],
+    ['delivery', 'payment', 'agreements', 'summary'],
     $values($resolver->affectedBy(CheckoutMutation::CarrierSelected)),
-    'Carrier selection must refresh delivery, payment eligibility and totals.'
+    'Carrier selection must refresh delivery, payment eligibility, legal conditions and totals.'
 );
 $assertSame(
     ['identity', 'addresses', 'delivery', 'payment', 'agreements', 'summary'],
