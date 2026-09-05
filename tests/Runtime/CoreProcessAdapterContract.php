@@ -59,7 +59,19 @@ $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
-$orderController = new OrderController();
+// A normal front request initializes Controller::$container from buildContainer()
+// inside Controller::init(). Calling full init() in this CLI contract would also run
+// request hooks and redirect-sensitive front-controller behavior, so expose exactly
+// that protected bootstrap step and nothing else.
+$orderController = new class extends OrderController {
+    public function initializeRuntimeContainer(): void
+    {
+        if ($this->getContainer() === null) {
+            $this->container = $this->buildContainer();
+        }
+    }
+};
+$orderController->initializeRuntimeContainer();
 $context->controller = $orderController;
 $session = $orderController->getCheckoutSession();
 if (!$session instanceof CheckoutSession) {
@@ -131,6 +143,7 @@ if ($expectedFamily === '9.1') {
     }
 }
 
+$cartId = (int) $cart->id;
 if (!$cart->delete()) {
     $fail('Runtime checkout cart cleanup failed.');
 }
@@ -138,5 +151,5 @@ if (!$cart->delete()) {
 fwrite(STDOUT, sprintf(
     "Core process adapter contract OK: PrestaShop %s, cart=%d\n",
     _PS_VERSION_,
-    (int) $cart->id,
+    $cartId,
 ));
