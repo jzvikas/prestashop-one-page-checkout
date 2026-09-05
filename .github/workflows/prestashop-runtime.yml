@@ -128,3 +128,9 @@ jobs:
           php tests/Runtime/CoreProcessAdapterContract.php \
             /tmp/prestashop \
             "${{ matrix.family }}"
+
+      - name: Execute installed Smarty shell contract
+        run: |
+          php tests/Runtime/InstalledSmartyShellContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}"
