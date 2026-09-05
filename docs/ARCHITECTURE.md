@@ -14,13 +14,15 @@ This document describes architecture that exists in the repository today. It int
 
 `PrestaShopRuntimeProbe` asks whether Core capabilities are autoloadable, not merely whether their classes have already been touched in the current process. Installed-runtime CI caught and fixed a false-negative caused by `class_exists('Hook', false)`: clean PrestaShop CLI processes legitimately had not loaded `Hook` yet, so normal autoload-capable `class_exists()` is required for capability detection.
 
+PrestaShop's legacy front-office controller container is a separate service-loading boundary from the generic Symfony application kernel. `FrontController` builds the named `front` container, whose module compiler pass loads `config/front/services.yml`. The module therefore keeps one canonical constructor-injected graph in `config/services.yml` and imports it from `config/front/services.yml`. This prevents duplicated service definitions while making the public integration services resolvable through `Module::get()` in a real `OrderController`. Installed runtime CI covers this boundary on both tested runtime families. See ADR-0011.
+
 `CheckoutProcessBuilder` creates a real Core `CheckoutProcess` around a single `CheckoutShellStep`. The step extends `AbstractCheckoutStep`, stays reachable/current as the one-page surface and calls Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`. `CheckoutShellRenderer` then renders the trusted module root from the same Core cart/session and persisted server selections used by mutation guards.
 
 `CheckoutBrowserBootstrapFactory` builds the initial browser binding from the loaded cart, `Tools::getToken(false)`, `PrestaShopCheckoutStateFactory`, `CheckoutStateVersioner` and PrestaShop-generated module links. The shell exposes only cart ID, CSRF token, state version and payment/agreement endpoint URLs. It does not expose client-authoritative totals or a browser copy of server selections.
 
 `actionFrontControllerSetMedia` is installed in addition to the version-specific checkout hook. It is restricted to `OrderController`, must pass the same activation policy, and delegates to `CheckoutFrontendAssetRegistrar`. Existing installations receive that hook through idempotent `upgrade/upgrade-0.3.0.php`; the version is therefore `0.3.0`.
 
-See ADR-0001, ADR-0008, ADR-0009 and ADR-0010.
+See ADR-0001, ADR-0008, ADR-0009, ADR-0010 and ADR-0011.
 
 ## Server-authoritative checkout state
 
@@ -146,26 +148,26 @@ The dependency resolver is conservative. Address/cart changes refresh addresses,
 
 ## Testing state
 
-The smoke suite covers capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contracts, response mapping, address selection/rendering, Core-backed address/delivery/payment/agreement presenters, payment JavaScript behavior, payment selection validation, agreement exact-set validation, authoritative selection restoration, guarded endpoint contracts and stale-safe browser mutation transport.
+The smoke suite covers capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contracts, response mapping, address selection/rendering, Core-backed address/delivery/payment/agreement presenters, payment JavaScript behavior, payment selection validation, agreement exact-set validation, authoritative selection restoration, guarded endpoint contracts, stale-safe browser mutation transport and the required legacy front-office service entry point.
 
 Version-specific source-contract coverage also verifies the 9.2 provider shape/isolation, 9.0/9.1 Core-session reuse, module shell step construction, Core `renderTemplate()` lifecycle, readiness gate, media registration and `0.3.0` upgrade path.
 
 GitHub Actions baseline CI validates Composer metadata and production autoload installation, PHP 8.4 syntax, JavaScript syntax with Node.js 22 and the full smoke suite.
 
-A separate `PrestaShop Runtime` workflow now provisions MariaDB 11.4 and boots real source-tree installations for:
+A separate `PrestaShop Runtime` workflow provisions MariaDB 11.4 and boots real source-tree installations for:
 
-- PrestaShop 9.1.5, proving module installation/enabled state, `actionCheckoutRender` registration, absence of the 9.2 provider interface, media-hook registration and fail-closed activation;
-- PrestaShop 9.2.0-beta.1, proving module installation/enabled state, `actionCheckoutBuildProcess` registration, presence of the provider interface, media-hook registration, pinned native `ps_onepagecheckout` installation/enabled detection and fail-closed activation.
+- PrestaShop 9.1.5, proving module installation/enabled state, `actionCheckoutRender` registration, absence of the 9.2 provider interface, media-hook registration, fail-closed activation, front-container service resolution and real Core process replacement while preserving the original `CheckoutSession`;
+- PrestaShop 9.2.0-beta.1, proving module installation/enabled state, `actionCheckoutBuildProcess` registration, presence of the provider interface, media-hook registration, pinned native `ps_onepagecheckout` installation/enabled detection, fail-closed activation, front-container service resolution and direct provider process construction while preserving the supplied `CheckoutSession`.
 
-The real runtime matrix also guards clean-process Core autoload behavior in `PrestaShopRuntimeProbe`. It does **not** yet open the readiness gate, perform live `actionCheckoutRender` reference replacement/provider resolution, render the shell through a real HTTP/Smarty checkout page, exercise mutation front controllers over HTTP, or run browser E2E with representative carrier/payment modules. Schema/media-hook upgrade execution against an older installed module version also remains to be added.
+The real runtime matrix guards clean-process Core autoload behavior in `PrestaShopRuntimeProbe` and the PrestaShop-specific `config/front/services.yml` service-loading boundary. It does **not** yet open the readiness gate, execute the real checkout hook/provider resolver with takeover enabled, render the shell through a real HTTP/Smarty checkout page, exercise mutation front controllers over HTTP, or run browser E2E with representative carrier/payment modules. Schema/media-hook upgrade execution against an older installed module version also remains to be added.
 
 ## Next application boundary
 
-Installed capability/hook/conflict coverage is now green on PrestaShop 9.1.5 and 9.2.0-beta.1, but activation remains deliberately fail-closed. The next highest-priority milestone is a controlled live checkout harness proving:
+Installed capability/hook/conflict coverage and direct real-Core process construction are green on PrestaShop 9.1.5 and 9.2.0-beta.1, but activation remains deliberately fail-closed. The next highest-priority milestone is a controlled live checkout harness proving:
 
 1. native checkout remains intact with the module disabled, feature disabled, or native `ps_onepagecheckout` conflict active;
-2. 9.0/9.1 `actionCheckoutRender` reference replacement preserves the original Core checkout session when takeover is explicitly test-enabled;
-3. 9.2+ provider resolution returns the module process only when exactly one eligible provider exists and otherwise falls back to Core;
+2. the real 9.0/9.1 `actionCheckoutRender` hook path performs reference replacement while preserving the Core checkout session when takeover is explicitly test-enabled;
+3. the real 9.2+ provider resolver returns the module process only when exactly one eligible provider exists and otherwise falls back to Core;
 4. real HTTP/Smarty rendering emits the trusted shell/bootstrap and registers frontend assets only in the active checkout path;
 5. browser mutation lifecycle works without stale-response corruption or breaking payment/carrier hooks;
 6. representative payment/carrier modules survive section replacement and re-initialization.
