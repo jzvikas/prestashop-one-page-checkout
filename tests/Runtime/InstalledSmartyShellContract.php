@@ -107,6 +107,7 @@ $requiredFragments = [
     'data-jzopc-section="summary"',
     'data-jzopc-csrf-token="',
     'data-jzopc-state-version="',
+    'data-jzopc-address-url="',
     'data-jzopc-payment-url="',
     'data-jzopc-agreements-url="',
 ];
@@ -143,7 +144,7 @@ if (substr_count($html, $cartBinding) !== 1) {
     $fail('Rendered checkout bootstrap is not uniquely bound to the runtime cart.');
 }
 
-foreach (['csrf-token', 'state-version', 'payment-url', 'agreements-url'] as $attribute) {
+foreach (['csrf-token', 'state-version', 'address-url', 'payment-url', 'agreements-url'] as $attribute) {
     if (!preg_match('/data-jzopc-' . preg_quote($attribute, '/') . '="([^"]+)"/', $html, $matches)) {
         $fail(sprintf('Rendered checkout bootstrap attribute %s is unavailable.', $attribute));
     }
@@ -152,19 +153,19 @@ foreach (['csrf-token', 'state-version', 'payment-url', 'agreements-url'] as $at
     }
 }
 
-if (!preg_match('/data-jzopc-payment-url="([^"]+)"/', $html, $paymentMatches)) {
-    $fail('Payment mutation URL is unavailable.');
-}
-if (!preg_match('/data-jzopc-agreements-url="([^"]+)"/', $html, $agreementMatches)) {
-    $fail('Agreement mutation URL is unavailable.');
-}
-$paymentUrl = html_entity_decode($paymentMatches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-$agreementsUrl = html_entity_decode($agreementMatches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-if (!str_contains($paymentUrl, 'jzonepagecheckout') || !str_contains($paymentUrl, 'paymentselection')) {
-    $fail('Payment mutation URL does not target the module paymentselection controller.');
-}
-if (!str_contains($agreementsUrl, 'jzonepagecheckout') || !str_contains($agreementsUrl, 'agreements')) {
-    $fail('Agreement mutation URL does not target the module agreements controller.');
+$controllerTargets = [
+    'address' => 'addressselection',
+    'payment' => 'paymentselection',
+    'agreements' => 'agreements',
+];
+foreach ($controllerTargets as $attribute => $controller) {
+    if (!preg_match('/data-jzopc-' . preg_quote($attribute, '/') . '-url="([^"]+)"/', $html, $matches)) {
+        $fail(sprintf('%s mutation URL is unavailable.', ucfirst($attribute)));
+    }
+    $url = html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if (!str_contains($url, 'jzonepagecheckout') || !str_contains($url, $controller)) {
+        $fail(sprintf('%s mutation URL does not target the expected module controller.', ucfirst($attribute)));
+    }
 }
 
 $cartId = (int) $cart->id;
