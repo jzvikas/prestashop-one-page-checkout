@@ -31,6 +31,7 @@ foreach ([
 $contracts = [
     'InstalledModuleContract.php',
     'CoreProcessAdapterContract.php',
+    'IntegrationFailureIsolationContract.php',
     'InstalledSmartyShellContract.php',
     'ModuleFrontCheckoutSessionContract.php',
 ];
@@ -44,6 +45,29 @@ foreach ($contracts as $contract) {
     if (!str_contains($source, "['9.0', '9.1', '9.2']")) {
         $fail(sprintf('%s does not explicitly accept the supported 9.0/9.1/9.2 runtime families.', $contract));
     }
+}
+
+if (!str_contains($workflow, 'Execute integration failure isolation contract')
+    || !str_contains($workflow, 'php tests/Runtime/IntegrationFailureIsolationContract.php')) {
+    $fail('PrestaShop runtime workflow must execute the integration failure isolation contract.');
+}
+
+if (!str_contains($workflow, 'Build Classic theme assets for PrestaShop 9.0')
+    || !str_contains($workflow, "if: matrix.family == '9.0'")
+    || !str_contains($workflow, 'bash tools/assets/build.sh front-classic')
+    || !str_contains($workflow, 'bash tools/assets/build.sh front-hummingbird')) {
+    $fail('Runtime workflow must build the Classic install prerequisite for 9.0 while retaining Hummingbird asset coverage.');
+}
+
+$installedSmartyContract = file_get_contents($root . '/tests/Runtime/InstalledSmartyShellContract.php');
+if (!is_string($installedSmartyContract)) {
+    $fail('Installed Smarty runtime contract is unavailable.');
+}
+if (!str_contains($installedSmartyContract, '$process->handleRequest([]);')
+    || !str_contains($installedSmartyContract, '$steps[0]->isReachable()')
+    || !str_contains($installedSmartyContract, '$steps[0]->isCurrent()')
+    || !str_contains($installedSmartyContract, '$steps[0]->isComplete()')) {
+    $fail('Installed Smarty runtime contract must execute and verify the real Core checkout-step lifecycle before rendering.');
 }
 
 $installedContract = file_get_contents($root . '/tests/Runtime/InstalledModuleContract.php');

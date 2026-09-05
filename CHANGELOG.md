@@ -24,6 +24,10 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - `CheckoutFinalizationReservationBrowserGuardContractSmokeTest.php` and ADR-0024 documenting reload-safe reservation UX, shared ambiguity lifecycle and the binary post-activation `AbortError` rule.
 - Request-local native-checkout fallback containment with eager shell preparation before version-specific process takeover.
 - `IntegrationFailureIsolationContract.php` in every installed PrestaShop 9.0/9.1/9.2 runtime job, plus source smoke contracts and ADR-0025/ADR-0026 documenting the containment and installed-object identity gate.
+- Disposable `/tmp/jzopc-active-fixture*` runtime builder that can open readiness only in the copied test module while rechecking production source remains closed.
+- Controlled active HTTP fallback matrix for persistence, shell-service, real Smarty-template and asset-registration failures, with same-session recovery and cleanup.
+- Pinned Playwright/Chromium active checkout contract covering real Core cart creation, OPC root/bootstrap/assets, server identity validation, native fallback and same-cart recovery.
+- ADR-0027 and ADR-0028 documenting the isolated active HTTP fixture and controlled Chromium takeover contract.
 
 ### Changed
 
@@ -33,26 +37,27 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Binary payment preflight publishes `jzopc:checkout:validation-failed`, and `AbortError` is considered a harmless abort only before native click/form activation starts; the same error name after activation is treated as ambiguous and preserves the reservation.
 - A server-rendered active finalization reservation locks the checkout after page reload; the same lock is entered after a `finalization_in_progress` server rejection and suppresses link-style as well as form-style payment activation.
 - Ordinary payment form controls remain enabled and untouched for native successful controls/embedded integrations, but a capture-phase guard blocks normal direct submit before the reserved final-submit handoff. Authorization is exact option/form scoped, consumed by the first observable submit and revoked after the current synchronous handoff stack or payment/section change.
-- Checkout process construction now pre-renders the complete shell before Core process/provider takeover. Legacy process reference assignment happens only after replacement construction succeeds, and the 9.2 provider receives already-prepared shell HTML.
+- Checkout process construction pre-renders the complete shell before Core process/provider takeover. Legacy process reference assignment happens only after replacement construction succeeds, and the 9.2 provider receives already-prepared shell HTML.
 - Checkout hook/asset integration failures trip a request-local circuit breaker, causing later takeover decisions in the same request to leave Core native checkout intact. Fallback logging excludes exception messages and request/payment/customer payloads.
-- Installed runtime workflow covers 9.0/9.1/9.2 families, with 9.0 and 9.1 sharing the legacy `actionCheckoutRender` path and 9.2 exercising the provider path.
-- Installed runtime contract verifies `actionValidateOrderAfter` successful-order cleanup hook registration.
+- Runtime shop domain is pinned to `localhost:8080` so generated checkout endpoints, loopback server and Chromium origin agree exactly.
+- Installed runtime workflow now proves closed production behavior first, stops that server, then remounts only the disposable active fixture for browser/failure testing.
 
 ### Verification
 
-- CI #112 on `852181de9687726521f95de479f3f2f58986ce8b` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite, including the reservation-browser guard contract.
-- PrestaShop Runtime #61 on `ad87574322de36b6f849c8f760d88fedf6bffc92` completed successfully for 9.0.3, 9.1.5 and 9.2.0-beta.1 through module installation, Core process adapter, installed Smarty shell, module-front CheckoutSession and fail-closed Front Office HTTP contracts.
-- The newly restored integration-failure-isolation contract is a new gate in this delta and must complete on all three installed runtime families before that containment is considered verified.
-- Controlled active Chromium checkout/payment coverage is still not part of current `main` verification and remains a release blocker.
+- CI #113 on `239f2ad61a802d351ca92e8106bad4c7a1c5d0bb` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
+- PrestaShop Runtime #63 on the same commit completed successfully for 9.0.3, 9.1.5 and 9.2.0-beta.1. Every family passed module installation, Core process adapter, the new integration-failure-isolation contract, installed Smarty shell, module-front CheckoutSession and fail-closed Front Office HTTP checks.
+- CI #112 previously verified the reservation-browser hardening source/smoke layer on `852181de9687726521f95de479f3f2f58986ce8b`.
+- The newly restored active HTTP and Chromium gates are new in this delta and must execute successfully before they count as browser/runtime evidence.
+- Representative real payment completion, carrier diversity, concurrent-tab finalization, zero-total order completion and full account/address browser flows remain release blockers after this first active Chromium gate.
 
 ### Safety
 
-- `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
+- `INTEGRATION_SHELL_READY` remains `false` in repository production source; these changes do not enable production checkout takeover.
+- The active runtime builder refuses to run without an explicit env guard and refuses targets outside `/tmp/jzopc-active-fixture*`; it rechecks the source readiness constant before and after patching the disposable copy.
+- Runtime failure instrumentation exists only in the temporary copied module and production service/template/asset sources are required to stay marker-free.
+- Active browser/HTTP contracts do not submit finalization, call `validateOrder()`, create an order or write Core cart/order SQL directly.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state and ambiguous post-activation payment-handler failure preserve the duplicate-handoff barrier instead of weakening it.
-- Reload/same-tab reservation locking is browser defense in depth only; server DB reservation and Core order state remain the authoritative duplicate-handoff boundary.
-- Integration failure containment falls back to Core native checkout and does not mutate carts, release reservations, submit payment or create orders.
-- Direct ordinary module-form submit blocking changes only the observable browser submit lifecycle; it does not rewrite payment payloads, disable payment form fields before handoff, call `validateOrder()` or claim to police low-level hostile/module JavaScript submission.
-- No module version bump: browser reservation/submit policy, failure containment and runtime-test changes introduce no new schema/config/hook migration.
+- No module version bump: browser policy, fallback containment and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
