@@ -15,6 +15,7 @@
     ADDRESS_SECTION_SELECTOR + ' input[name="use_same_address"]',
   ].join(',');
   const AGREEMENT_SELECTOR = '[data-jzopc-section="agreements"] input[name="agreements[]"]';
+  const TRUSTED_BINDING_NAMES = new Set(['token', 'cartId', 'stateVersion']);
   const instances = new WeakMap();
 
   class JzOpcMutationClient {
@@ -228,6 +229,9 @@
       const payload = {};
       for (const [rawName, value] of new FormData(form).entries()) {
         const name = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+        if (TRUSTED_BINDING_NAMES.has(name)) {
+          continue;
+        }
         if (Object.prototype.hasOwnProperty.call(payload, name)) {
           payload[name] = Array.isArray(payload[name]) ? payload[name] : [payload[name]];
           payload[name].push(String(value));
@@ -313,6 +317,9 @@
       body.set('stateVersion', this.stateVersion);
 
       for (const [name, value] of Object.entries(operationPayload)) {
+        if (TRUSTED_BINDING_NAMES.has(name)) {
+          continue;
+        }
         if (Array.isArray(value)) {
           for (const item of value) {
             body.append(name + '[]', item);

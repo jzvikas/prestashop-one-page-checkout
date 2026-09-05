@@ -22,6 +22,8 @@ assertMutationJavascript(str_contains($source, 'jzopcCarrierUrl'), 'trusted boot
 assertMutationJavascript(str_contains($source, "body.set('token', this.csrfToken)"), 'every mutation must send CSRF');
 assertMutationJavascript(str_contains($source, "body.set('cartId', this.cartId)"), 'every mutation must send cart binding');
 assertMutationJavascript(str_contains($source, "body.set('stateVersion', this.stateVersion)"), 'every mutation must send prior state version');
+assertMutationJavascript(str_contains($source, "new Set(['token', 'cartId', 'stateVersion'])"), 'operation payload must reserve trusted checkout binding names');
+assertMutationJavascript(str_contains($source, 'if (TRUSTED_BINDING_NAMES.has(name))'), 'serialized Core form fields must not overwrite trusted checkout bindings');
 assertMutationJavascript(str_contains($source, "addressAction: 'present'"), 'address editor must be server-rendered on demand');
 assertMutationJavascript(str_contains($source, "payload.addressAction = 'save'"), 'native address form submissions must use the guarded save action');
 assertMutationJavascript(str_contains($source, 'new FormData(form).entries()'), 'native Core address fields must be serialized instead of reimplemented in JavaScript');
