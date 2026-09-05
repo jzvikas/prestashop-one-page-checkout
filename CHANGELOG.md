@@ -17,11 +17,13 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Bounded opportunistic garbage collection for abandoned transient checkout-selection rows.
 - `docs/COMPATIBILITY.md` and ADR-0019 documenting rollout and multistore activation rules.
 - `CheckoutFinalizationReservationRecoveryContractSmokeTest.php` and ADR-0022 documenting the hardened duplicate-handoff recovery window and order-aware release rule.
+- Final-submit browser contract coverage for the post-activation fail-closed boundary on ordinary and binary payment handoffs.
 
 ### Changed
 
 - Finalization reservation default TTL increased from 90 seconds to 900 seconds, with constructor overrides bounded to 60..3600 seconds, so slow redirect/payment initialization cannot reopen the handoff barrier prematurely.
 - Attempt-scoped reservation release now refuses to delete the barrier after Core reports an order for the cart; Core order-state lookup failure also fails closed and leaves bounded TTL recovery in control.
+- Ordinary and binary payment adapters no longer automatically release a reservation after module-owned native activation has begun. If a third-party handler throws after submit/click invocation starts, checkout remains frozen behind the reservation until Core successful-order cleanup or bounded TTL recovery.
 - Installed runtime workflow now starts a loopback Front Office server and executes the same fail-closed HTTP boundary contract for the 9.0, 9.1 and 9.2 runtime families.
 - Installed runtime contracts now explicitly accept 9.0/9.1/9.2 families, with 9.0 and 9.1 sharing the legacy `actionCheckoutRender` path.
 - Removed stale exact `0.3.0` runtime assertion; the installed contract now requires at least the `0.4.0` finalization-schema baseline.
@@ -30,16 +32,17 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Verification
 
-- Reservation recovery hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
+- Post-activation handoff hardening and its updated browser source contract were source-reviewed but not executed while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
+- Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime evidence.
 - The new/updated 9.0 runtime and smoke contracts are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing compatibility evidence yet.
 
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
-- Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
+- Reservation release remains exact customer/attempt scoped; uncertain Core order state and ambiguous post-activation payment-handler failure preserve the duplicate-handoff barrier instead of weakening it.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: reservation policy, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
+- No module version bump: browser reservation policy, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
