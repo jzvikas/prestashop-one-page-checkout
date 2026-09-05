@@ -40,7 +40,11 @@ The containment latch is not a new checkout authority. It only prevents module t
 
 Fallback logs contain only an internal stage, exception class and numeric shop/cart IDs. Exception messages, request/form payloads, tokens and payment/customer data are deliberately excluded.
 
-Installed failure-injection coverage is deliberately isolated under `tests/Runtime`. `IntegrationFailureIsolationContract.php` injects a selection-store read exception into eager shell preparation without changing production configuration or readiness. On 9.0/9.1 it requires the exact original Core process/session to remain untouched after the adapter fails. On 9.2 it requires failure during eager preparation and verifies that a provider given already-prepared HTML cannot re-enter the failing persistence/shell-render path later. The fixture does not write activation state, reflectively modify `INTEGRATION_SHELL_READY`, add a debug endpoint, send finalization actions or create an order. Full request-path fallback still requires controlled HTTP/browser failure injection.
+Installed failure-injection coverage is deliberately isolated under `tests/Runtime`. `IntegrationFailureIsolationContract.php` injects a selection-store read exception into eager shell preparation without changing production configuration or readiness. On 9.0/9.1 it requires the exact original Core process/session to remain untouched after the adapter fails. On 9.2 it requires failure during eager preparation and verifies that a provider given already-prepared HTML cannot re-enter the failing persistence/shell-render path later. The fixture does not write activation state, reflectively modify `INTEGRATION_SHELL_READY`, add a debug endpoint, send finalization actions or create an order.
+
+Controlled request-path failure coverage is now also configured without adding a production bypass. The workflow first executes the normal closed-readiness HTTP contract, then copies the module to `/tmp/jzopc-active-fixture*`, opens readiness only in that disposable copy and installs test-only marker checks only in that copy. Production `CheckoutShellRenderer`, `PrestaShopCheckoutTemplateRenderer` and `CheckoutFrontendAssetRegistrar` remain marker-free. The active HTTP contract uses one Core-created cart/cookie session to require healthy OPC, Core-native fallback and healthy recovery for persistence, shell-service, real Smarty missing-template and asset-registration failures. The instrumenter refuses non-`/tmp` targets, symlink patch targets and ambiguous source anchors. See ADR-0029.
+
+This active fixture does not call payment finalization, create an order, insert cart/order SQL or weaken production activation policy. Its purpose is only to prove the request-local takeover/fallback boundary once the configured runtime matrix can actually execute.
 
 ## 3. CSRF and cross-cart/customer binding
 
@@ -88,7 +92,7 @@ Saved address IDs and address edit targets are checked with `Customer::customerH
 
 Saved selections are applied through Core `CheckoutSession`, preserving cart delivery-address side effects.
 
-Address create/edit delegates to Core `CustomerAddressForm`, `CustomerAddressFormatter` and `CustomerAddressPersister`, preserving country/state validation, required fields, module hooks and historization.
+Address create/edit delegates to `CustomerAddressForm`, `CustomerAddressFormatter` and `CustomerAddressPersister`, preserving country/state validation, required fields, module hooks and historization.
 
 A successful address mutation clears prior payment/agreement authority before downstream sections are regenerated.
 
@@ -101,7 +105,7 @@ Browser carrier IDs/prices/labels are not accepted as authority. `CheckoutCarrie
 - regenerates fresh Core delivery options;
 - accepts only an exact canonical option key;
 - writes using Core's address-keyed `CheckoutSession::setDeliveryOption()` payload;
-- rereads persisted cart delivery state to confirm Core retained the choice.
+- rereads persisted cart state to confirm Core retained the choice.
 
 A real carrier change clears payment/agreement authority. Virtual carts reject carrier mutation.
 
@@ -248,7 +252,7 @@ The internal readiness constant remains private production authority; the BO pag
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
 | Concurrent final submission | DB reservation + attempt scoping + Core-order-aware release + effective 15-minute TTL + reload/live losing-tab UI convergence + locked activation suppression | Real concurrent-tab/process, reload/back and slow-payment verification |
 | Payment/order handoff | Native ordinary/binary/free-order paths; post-activation exceptions preserve reservation | Real third-party module browser verification of redirect/embedded/binary, link-style activation and thrown/partial handlers |
-| Checkout integration failure | Eager shell preparation + request-local circuit breaker; installed failure-isolation contract covers legacy Core process/session identity and 9.2 no-late-render property without readiness bypass | Execute configured installed contract, then inject DB/template/service/asset failures on real HTTP/browser request paths across 9.0/9.1/9.2 |
+| Checkout integration failure | Eager shell preparation + request-local circuit breaker + installed object isolation + controlled active HTTP persistence/service/template/asset failure matrix, all without production readiness bypass | Execute the configured 9.0/9.1/9.2 installed + active HTTP matrix; then retain real-browser takeover/payment/carrier verification before readiness |
 | Persisted stale selection rows | Immediate order cleanup + bounded abandoned GC implemented | Execute lifecycle/GC/runtime verification |
 | Native OPC conflict | Shared policy blocks enabled `ps_onepagecheckout` provider | Re-run 9.2 installed/browser conflict matrix |
 | Multistore activation spillover | BO writes limited to exact shop scope | Real multistore BO verification |
@@ -273,16 +277,16 @@ Integration-fallback logging is intentionally narrower still: internal stage, ex
 
 The source contains final validation, duplicate-handoff barrier, native payment handoff, post-activation ambiguity protection, active-reservation reload/live-tab UI convergence, locked activation suppression, native-checkout integration-failure containment, successful-order cleanup, abandoned-state cleanup and Back Office rollout controls. The reservation recovery boundary uses a payment-safe effective 15-minute TTL, refuses explicit release after a Core order or when Core order state is unknown, and refuses browser automatic release after native payment activation may have begun.
 
-The repository now also contains an installed failure-isolation contract and strengthened installed Smarty finalization bootstrap assertions. The local/CI smoke runner forces assertion execution and its PHP 8.4 assertion-enablement mechanism has been checked directly. These additions improve the verification boundary but do not make production takeover proven.
+The repository now contains both the installed failure-isolation contract and a controlled active HTTP fallback matrix. The latter keeps the production readiness gate closed, opens only a disposable `/tmp` copy, injects persistence/service/template/assets failures at request-path boundaries and requires Core-native fallback plus same-cart recovery. Its test-only instrumenter has been syntax-checked and executed against a synthetic temporary source layout, but that does not constitute PrestaShop runtime evidence.
 
-GitHub is currently creating no workflow checks/statuses for the branch, so the latest PHP/Node/smoke/installed-runtime contracts — including PrestaShop 9.0.3, `IntegrationFailureIsolationContract.php`, strengthened Smarty finalization assertions, reservation recovery, concurrent-tab UI convergence, locked activation suppression and integration-failure containment — remain unexecuted as a suite.
+GitHub is currently creating no workflow checks/statuses for the branch, so the latest PHP/Node/smoke/installed-runtime/active-HTTP contracts — including PrestaShop 9.0.3, `IntegrationFailureIsolationContract.php`, strengthened Smarty finalization assertions, reservation recovery, concurrent-tab UI convergence, locked activation suppression and the four-mode active fallback matrix — remain unexecuted as a suite.
 
 Before `INTEGRATION_SHELL_READY` can be reconsidered:
 
 1. execute all deferred checks and fix every failure;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix, including failure isolation and strengthened finalization bootstrap assertions;
-3. prove native fallback/takeover including injected shell DB/template/service failures and asset-registration failure on the actual HTTP/browser request path, plus identity, CSRF rotation/cart restoration and address flows in a browser;
-4. prove carrier/no-carrier and representative payment module compatibility;
+3. execute the configured active HTTP persistence/service/template/assets fallback matrix on all runtime families and fix every failure;
+4. prove identity, CSRF rotation/cart restoration, address, carrier/no-carrier and representative payment-module compatibility in a real browser;
 5. prove zero-total free order, concurrent-tab reservation including losing-tab live/reload convergence and locked link/form surfaces, slow/failed/abandoned payment recovery, thrown/partial native-handler behavior and successful cleanup;
 6. complete responsive/accessibility/performance and final packaging/release review.
 
