@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'runtime/installed-smarty-shell-render']
   pull_request:
 
 permissions:
