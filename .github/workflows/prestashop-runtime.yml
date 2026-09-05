@@ -51,6 +51,11 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install module dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
@@ -61,6 +66,10 @@ jobs:
       - name: Install PrestaShop dependencies
         working-directory: /tmp/prestashop
         run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Build Hummingbird theme assets
+        working-directory: /tmp/prestashop
+        run: bash tools/assets/build.sh front-hummingbird
 
       - name: Install PrestaShop
         working-directory: /tmp/prestashop
