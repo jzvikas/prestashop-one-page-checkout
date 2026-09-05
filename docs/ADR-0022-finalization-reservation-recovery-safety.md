@@ -27,12 +27,16 @@ The downside of a longer reservation is a temporary retry delay after a hard bro
 
 Likewise, an explicit release after Core order creation would weaken the duplicate-handoff barrier exactly when checkout state is most sensitive. Failing closed on unknown order state prefers bounded temporary unavailability over duplicate order/payment risk.
 
-## Remaining browser boundary
+## Browser ambiguity follow-up
 
-This store-layer hardening cannot prove whether a third-party JavaScript handler that throws has already initiated network/payment work. The ordinary and binary browser adapters therefore still require controlled browser verification of thrown/partial native handlers. The follow-up rule should remain conservative: automatic release is safe only while native module-owned activation has definitely not started; once it has started, successful Core cleanup or TTL recovery is safer than guessing.
+The store layer cannot prove whether a third-party JavaScript handler that throws has already initiated network/payment work. ADR-0023 now applies the conservative rule in both browser adapters: automatic attempt release remains available only while native module-owned activation definitely has not started. Once an ordinary submit lifecycle, binary click or binary form replay has begun, a thrown exception preserves the reservation for successful Core cleanup or bounded TTL recovery.
+
+This source hardening does not replace the required controlled browser verification of thrown/partial native handlers.
 
 ## Verification
 
-`CheckoutFinalizationReservationRecoveryContractSmokeTest.php` records the new TTL, bounded-release and Core-order-aware fail-closed source contract. It has not been executed in this change because GitHub Actions quota remains exhausted and the connected environment has no local installed PrestaShop/browser runtime.
+`CheckoutFinalizationReservationRecoveryContractSmokeTest.php` records the TTL, bounded-release and Core-order-aware fail-closed source contract. `CheckoutNativePaymentHandoffAmbiguityContractSmokeTest.php` separately locks the browser-side pre-activation versus post-activation release boundary introduced by ADR-0023.
 
-Real runtime/browser verification must still prove concurrent tabs, slow/abandoned payment initialization, successful lifecycle cleanup, explicit pre-handoff release and retry after TTL expiry before the readiness gate can be reconsidered.
+These latest contracts have not been executed because GitHub Actions quota remains exhausted and the connected environment has no local installed PrestaShop/browser runtime.
+
+Real runtime/browser verification must still prove concurrent tabs, slow/abandoned payment initialization, successful lifecycle cleanup, explicit pre-handoff release, thrown/partial native handlers and retry after TTL expiry before the readiness gate can be reconsidered.

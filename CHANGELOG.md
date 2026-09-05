@@ -6,6 +6,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Added
 
+- `CheckoutNativePaymentHandoffAmbiguityContractSmokeTest.php` and ADR-0023 documenting the fail-closed boundary between safe pre-activation release and ambiguous post-activation native payment progress.
 - Front Office fail-closed HTTP runtime contract covering native `/order` non-takeover, absent OPC checkout assets/root and direct finalization-endpoint rejection while readiness remains closed.
 - Source smoke contract locking the fail-closed HTTP workflow wiring and the production `INTEGRATION_SHELL_READY=false` boundary.
 - ADR-0021 documenting the external HTTP activation-boundary test and its non-goals.
@@ -20,6 +21,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Changed
 
+- Ordinary native payment-form exceptions no longer automatically release the finalization reservation after the module-owned submit lifecycle has started; ambiguous progress now preserves the duplicate-handoff barrier for Core cleanup or bounded TTL recovery.
+- Binary payment replay now explicitly tracks whether the original module-owned click/form activation has started. Pre-activation errors may release their exact attempt; exceptions after activation starts preserve the reservation and emit the `jzopc:checkout:payment-handoff-ambiguous` lifecycle event.
 - Finalization reservation default TTL increased from 90 seconds to 900 seconds, with constructor overrides bounded to 60..3600 seconds, so slow redirect/payment initialization cannot reopen the handoff barrier prematurely.
 - Attempt-scoped reservation release now refuses to delete the barrier after Core reports an order for the cart; Core order-state lookup failure also fails closed and leaves bounded TTL recovery in control.
 - Installed runtime workflow now starts a loopback Front Office server and executes the same fail-closed HTTP boundary contract for the 9.0, 9.1 and 9.2 runtime families.
@@ -30,16 +33,18 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Verification
 
-- Reservation recovery hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
+- Native handoff ambiguity hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real ordinary/binary thrown-handler behavior remains a browser gate, not verified compatibility evidence.
+- Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime evidence.
 - The new/updated 9.0 runtime and smoke contracts are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing compatibility evidence yet.
 
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
+- Browser-side release is now intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: reservation policy, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
+- No module version bump: reservation policy, payment-handoff browser safety, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 

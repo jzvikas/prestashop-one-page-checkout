@@ -106,6 +106,8 @@ The OPC module does not call `PaymentModule::validateOrder()` for normal third-p
 
 Unexpected binary preflight section replacement fails closed to avoid destroying third-party runtime handler/state before replay.
 
+Native activation is now also a fail-closed recovery boundary. Before a module-owned native submit/click/form replay starts, an exact attempt may still be best-effort released. Once native activation starts, a thrown JavaScript exception is treated as ambiguous because the payment handler may already have started network/order work. Ordinary and binary adapters preserve the reservation, emit `jzopc:checkout:payment-handoff-ambiguous`, and leave recovery to successful Core cleanup or bounded TTL expiry instead of reopening a second handoff.
+
 ## 9. Legal-agreement tampering
 
 Required conditions come from Core `ConditionsToApproveFinder`, including shop terms and module `termsAndConditions` contributions.
@@ -145,6 +147,7 @@ Security properties:
 - explicit release first asks Core whether an order already exists for the cart and preserves the reservation when it does;
 - if Core order state cannot be read reliably, release fails closed and leaves TTL recovery in control;
 - ordinary checkout mutations are frozen while final handoff is reserved;
+- browser adapters release only before native activation is known to have started; post-activation exceptions preserve the barrier because native progress is ambiguous;
 - default reservation TTL is 900 seconds, with code-level overrides bounded to 60..3600 seconds and expiry based on database time;
 - expired reservation cleanup remains bounded to 100 rows per purge;
 - Core order existence is checked before finalization and Core payment/order paths retain their own duplicate protections.
@@ -153,7 +156,7 @@ A browser busy flag exists only for UX and is not the duplicate-order security b
 
 The longer default TTL deliberately prefers bounded temporary retry blocking over reopening a second native payment handoff while a slow redirect, payment initialization or out-of-process payment action may still be progressing.
 
-Real concurrent-tab/browser verification is still required before this control is considered production-proven. In particular, third-party JavaScript handlers that throw after partially starting native payment work remain a browser-boundary case: automatic release must not be assumed safe once module-owned activation has started.
+Real concurrent-tab/browser verification is still required before this control is considered production-proven. Thrown/partial third-party handler behavior now has a fail-closed source rule, but representative real payment modules must still prove that post-activation errors cannot reopen a second handoff and that abandoned attempts recover through Core cleanup or TTL as designed.
 
 ## 12. Successful-order and abandoned-state cleanup
 
@@ -163,7 +166,7 @@ Cleanup exceptions are contained/logged safely and are not allowed to turn an al
 
 Abandoned `jzopc_checkout_selection` rows are bounded opportunistically: one in 64 saves may delete at most 100 rows older than 30 days. The GC touches only the module table and does not inspect/delete Core carts or orders.
 
-Finalization reservations have a separate 15-minute default TTL, bounded override range and expired-row cleanup path. A failed explicit release therefore cannot produce an indefinite lock.
+Finalization reservations have a separate 15-minute default TTL, bounded override range and expired-row cleanup path. A failed explicit release or ambiguous post-activation handoff therefore cannot produce an indefinite lock.
 
 ## 13. Rendering/XSS boundaries
 
@@ -220,7 +223,7 @@ The internal readiness constant remains private production authority; the BO pag
 | Monetary tampering | Server-only totals/orderability inputs | Live cart/promotion/tax scenarios |
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
 | Concurrent final submission | DB reservation + attempt scoping + Core-order-aware release + bounded 15-minute default TTL | Real concurrent-tab/process and slow-payment verification |
-| Payment/order handoff | Native ordinary/binary/free-order paths implemented | Real third-party module browser verification, especially thrown/partial handlers |
+| Payment/order handoff | Native ordinary/binary/free-order paths; post-activation exceptions preserve reservation | Real third-party module browser verification of redirect/embedded/binary and thrown/partial handlers |
 | Persisted stale selection rows | Immediate order cleanup + bounded abandoned GC implemented | Execute lifecycle/GC/runtime verification |
 | Native OPC conflict | Shared policy blocks enabled `ps_onepagecheckout` provider | Re-run 9.2 installed/browser conflict matrix |
 | Multistore activation spillover | BO writes limited to exact shop scope | Real multistore BO verification |
@@ -237,13 +240,13 @@ Server logs may include operation name plus non-sensitive shop/cart identifiers 
 - cookies/session identifiers;
 - full customer/address payloads or unnecessary PII.
 
-Browser lifecycle events must likewise avoid tokens and form payloads.
+Browser lifecycle events must likewise avoid tokens and form payloads. The handoff-ambiguity event contains only the selected payment option identifier already present in rendered checkout state; it must not carry payment form payloads or credentials.
 
 ## 18. Verification state and release blockers
 
-The source contains final validation, duplicate-handoff barrier, native payment handoff, successful-order cleanup, abandoned-state cleanup and Back Office rollout controls. The reservation recovery boundary now also uses a payment-safe default TTL and refuses explicit release after a Core order or when Core order state is unknown.
+The source contains final validation, duplicate-handoff barrier, native payment handoff, post-activation ambiguity protection, successful-order cleanup, abandoned-state cleanup and Back Office rollout controls. The reservation recovery boundary uses a payment-safe default TTL, refuses explicit release after a Core order or when Core order state is unknown, and now also refuses browser automatic release after native payment activation may have begun.
 
-They are still not production-proven. GitHub Actions quota is exhausted, so the latest PHP/Node/smoke/installed-runtime contracts, including the configured PrestaShop 9.0.3 job and reservation-recovery contract, have not executed.
+They are still not production-proven. GitHub Actions quota is exhausted, so the latest PHP/Node/smoke/installed-runtime contracts, including the configured PrestaShop 9.0.3 job, reservation-recovery contract and native-handoff ambiguity contract, have not executed.
 
 Before `INTEGRATION_SHELL_READY` can be reconsidered:
 

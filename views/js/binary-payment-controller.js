@@ -216,6 +216,7 @@
       this.showStatus('');
       this.dispatch('jzopc:checkout:binary-preflight-started', { paymentOptionId: selected.id });
 
+      let nativeActivationStarted = false;
       try {
         const result = await this.request(attemptId, false);
         if (!result) {
@@ -265,8 +266,10 @@
         this.replaying = true;
         try {
           if (activation.type === 'click' && activation.target instanceof HTMLElement) {
+            nativeActivationStarted = true;
             activation.target.click();
           } else if (activation.type === 'submit' && activation.target instanceof HTMLFormElement) {
+            nativeActivationStarted = true;
             this.submitForm(activation.target);
           } else {
             throw new Error('Binary payment activation is unavailable.');
@@ -275,11 +278,17 @@
           this.replaying = false;
         }
       } catch (error) {
-        if (error && error.name === 'AbortError') {
+        if (!nativeActivationStarted && error && error.name === 'AbortError') {
           return;
         }
 
-        await this.bestEffortRelease(attemptId);
+        if (!nativeActivationStarted) {
+          await this.bestEffortRelease(attemptId);
+        } else {
+          // The module-owned handler may already have initiated payment/order work before throwing.
+          // Preserve the duplicate-handoff barrier until Core cleanup or bounded TTL recovery.
+          this.dispatch('jzopc:checkout:payment-handoff-ambiguous', { paymentOptionId: selected.id });
+        }
         this.fail(this.message('handoff-failed'));
       }
     }

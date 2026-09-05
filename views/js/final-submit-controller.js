@@ -315,8 +315,9 @@
       this.dispatch('jzopc:checkout:payment-handoff', { paymentOptionId: this.paymentOptionId });
 
       try {
-        // Match PrestaShop's observable submit lifecycle where possible so payment modules that
-        // attach submit handlers still participate. Raw form.submit() is only a last-resort fallback.
+        // Once a module-owned submit lifecycle begins, its handler may start remote payment/order work
+        // before returning or throwing. From that point the browser cannot prove release is safe.
+        // Keep the reservation until Core order cleanup or bounded TTL recovery resolves ambiguity.
         if (typeof window.jQuery === 'function') {
           window.jQuery(form).trigger('submit');
           return;
@@ -328,7 +329,7 @@
 
         HTMLFormElement.prototype.submit.call(form);
       } catch (error) {
-        await this.bestEffortRelease(attemptId);
+        this.dispatch('jzopc:checkout:payment-handoff-ambiguous', { paymentOptionId: this.paymentOptionId });
         this.dispatch('jzopc:checkout:error', { message: this.message('handoff-failed') });
         this.fail(this.message('handoff-failed'));
       }
