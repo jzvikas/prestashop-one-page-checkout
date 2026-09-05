@@ -27,7 +27,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Disposable `/tmp/jzopc-active-fixture*` runtime builder that can open readiness only in the copied test module while rechecking production source remains closed.
 - Controlled active HTTP fallback matrix for persistence, shell-service, real Smarty-template and asset-registration failures, with same-session recovery and cleanup.
 - Pinned Playwright/Chromium active checkout contract covering real Core cart creation, OPC root/bootstrap/assets, server identity validation, native fallback and same-cart recovery.
-- ADR-0027 and ADR-0028 documenting the isolated active HTTP fixture and controlled Chromium takeover contract.
+- `finalization-preflight-browser-contract.mjs` covering a real active-browser premature finalization attempt with valid CSRF/cart/state bindings, requiring `customer_required` and proving no reservation is leaked after rejection.
+- ADR-0027 and ADR-0028 documenting the isolated active HTTP fixture and controlled Chromium takeover/finalization-preflight contracts.
 
 ### Changed
 
@@ -41,21 +42,22 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Checkout hook/asset integration failures trip a request-local circuit breaker, causing later takeover decisions in the same request to leave Core native checkout intact. Fallback logging excludes exception messages and request/payment/customer payloads.
 - Runtime shop domain is pinned to `localhost:8080` so generated checkout endpoints, loopback server and Chromium origin agree exactly.
 - Installed runtime workflow now proves closed production behavior first, stops that server, then remounts only the disposable active fixture for browser/failure testing.
+- The active runtime browser phase now runs the takeover/fallback contract and a separate finalization-preflight rejection contract before HTTP fixture cleanup.
 
 ### Verification
 
 - CI #113 on `239f2ad61a802d351ca92e8106bad4c7a1c5d0bb` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
 - PrestaShop Runtime #63 on the same commit completed successfully for 9.0.3, 9.1.5 and 9.2.0-beta.1. Every family passed module installation, Core process adapter, the new integration-failure-isolation contract, installed Smarty shell, module-front CheckoutSession and fail-closed Front Office HTTP checks.
 - CI #112 previously verified the reservation-browser hardening source/smoke layer on `852181de9687726521f95de479f3f2f58986ce8b`.
-- The newly restored active HTTP and Chromium gates are new in this delta and must execute successfully before they count as browser/runtime evidence.
-- Representative real payment completion, carrier diversity, concurrent-tab finalization, zero-total order completion and full account/address browser flows remain release blockers after this first active Chromium gate.
+- The active HTTP/Chromium gates and the newly added finalization-preflight Chromium gate have not executed in this delta and must not be counted as passing while GitHub Actions quota remains exhausted.
+- Representative real payment completion, carrier diversity, concurrent-tab finalization, zero-total order completion and full account/address browser flows remain release blockers.
 
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false` in repository production source; these changes do not enable production checkout takeover.
 - The active runtime builder refuses to run without an explicit env guard and refuses targets outside `/tmp/jzopc-active-fixture*`; it rechecks the source readiness constant before and after patching the disposable copy.
 - Runtime failure instrumentation exists only in the temporary copied module and production service/template/asset sources are required to stay marker-free.
-- Active browser/HTTP contracts do not submit finalization, call `validateOrder()`, create an order or write Core cart/order SQL directly.
+- The new finalization-preflight browser contract calls only the real guarded `begin` endpoint while checkout identity is intentionally incomplete; it requires rejection before reservation acquisition and never crosses payment handoff or creates an order.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state and ambiguous post-activation payment-handler failure preserve the duplicate-handoff barrier instead of weakening it.
 - No module version bump: browser policy, fallback containment and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
 
