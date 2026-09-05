@@ -42,6 +42,10 @@ The same contract runs on PrestaShop 9.1.5 and 9.2.0-beta.1 in the MariaDB-backe
 
 This gate does not justify opening `INTEGRATION_SHELL_READY`. Production takeover remains disabled until HTTP/browser testing proves real order-page takeover/fallback, asset registration, mutation lifecycle behavior, and representative payment/carrier compatibility, and until the remaining identity/address/carrier/final-submit release blockers are implemented.
 
+## Verification status
+
+The runtime contract and workflow step are committed, but execution is temporarily deferred because the repository's GitHub Actions free quota is exhausted. The contract must be executed on the full PrestaShop 9.1.5 and 9.2.0-beta.1 matrix after the Actions quota resets. Until then, this ADR records the required gate, not a claim that the runtime render passed.
+
 ## Next milestone
 
-After this installed Smarty contract is green, add a controlled HTTP/browser checkout harness that proves native fallback while disabled/conflicted and exercises the module root/assets/mutation lifecycle only through a safe testable activation boundary that cannot become a production bypass.
+After this installed Smarty contract is executed successfully, add a controlled HTTP/browser checkout harness that proves native fallback while disabled/conflicted and exercises the module root/assets/mutation lifecycle only through a safe testable activation boundary that cannot become a production bypass.
