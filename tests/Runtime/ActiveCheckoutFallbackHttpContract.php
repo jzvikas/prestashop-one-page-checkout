@@ -129,6 +129,8 @@ function expectNativeFallback(array $response, string $stage): void
 $schema = new CheckoutServerSelectionsSchema();
 $schemaDropped = false;
 $product = new Product($productId);
+$failure = null;
+$successMessage = null;
 
 try {
     expectActiveHttp(Validate::isLoadedObject($product), 'Runtime checkout product is not loaded.');
@@ -165,30 +167,61 @@ try {
     $recovered = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
     expectHealthyOpc($recovered, 'Recovered');
 
-    fwrite(STDOUT, sprintf(
+    $successMessage = sprintf(
         "Active checkout persistence fallback HTTP contract OK: product=%d, healthy=%d, fallback=%d, recovered=%d\n",
         $productId,
         $healthy['status'],
         $fallback['status'],
         $recovered['status'],
-    ));
+    );
 } catch (Throwable $exception) {
-    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
-    exit(1);
+    $failure = $exception;
 } finally {
     if ($schemaDropped) {
         try {
-            $schema->install();
-        } catch (Throwable) {
+            if (!$schema->install() && $failure === null) {
+                $failure = new RuntimeException('Cleanup could not restore checkout-selection schema.');
+            }
+        } catch (Throwable $cleanupException) {
+            $failure ??= $cleanupException;
         }
+    }
+
+    try {
+        $shopId = (int) Configuration::get('PS_SHOP_DEFAULT');
+        $shopGroupId = (int) Shop::getGroupFromShop($shopId);
+        if ($shopId > 0 && $shopGroupId > 0) {
+            $disabled = Configuration::updateValue(
+                JzOnePageCheckout::CONFIG_CHECKOUT_ENABLED,
+                false,
+                false,
+                $shopGroupId,
+                $shopId,
+            );
+            if (!$disabled && $failure === null) {
+                $failure = new RuntimeException('Cleanup could not disable the temporary active checkout fixture.');
+            }
+        }
+    } catch (Throwable $cleanupException) {
+        $failure ??= $cleanupException;
     }
 
     if (Validate::isLoadedObject($product)) {
         try {
-            $product->delete();
-        } catch (Throwable) {
+            if (!$product->delete() && $failure === null) {
+                $failure = new RuntimeException('Cleanup could not delete runtime checkout product.');
+            }
+        } catch (Throwable $cleanupException) {
+            $failure ??= $cleanupException;
         }
     }
 
     @unlink($cookieJar);
 }
+
+if ($failure instanceof Throwable) {
+    fwrite(STDERR, $failure->getMessage() . PHP_EOL);
+    exit(1);
+}
+
+fwrite(STDOUT, $successMessage ?? "Active checkout persistence fallback HTTP contract completed.\n");
