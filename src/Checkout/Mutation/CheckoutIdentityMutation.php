@@ -10,6 +10,7 @@ use Jzvikas\OnePageCheckout\Checkout\CheckoutMutation;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationExecutionResult;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOutcome;
+use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 use Jzvikas\OnePageCheckout\Checkout\Identity\CheckoutIdentityException;
 use Jzvikas\OnePageCheckout\Checkout\Identity\CheckoutIdentityService;
@@ -52,7 +53,14 @@ final readonly class CheckoutIdentityMutation
                 }
 
                 if (!$submission->completed) {
-                    $sections = $this->rendererRegistry->render($context, $requiredSections, $currentSelections);
+                    // The submitted Core forms already contain the authoritative field errors and
+                    // module-added fields. Do not instantiate/render a second identity form stack
+                    // just to overwrite it afterward, because that could execute form hooks twice.
+                    $nonIdentitySections = array_values(array_filter(
+                        $requiredSections,
+                        static fn (CheckoutSection $section): bool => $section !== CheckoutSection::Identity,
+                    ));
+                    $sections = $this->rendererRegistry->render($context, $nonIdentitySections, $currentSelections);
                     $sections['identity'] = $this->identityRenderer->renderWithForms(
                         $context,
                         $submission->registerFormHtml,
