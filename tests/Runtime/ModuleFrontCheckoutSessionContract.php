@@ -57,13 +57,21 @@ $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
-// Deliberately remove the OrderController capability. Module mutation controllers do not expose
-// getCheckoutSession(), so the private provider dependency must construct the Core session shape.
-$context->controller = new stdClass();
+// A real module front request initializes Controller::$container from buildContainer(). Use that
+// exact front-container bootstrap without running full init()/routing hooks, while deliberately
+// keeping a controller that has no getCheckoutSession() capability. This proves that the private
+// provider fallback is resolved through the actual legacy front service graph.
+$moduleFrontController = new class extends ModuleFrontController {
+    public function initializeRuntimeContainer(): void
+    {
+        if ($this->getContainer() === null) {
+            $this->container = $this->buildContainer();
+        }
+    }
+};
+$moduleFrontController->initializeRuntimeContainer();
+$context->controller = $moduleFrontController;
 
-// ADR-0011 intentionally keeps helper dependencies private. Resolve the actual public module-front
-// entry service, then inspect the already-autowired dependency chain instead of weakening the
-// container boundary merely to make this runtime test convenient.
 $entry = $module->get(CheckoutAddressSelectionMutation::class);
 if (!$entry instanceof CheckoutAddressSelectionMutation) {
     $fail('CheckoutAddressSelectionMutation entry service is unavailable in the module front container.');
