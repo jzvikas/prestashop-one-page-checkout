@@ -24,6 +24,7 @@ $bootstrap = new CheckoutBrowserBootstrap(
     carrierUrl: 'https://shop.test/module/jzonepagecheckout/carrierselection',
     paymentUrl: 'https://shop.test/module/jzonepagecheckout/paymentselection',
     agreementsUrl: 'https://shop.test/module/jzonepagecheckout/agreements',
+    finalizationUrl: 'https://shop.test/module/jzonepagecheckout/finalize',
 );
 
 assertBootstrapContract($bootstrap->toTemplateVariables() === [
@@ -36,20 +37,22 @@ assertBootstrapContract($bootstrap->toTemplateVariables() === [
     'carrierUrl' => 'https://shop.test/module/jzonepagecheckout/carrierselection',
     'paymentUrl' => 'https://shop.test/module/jzonepagecheckout/paymentselection',
     'agreementsUrl' => 'https://shop.test/module/jzonepagecheckout/agreements',
+    'finalizationUrl' => 'https://shop.test/module/jzonepagecheckout/finalize',
 ], 'trusted bootstrap must expose the exact server-generated checkout mutation bindings');
 
 $rejected = 0;
 foreach ([
-    [0, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements'],
-    [1, '', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements'],
-    [1, 'token', '', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements'],
-    [1, 'token', 'version', '', 'address', 'address-save', 'carrier', 'payment', 'agreements'],
-    [1, 'token', 'version', 'identity', '', 'address-save', 'carrier', 'payment', 'agreements'],
-    [1, 'token', 'version', 'identity', 'address', '', 'carrier', 'payment', 'agreements'],
-    [1, 'token', 'version', 'identity', 'address', 'address-save', '', 'payment', 'agreements'],
-    [1, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', '', 'agreements'],
-    [1, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', ''],
-] as [$cartId, $token, $version, $identityUrl, $addressUrl, $addressSaveUrl, $carrierUrl, $paymentUrl, $agreementsUrl]) {
+    [0, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, '', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, 'token', '', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, 'token', 'version', '', 'address', 'address-save', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, 'token', 'version', 'identity', '', 'address-save', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, 'token', 'version', 'identity', 'address', '', 'carrier', 'payment', 'agreements', 'finalize'],
+    [1, 'token', 'version', 'identity', 'address', 'address-save', '', 'payment', 'agreements', 'finalize'],
+    [1, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', '', 'agreements', 'finalize'],
+    [1, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', '', 'finalize'],
+    [1, 'token', 'version', 'identity', 'address', 'address-save', 'carrier', 'payment', 'agreements', ''],
+] as [$cartId, $token, $version, $identityUrl, $addressUrl, $addressSaveUrl, $carrierUrl, $paymentUrl, $agreementsUrl, $finalizationUrl]) {
     try {
         new CheckoutBrowserBootstrap(
             $cartId,
@@ -61,12 +64,13 @@ foreach ([
             $carrierUrl,
             $paymentUrl,
             $agreementsUrl,
+            $finalizationUrl,
         );
     } catch (\InvalidArgumentException) {
         ++$rejected;
     }
 }
 
-assertBootstrapContract($rejected === 9, 'every incomplete trusted bootstrap field must fail closed');
+assertBootstrapContract($rejected === 10, 'every incomplete trusted bootstrap field must fail closed');
 
 echo "CheckoutBrowserBootstrapSmokeTest OK\n";
