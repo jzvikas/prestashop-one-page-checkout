@@ -12,6 +12,10 @@ use RuntimeException;
 
 final readonly class DbalCheckoutServerSelectionsStore implements CheckoutServerSelectionsStoreInterface
 {
+    private const ABANDONED_RETENTION_DAYS = 30;
+    private const ABANDONED_PURGE_LIMIT = 100;
+    private const ABANDONED_PURGE_CHANCE_DENOMINATOR = 64;
+
     public function __construct(private Connection $connection)
     {
     }
@@ -71,6 +75,11 @@ final readonly class DbalCheckoutServerSelectionsStore implements CheckoutServer
             throw new RuntimeException('Checkout agreement state could not be encoded.', 0, $exception);
         }
 
+        // Keep transient checkout authority bounded without adding a cleanup query to every
+        // mutation. Old rows are safe to drop: a returning checkout simply rebuilds current
+        // Core state and requires payment/agreements to be selected again.
+        $this->maybePurgeAbandoned();
+
         $this->connection->executeStatement(
             sprintf(
                 'INSERT INTO `%1$s` (id_shop, id_cart, id_customer, selected_payment_option, approved_agreements, date_upd) '
@@ -91,6 +100,20 @@ final readonly class DbalCheckoutServerSelectionsStore implements CheckoutServer
             sprintf('DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ?', $this->tableName()),
             [$shopId, $cartId],
         );
+    }
+
+    private function maybePurgeAbandoned(): void
+    {
+        if (mt_rand(1, self::ABANDONED_PURGE_CHANCE_DENOMINATOR) !== 1) {
+            return;
+        }
+
+        $this->connection->executeStatement(sprintf(
+            'DELETE FROM `%s` WHERE date_upd < DATE_SUB(NOW(), INTERVAL %d DAY) LIMIT %d',
+            $this->tableName(),
+            self::ABANDONED_RETENTION_DAYS,
+            self::ABANDONED_PURGE_LIMIT,
+        ));
     }
 
     /** @return array{0:int,1:int,2:int} */
