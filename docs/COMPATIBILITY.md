@@ -16,23 +16,27 @@ This matrix records what the repository currently implements and what has actual
 
 ### PrestaShop 9.0 / 9.1
 
-The module uses `actionCheckoutRender`. `LegacyCheckoutRenderAdapter` receives the Core process by reference, reuses the exact active `CheckoutSession`, and replaces only the checkout process with the module-built process.
+The module uses `actionCheckoutRender`. Core has already built the native `CheckoutProcess` when this hook executes. `LegacyCheckoutRenderAdapter` reuses the exact Core `CheckoutSession`, prepares the complete OPC shell/replacement process first, and only then assigns the replacement to the reference-bearing hook parameter. If persistence/template/presenter/third-party shell rendering throws, the assignment never happens and Core's original process remains intact.
 
-The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All four installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
+The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
 
-PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run.
+PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/fallback deltas; those newer changes still require a fresh run.
 
 ### PrestaShop 9.2+
 
 The module uses `actionCheckoutBuildProcess` only when the provider interface and hook are present. The 9.2-only provider class is isolated so older 9.x versions do not resolve it.
 
+Before the module returns a valid provider it eagerly prepares the OPC shell. If that preparation fails, the hook returns `null`; Core's `CheckoutProcessProviderResolver` therefore has no valid module provider and `OrderController` builds native checkout. Once a provider has been returned, its later `buildCheckoutProcess()` consumes the prepared shell while still using the exact `CheckoutSession` and translator supplied by Core.
+
 An enabled native `ps_onepagecheckout` provider blocks this module's takeover. Core fallback remains untouched when no unique custom provider is active.
 
-The repository previously exercised installed-runtime capability/process behavior on PrestaShop 9.2.0-beta.1, including native-provider conflict detection. The latest checkout/finalization/BO deltas still require a fresh runtime/browser run.
+The repository previously exercised installed-runtime capability/process behavior on PrestaShop 9.2.0-beta.1, including native-provider conflict detection. The latest checkout/finalization/failure-containment deltas still require a fresh runtime/browser run.
 
 ## Installed runtime contract baseline
 
 The current installed module contract requires module version `>=0.4.0`, matching the finalization-reservation schema baseline, and verifies both frontend media registration and the `actionValidateOrderAfter` successful-order cleanup hook. A source smoke contract locks the 9.0/9.1/9.2 workflow-family matrix so future version/test drift is caught before runtime evidence is interpreted.
+
+`CheckoutIntegrationFailureContainmentContractSmokeTest.php` additionally records the source-level native-fallback contract. It does not replace installed failure injection.
 
 These source checks are not a substitute for executing the installed matrix.
 
@@ -45,6 +49,8 @@ These source checks are not a substitute for executing the installed matrix.
 | Third-party themes | No Bootstrap/theme-specific checkout override is required, but real compatibility must be verified per theme. |
 
 Raw HTML is restricted to explicit PrestaShop/Core/theme/module-rendered boundaries such as native identity/address forms, carrier hooks, payment forms/additional information and legal-condition HTML.
+
+Shell composition now happens before process takeover, but no rendered third-party content is cached across requests.
 
 ## Payments
 
@@ -98,8 +104,12 @@ Still requiring real browser verification:
 
 `JZOPC_CHECKOUT_ENABLED` is a shop-scoped merchant setting. The Back Office page accepts writes only in a concrete single-shop context. Enabling is rejected unless runtime capability, native-provider conflict and the internal readiness gate all allow takeover.
 
+When the module is eligible for takeover, integration failure is request-contained: required asset registration failure trips a request-local circuit breaker; shell composition is completed before provider exposure or legacy process assignment; failures fall back to Core native checkout rather than deliberately constructing a partial OPC process. Fallback logging excludes exception messages and request/payment payloads.
+
 `INTEGRATION_SHELL_READY` is currently `false`, so production checkout takeover remains intentionally disabled even though the underlying code paths exist. This is the decisive safety gate until the deferred installed-runtime/browser matrix succeeds.
+
+Real failure-containment verification must inject asset, DB/persistence, template and renderer/service failures on both the 9.0/9.1 legacy and 9.2+ provider families and prove Core native `/order` remains functional.
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contracts, live concurrent-tab convergence/locked-activation contracts and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contracts, live concurrent-tab convergence/locked-activation contracts, integration-failure containment contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
