@@ -60,17 +60,19 @@ Implemented architecture:
 - explicit attempt release remains customer/attempt scoped and refuses to clear the barrier if Core already has an order for the cart or Core order state cannot be determined safely;
 - post-native-activation JavaScript exceptions preserve the reservation rather than assuming release is safe;
 - reload/back navigation receives a server-derived boolean reservation marker and immediately presents the fail-closed locked checkout state while the reservation is active;
-- tabs rendered before the reservation was acquired converge live when the guarded server returns `finalization_in_progress`: generic mutations and ordinary/binary final-submit paths publish the same validation lifecycle, and the losing tab locks without polling or releasing the reservation.
+- tabs rendered before the reservation was acquired converge live when the guarded server returns `finalization_in_progress`: generic mutations and ordinary/binary final-submit paths publish the same validation lifecycle, and the losing tab locks without polling or releasing the reservation;
+- once locked, native form controls are disabled and capture-phase `click`/`submit` suppression also covers link-style (`a[href]`) and ARIA-button third-party payment activators without touching unlocked payment hooks/forms.
 
 Still requiring real browser verification:
 
 - representative redirect payment module;
 - representative embedded/form payment module;
 - module with additional information and JavaScript reinitialization;
-- binary click and binary form-submit paths;
+- binary click and binary form-submit paths, including link-style activation controls;
 - thrown/partial third-party native handlers, including proof that automatic release cannot reopen a handoff already in progress;
 - two pre-opened tabs racing finalization plus older-tab mutation attempts after another tab acquires the reservation;
 - reload/back behavior while a reservation is active, after successful Core cleanup and after TTL expiry;
+- locked-state suppression proving link/form activators cannot reach module handlers while ordinary/binary controls remain fully usable before lock;
 - payment failure/retry and abandoned-reservation recovery, including retry after TTL expiry;
 - zero-total free order and duplicate refresh behavior.
 
@@ -100,4 +102,4 @@ Still requiring real browser verification:
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contracts, live concurrent-tab convergence contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contracts, live concurrent-tab convergence/locked-activation contracts and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.

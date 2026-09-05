@@ -91,6 +91,8 @@ Binary/self-submitting options follow Core's `data-module-name` → `.js-payment
 
 Reservation state also converges in the browser without becoming browser-authoritative. A fresh reload/back render exposes only a boolean active-reservation marker and immediately locks mutable checkout controls. If another pre-opened tab acquires the reservation later, guarded operations return the stable `finalization_in_progress` machine code; generic checkout mutations and ordinary/binary final submit all publish that failure, and the losing tab converges to the same fail-closed lock after local controller cleanup. The browser guard does not poll, release reservations, submit payment or create orders.
 
+A locked checkout suppresses activation as well as disabling native form controls. Link-style payment activators (`a[href]`) and ARIA button surfaces are marked disabled and removed from normal tab order, while capture-phase `click` and `submit` listeners stop events only inside an already locked checkout root before third-party payment handlers or browser default navigation can run. Unlocked third-party hooks/forms keep their native lifecycle.
+
 Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationController::checkFreeOrder()`.
 
 `actionValidateOrderAfter` removes the module's selection/reservation state after a real Core order exists. Abandoned selection rows are also bounded by opportunistic 30-day/100-row GC; expired finalization reservations use their separate bounded cleanup path.
@@ -145,7 +147,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
 - verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
-- verify zero-total free order, two-tab finalization races, losing-tab live/reload convergence, slow/abandoned-payment recovery and successful lifecycle cleanup;
+- verify zero-total free order, two-tab finalization races, losing-tab live/reload convergence, locked link/form activation suppression, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
 

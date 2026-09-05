@@ -5,6 +5,7 @@
   const STATUS_SELECTOR = '[data-jzopc-final-status]';
   const MESSAGE_SELECTOR = '[data-jzopc-final-message="handoff-ambiguous"]';
   const INTERACTIVE_SELECTOR = 'button, input, select, textarea';
+  const NON_FORM_ACTIVATION_SELECTOR = 'a[href], [role="button"]';
   const FINALIZATION_IN_PROGRESS_CODE = 'finalization_in_progress';
 
   function lockAmbiguousCheckout(root) {
@@ -21,6 +22,13 @@
         || control instanceof HTMLSelectElement
         || control instanceof HTMLTextAreaElement) {
         control.disabled = true;
+      }
+    }
+
+    for (const activation of root.querySelectorAll(NON_FORM_ACTIVATION_SELECTOR)) {
+      if (activation instanceof HTMLElement) {
+        activation.setAttribute('aria-disabled', 'true');
+        activation.setAttribute('tabindex', '-1');
       }
     }
 
@@ -48,6 +56,16 @@
     return root instanceof HTMLElement ? root : null;
   }
 
+  function suppressLockedActivation(event) {
+    const root = rootForEvent(event);
+    if (!(root instanceof HTMLElement) || !root.hasAttribute('data-jzopc-payment-handoff-ambiguous')) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
   function hasErrorCode(event, code) {
     const detail = event.detail || {};
     return Array.isArray(detail.errors)
@@ -72,6 +90,12 @@
 
     lockAmbiguousCheckout(root);
   }
+
+  // Capture before checkout/payment-module handlers. Disabled native controls cover normal form UI,
+  // while these listeners also stop link-style binary activators and form submits inside a locked
+  // reservation surface from reaching module handlers or browser default navigation.
+  document.addEventListener('click', suppressLockedActivation, true);
+  document.addEventListener('submit', suppressLockedActivation, true);
 
   document.addEventListener('jzopc:checkout:payment-handoff-ambiguous', function (event) {
     const root = rootForEvent(event);

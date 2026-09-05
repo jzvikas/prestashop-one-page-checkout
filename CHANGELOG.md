@@ -6,6 +6,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Added
 
+- `CheckoutReservationUiEventSuppressionContractSmokeTest.php` and ADR-0026 covering capture-phase suppression of link/form activation after a checkout reservation/ambiguity lock.
 - `CheckoutConcurrentFinalizationUiConvergenceContractSmokeTest.php` and ADR-0025 covering live same-cart reservation conflicts when another tab acquires finalization after the current page was rendered.
 - `CheckoutReservedReloadUiContractSmokeTest.php` and ADR-0024 covering fail-closed initial rendering when the current cart already has an active server-side finalization reservation.
 - `CheckoutPaymentHandoffAmbiguityUiLockContractSmokeTest.php` and `payment-handoff-ambiguity-guard.js`, which keep the browser checkout visibly fail-closed after ambiguous native payment activation instead of presenting an immediate retry path.
@@ -24,6 +25,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Changed
 
+- Locked reservation/ambiguity state now covers non-form payment surfaces: link-style/ARIA activators are marked disabled and removed from tab order, while capture-phase click and submit listeners stop user activation before third-party payment handlers or browser navigation can run inside the locked checkout.
 - A live `finalization_in_progress` server response now converges generic checkout mutations plus ordinary and binary final-submit paths to the same fail-closed browser lock. The losing concurrent tab records only the boolean reserved state, waits until controller cleanup finishes, disables mutable controls and does not present an immediate retry surface.
 - Binary final-submit failures now publish the shared `jzopc:checkout:validation-failed` lifecycle with server errors, matching ordinary submit and generic mutation behavior so reservation conflicts can be handled consistently.
 - Checkout shell rendering now reads the authoritative finalization reservation store and exposes only a boolean reserved marker. Reload/back navigation during an active reservation immediately reuses the fail-closed ambiguity UI lock instead of presenting editable checkout controls and an apparently available submit path.
@@ -41,6 +43,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Verification
 
+- Locked activation-surface suppression and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real link-style binary and form-submit behavior remains a browser compatibility gate.
 - Live concurrent-tab reservation convergence and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real two-tab ordinary/binary/mutation behavior remains a browser gate rather than verified evidence.
 - Active-reservation reload locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real reload/back-navigation behavior remains a browser gate rather than verified evidence.
 - Effective 900-second DI wiring and its strengthened reservation-recovery smoke assertion are source-reviewed but unexecuted while GitHub Actions quota is exhausted; installed runtime behavior is not considered verified until the deferred matrix executes.
@@ -53,13 +56,14 @@ All notable repository changes are recorded here. Runtime/browser verification s
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
+- Locked event suppression is limited to a checkout already marked reserved/ambiguous and has no network/finalization/order side effects; unlocked third-party payment controls keep their native handlers.
 - Live reservation convergence consumes only the guarded server machine error and can cause only a local browser lock; it does not poll, release reservations, submit payment or create orders.
 - The server-reserved reload marker is boolean-only; no attempt ID, payment selection, expiry or other reservation internals are exposed to the browser, and the browser guard never releases the reservation or creates an order.
 - The ambiguity UI guard is defense in depth only and never sends finalization release, submits payment or creates an order; the DB reservation remains authoritative.
 - Browser-side release is intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: reservation policy, effective DI TTL alignment, live/reload UI safety, payment-handoff browser safety, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
+- No module version bump: reservation policy, effective DI TTL alignment, locked/live/reload UI safety, payment-handoff browser safety, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 

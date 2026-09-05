@@ -161,6 +161,8 @@ Generic checkout mutations and ordinary final submit publish `jzopc:checkout:val
 
 If the page was rendered after a reservation already existed, the same guard consumes the trusted boolean shell marker and locks immediately. If the reservation is acquired later by another tab, the machine error provides live convergence without polling. The browser records only a local boolean reserved fact, disables mutable controls, keeps `aria-busy=true` and announces the translated payment-progress warning. This browser state is defense in depth; it cannot release a reservation or authorize payment/order creation.
 
+Once that reservation/ambiguity lock is active, `payment-handoff-ambiguity-guard.js` also covers non-form payment activation surfaces that cannot use the native `disabled` property. `a[href]` and `[role="button"]` elements are marked `aria-disabled="true"` and removed from normal tab order, while document-level capture listeners suppress `click` and `submit` before checkout/payment-module handlers or browser default navigation can run. Suppression is conditional on an already locked checkout root, so unlocked third-party payment hooks/forms keep their native event lifecycle.
+
 `payment-controller.js` synchronizes selected payment UI and reinitializes after payment-section replacement but never places an order.
 
 ## 12. Finalization, duplicate protection and native payment handoff
@@ -246,14 +248,14 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab/locked-activation deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
+4. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, locked link/form activation suppression, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
 
