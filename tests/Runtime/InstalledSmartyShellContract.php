@@ -24,6 +24,10 @@ if (!in_array($expectedFamily, ['9.1', '9.2'], true)) {
 require_once $shopRoot . '/config/config.inc.php';
 require_once $shopRoot . '/modules/jzonepagecheckout/jzonepagecheckout.php';
 
+if (!str_starts_with((string) _PS_VERSION_, $expectedFamily . '.')) {
+    $fail(sprintf('Installed PrestaShop version %s does not match expected family %s.', _PS_VERSION_, $expectedFamily));
+}
+
 $module = Module::getInstanceByName('jzonepagecheckout');
 if (!$module instanceof JzOnePageCheckout) {
     $fail('Unable to load JzOnePageCheckout.');
@@ -80,6 +84,10 @@ if (!$builder instanceof CheckoutProcessBuilder) {
 }
 
 $process = $builder->build($context, $session, $translator);
+if (!$process instanceof CheckoutProcess || $process->getCheckoutSession() !== $session) {
+    $fail('Checkout process did not preserve the real Core CheckoutSession.');
+}
+
 $steps = $process->getSteps();
 if (count($steps) !== 1 || !$steps[0] instanceof CheckoutShellStep) {
     $fail('Module process did not expose exactly one CheckoutShellStep.');
@@ -94,7 +102,6 @@ $requiredFragments = [
     'data-jzopc-step="one-page-checkout"',
     'data-jzopc-checkout',
     'data-jzopc-section="addresses"',
-    'data-jzopc-section="delivery"',
     'data-jzopc-section="payment"',
     'data-jzopc-section="agreements"',
     'data-jzopc-section="summary"',
@@ -109,9 +116,31 @@ foreach ($requiredFragments as $fragment) {
     }
 }
 
+foreach ([
+    'data-jzopc-step="one-page-checkout"',
+    'data-jzopc-checkout',
+    'data-jzopc-section="addresses"',
+    'data-jzopc-section="payment"',
+    'data-jzopc-section="agreements"',
+    'data-jzopc-section="summary"',
+] as $uniqueFragment) {
+    if (substr_count($html, $uniqueFragment) !== 1) {
+        $fail(sprintf('Rendered checkout shell must contain exactly one %s marker.', $uniqueFragment));
+    }
+}
+
+$deliveryMarker = 'data-jzopc-section="delivery"';
+if ($cart->isVirtualCart()) {
+    if (str_contains($html, $deliveryMarker)) {
+        $fail('Virtual runtime cart unexpectedly rendered a delivery section.');
+    }
+} elseif (substr_count($html, $deliveryMarker) !== 1) {
+    $fail('Physical runtime cart must render exactly one delivery section.');
+}
+
 $cartBinding = sprintf('data-jzopc-cart-id="%d"', (int) $cart->id);
-if (!str_contains($html, $cartBinding)) {
-    $fail('Rendered checkout bootstrap is not bound to the runtime cart.');
+if (substr_count($html, $cartBinding) !== 1) {
+    $fail('Rendered checkout bootstrap is not uniquely bound to the runtime cart.');
 }
 
 foreach (['csrf-token', 'state-version', 'payment-url', 'agreements-url'] as $attribute) {
