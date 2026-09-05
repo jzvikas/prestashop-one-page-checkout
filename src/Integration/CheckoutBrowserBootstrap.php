@@ -12,6 +12,7 @@ final readonly class CheckoutBrowserBootstrap
         public int $cartId,
         public string $csrfToken,
         public string $stateVersion,
+        public string $identityUrl,
         public string $addressUrl,
         public string $addressSaveUrl,
         public string $carrierUrl,
@@ -25,6 +26,7 @@ final readonly class CheckoutBrowserBootstrap
         foreach ([
             'csrfToken' => $this->csrfToken,
             'stateVersion' => $this->stateVersion,
+            'identityUrl' => $this->identityUrl,
             'addressUrl' => $this->addressUrl,
             'addressSaveUrl' => $this->addressSaveUrl,
             'carrierUrl' => $this->carrierUrl,
@@ -37,13 +39,14 @@ final readonly class CheckoutBrowserBootstrap
         }
     }
 
-    /** @return array{cartId:int,csrfToken:string,stateVersion:string,addressUrl:string,addressSaveUrl:string,carrierUrl:string,paymentUrl:string,agreementsUrl:string} */
+    /** @return array{cartId:int,csrfToken:string,stateVersion:string,identityUrl:string,addressUrl:string,addressSaveUrl:string,carrierUrl:string,paymentUrl:string,agreementsUrl:string} */
     public function toTemplateVariables(): array
     {
         return [
             'cartId' => $this->cartId,
             'csrfToken' => $this->csrfToken,
             'stateVersion' => $this->stateVersion,
+            'identityUrl' => $this->identityUrl,
             'addressUrl' => $this->addressUrl,
             'addressSaveUrl' => $this->addressSaveUrl,
             'carrierUrl' => $this->carrierUrl,
