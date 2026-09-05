@@ -65,7 +65,7 @@ final readonly class CheckoutMutationOrchestrator
 
                     $currentState = $guardResult->currentState
                         ?? throw new LogicException('Allowed mutation guard result has no current state.');
-                    $requiredSections = $this->dependencyResolver->affectedBy($mutation);
+                    $requiredSections = $this->dependencyResolver->affectedBy($mutation, $context);
                     $outcome = $mutationHandler($currentState, $requiredSections, $currentSelections);
 
                     if (!$outcome instanceof CheckoutMutationOutcome) {
