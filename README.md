@@ -23,7 +23,7 @@ The module does not hard-load one checkout API on every PrestaShop 9 release.
 - Unsupported or ambiguous runtime capability fails closed to native checkout.
 - `INTEGRATION_SHELL_READY=false` currently prevents all production takeover.
 
-`CheckoutProcessBuilder` builds a real Core `CheckoutProcess` around a module `CheckoutShellStep`. The step renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+`CheckoutProcessBuilder` builds a real Core `CheckoutProcess` around one module `CheckoutShellStep`. The step renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
 
 ## Server-authoritative state and mutation safety
 
@@ -80,7 +80,9 @@ Immediately before handoff, preflight revalidates:
 - fresh payment-option eligibility;
 - exact fresh mandatory agreements.
 
-A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. A release request can clear only its own attempt.
+A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
+
+An explicit release can clear only its own customer/attempt reservation and now refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
 
 Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
 
@@ -88,11 +90,11 @@ Binary/self-submitting options follow Core's `data-module-name` → `.js-payment
 
 Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationController::checkFreeOrder()`.
 
-`actionValidateOrderAfter` removes the module's selection/reservation state after a real Core order exists. Abandoned selection rows are also bounded by opportunistic 30-day/100-row GC; finalization reservations use their separate short TTL.
+`actionValidateOrderAfter` removes the module's selection/reservation state after a real Core order exists. Abandoned selection rows are also bounded by opportunistic 30-day/100-row GC; expired finalization reservations use their separate bounded cleanup path.
 
 ## Back Office activation
 
-The module configuration page now exposes the existing `JZOPC_CHECKOUT_ENABLED` setting through PrestaShop `HelperForm`.
+The module configuration page exposes the existing `JZOPC_CHECKOUT_ENABLED` setting through PrestaShop `HelperForm`.
 
 Safety rules:
 
@@ -128,19 +130,19 @@ find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
-The repository also contains a MariaDB-backed installed PrestaShop runtime workflow for 9.1.5 and 9.2.x-era coverage.
+The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families.
 
 GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
 
 ## Remaining release blockers
 
 - `INTEGRATION_SHELL_READY` remains `false`;
-- execute the latest PHP/Node/smoke/installed-runtime suite after Actions quota resets and fix every failure;
-- add/execute PrestaShop 9.0 installed-runtime coverage;
+- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs, after Actions quota resets and fix every failure;
 - execute controlled HTTP/browser takeover and native-fallback tests;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
-- verify zero-total free order, concurrent-tab reservation, abandoned-payment recovery and successful lifecycle cleanup;
+- verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
+- verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
 
