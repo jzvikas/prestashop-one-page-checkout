@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Jzvikas\OnePageCheckout\Checkout\Address;
 
+use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface;
+
 final readonly class CheckoutAddressSelectionService
 {
+    public function __construct(
+        private CheckoutSessionProviderInterface $checkoutSessionProvider,
+    ) {
+    }
+
     public function apply(\Context $context, CheckoutAddressSelection $selection): bool
     {
         $cart = $context->cart ?? null;
@@ -26,6 +33,7 @@ final readonly class CheckoutAddressSelectionService
 
         $initialDeliveryAddressId = (int) ($cart->id_address_delivery ?? 0);
         $initialInvoiceAddressId = (int) ($cart->id_address_invoice ?? 0);
+        $targetDeliveryAddressId = $selection->deliveryAddressId ?? $initialDeliveryAddressId;
 
         if ($selection->deliveryAddressId !== null) {
             $this->assertOwnedAddress(
@@ -35,12 +43,10 @@ final readonly class CheckoutAddressSelectionService
                 'The selected delivery address is not available for this customer.',
                 'deliveryAddressId',
             );
-            $cart->id_address_delivery = $selection->deliveryAddressId;
         }
 
         if ($selection->useSameAddress) {
-            $deliveryAddressId = (int) ($cart->id_address_delivery ?? 0);
-            if ($deliveryAddressId <= 0) {
+            if ($targetDeliveryAddressId <= 0) {
                 throw new CheckoutAddressSelectionException(
                     'delivery_address_required',
                     'Please select a delivery address before using it as the invoice address.',
@@ -51,15 +57,15 @@ final readonly class CheckoutAddressSelectionService
             // Recheck ownership even when the delivery id came from the cart rather than this request.
             $this->assertOwnedAddress(
                 $customerId,
-                $deliveryAddressId,
+                $targetDeliveryAddressId,
                 'delivery_address_not_owned',
                 'The selected delivery address is not available for this customer.',
                 'deliveryAddressId',
             );
-            $cart->id_address_invoice = $deliveryAddressId;
+            $targetInvoiceAddressId = $targetDeliveryAddressId;
         } else {
-            $invoiceAddressId = $selection->invoiceAddressId;
-            if ($invoiceAddressId === null) {
+            $targetInvoiceAddressId = $selection->invoiceAddressId;
+            if ($targetInvoiceAddressId === null) {
                 throw new CheckoutAddressSelectionException(
                     'invoice_address_required',
                     'Please select an invoice address.',
@@ -69,26 +75,42 @@ final readonly class CheckoutAddressSelectionService
 
             $this->assertOwnedAddress(
                 $customerId,
-                $invoiceAddressId,
+                $targetInvoiceAddressId,
                 'invoice_address_not_owned',
                 'The selected invoice address is not available for this customer.',
                 'invoiceAddressId',
             );
-            $cart->id_address_invoice = $invoiceAddressId;
         }
 
         if (
-            (int) $cart->id_address_delivery === $initialDeliveryAddressId
-            && (int) $cart->id_address_invoice === $initialInvoiceAddressId
+            $targetDeliveryAddressId === $initialDeliveryAddressId
+            && $targetInvoiceAddressId === $initialInvoiceAddressId
         ) {
             return false;
         }
 
-        if (!$cart->save()) {
-            // Keep the in-memory object from falsely representing a persisted mutation.
-            $cart->id_address_delivery = $initialDeliveryAddressId;
-            $cart->id_address_invoice = $initialInvoiceAddressId;
+        $session = $this->checkoutSessionProvider->get($context);
+        if (!method_exists($session, 'setIdAddressDelivery') || !method_exists($session, 'setIdAddressInvoice')) {
+            throw new \RuntimeException('Core CheckoutSession address mutation methods are unavailable.');
+        }
 
+        // Core CheckoutSession::setIdAddressDelivery() deliberately calls Cart::updateAddressId()
+        // before saving the cart. Using that path preserves cart_product/customization delivery
+        // address associations instead of changing only the two cart header IDs.
+        if ($targetDeliveryAddressId !== $initialDeliveryAddressId) {
+            $session->setIdAddressDelivery($targetDeliveryAddressId);
+        }
+
+        // Updating delivery can also move the invoice address when Core considers both addresses
+        // linked. Re-read the cart before deciding whether an explicit invoice mutation is needed.
+        if ((int) ($cart->id_address_invoice ?? 0) !== $targetInvoiceAddressId) {
+            $session->setIdAddressInvoice($targetInvoiceAddressId);
+        }
+
+        if (
+            (int) ($cart->id_address_delivery ?? 0) !== $targetDeliveryAddressId
+            || (int) ($cart->id_address_invoice ?? 0) !== $targetInvoiceAddressId
+        ) {
             throw new CheckoutAddressSelectionException(
                 'address_context_save_failed',
                 'Unable to save checkout address selection.',
