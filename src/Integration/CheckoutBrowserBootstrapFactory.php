@@ -51,6 +51,7 @@ final readonly class CheckoutBrowserBootstrapFactory
             csrfToken: $csrfToken,
             stateVersion: $this->stateVersioner->version($state),
             addressUrl: $this->moduleLink($link, 'addressselection'),
+            carrierUrl: $this->moduleLink($link, 'carrierselection'),
             paymentUrl: $this->moduleLink($link, 'paymentselection'),
             agreementsUrl: $this->moduleLink($link, 'agreements'),
         );

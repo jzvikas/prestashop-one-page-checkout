@@ -4,6 +4,7 @@
   const ROOT_SELECTOR = '[data-jzopc-checkout]';
   const SECTION_SELECTOR = '[data-jzopc-section]';
   const ADDRESS_SECTION_SELECTOR = '[data-jzopc-section="addresses"]';
+  const DELIVERY_OPTION_SELECTOR = '[data-jzopc-section="delivery"] input[name="delivery_option"]';
   const ADDRESS_INPUT_SELECTOR = [
     ADDRESS_SECTION_SELECTOR + ' input[name="id_address_delivery"]',
     ADDRESS_SECTION_SELECTOR + ' input[name="id_address_invoice"]',
@@ -59,6 +60,7 @@
       const stateVersion = this.root.dataset.jzopcStateVersion || '';
       const csrfToken = this.root.dataset.jzopcCsrfToken || '';
       const addressUrl = this.root.dataset.jzopcAddressUrl || '';
+      const carrierUrl = this.root.dataset.jzopcCarrierUrl || '';
       const paymentUrl = this.root.dataset.jzopcPaymentUrl || '';
       const agreementsUrl = this.root.dataset.jzopcAgreementsUrl || '';
 
@@ -68,6 +70,7 @@
         || !stateVersion
         || !csrfToken
         || !addressUrl
+        || !carrierUrl
         || !paymentUrl
         || !agreementsUrl
       ) {
@@ -78,6 +81,7 @@
       this.stateVersion = stateVersion;
       this.csrfToken = csrfToken;
       this.addressUrl = addressUrl;
+      this.carrierUrl = carrierUrl;
       this.paymentUrl = paymentUrl;
       this.agreementsUrl = agreementsUrl;
 
@@ -104,6 +108,11 @@
 
       if (target.matches(ADDRESS_INPUT_SELECTOR)) {
         this.onAddressChanged();
+        return;
+      }
+
+      if (target.matches(DELIVERY_OPTION_SELECTOR)) {
+        this.onCarrierChanged(target);
         return;
       }
 
@@ -146,6 +155,15 @@
         useSameAddress: sameAddressInput.checked,
       });
       this.mutate(this.addressUrl, payload);
+    }
+
+    onCarrierChanged(target) {
+      if (!target.checked || !target.value) {
+        return;
+      }
+
+      this.dispatch('jzopc:carrier:selected', { deliveryOption: target.value });
+      this.mutate(this.carrierUrl, { deliveryOption: target.value });
     }
 
     onAgreementChanged() {

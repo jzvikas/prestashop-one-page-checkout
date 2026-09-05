@@ -17,6 +17,7 @@ assertMutationJavascript(is_string($source) && $source !== '', 'mutation client 
 assertMutationJavascript(str_contains($source, 'class JzOpcMutationClient'), 'mutation client class is required');
 assertMutationJavascript(str_contains($source, "'[data-jzopc-checkout]'"), 'client must mount only inside module checkout root');
 assertMutationJavascript(str_contains($source, 'jzopcAddressUrl'), 'trusted bootstrap must require address endpoint');
+assertMutationJavascript(str_contains($source, 'jzopcCarrierUrl'), 'trusted bootstrap must require carrier endpoint');
 assertMutationJavascript(str_contains($source, "body.set('token', this.csrfToken)"), 'every mutation must send CSRF');
 assertMutationJavascript(str_contains($source, "body.set('cartId', this.cartId)"), 'every mutation must send cart binding');
 assertMutationJavascript(str_contains($source, "body.set('stateVersion', this.stateVersion)"), 'every mutation must send prior state version');
@@ -25,6 +26,9 @@ assertMutationJavascript(str_contains($source, 'payload.deliveryAddressId = deli
 assertMutationJavascript(str_contains($source, 'payload.invoiceAddressId = invoiceInput.value'), 'separate invoice mode must send selected invoice address');
 assertMutationJavascript(str_contains($source, 'this.mutate(this.addressUrl, payload)'), 'all address inputs must use one atomic address endpoint');
 assertMutationJavascript(str_contains($source, "'jzopc:address:selected'"), 'address lifecycle event must be published');
+assertMutationJavascript(str_contains($source, 'DELIVERY_OPTION_SELECTOR'), 'carrier changes must be delegated from the replaceable delivery section');
+assertMutationJavascript(str_contains($source, 'this.mutate(this.carrierUrl, { deliveryOption: target.value })'), 'carrier selection must use the guarded carrier endpoint');
+assertMutationJavascript(str_contains($source, "'jzopc:carrier:selected'"), 'carrier lifecycle event must be published');
 assertMutationJavascript(str_contains($source, "paymentOptionId: detail.optionId"), 'payment option id must remain in payment intent');
 assertMutationJavascript(str_contains($source, "paymentModule: detail.moduleName"), 'payment module must remain in payment intent');
 assertMutationJavascript(str_contains($source, "this.mutate(this.agreementsUrl, { agreements })"), 'agreement mutation contract must remain intact');
