@@ -57,7 +57,29 @@ assertSectionDependency(
 assertSectionDependency(
     $values($resolver->affectedBy(CheckoutMutation::AddressSelectionUpdated))
         === ['addresses', 'delivery', 'payment', 'agreements', 'summary'],
-    'context-free dependency inspection must stay conservative',
+    'context-free address dependency inspection must stay conservative',
+);
+
+assertSectionDependency(
+    $values($resolver->affectedBy(
+        CheckoutMutation::CarrierSelected,
+        new Context(new Cart(false)),
+    )) === ['delivery', 'payment', 'agreements', 'summary'],
+    'physical carrier mutation must refresh carrier UI, payment, legal conditions and totals',
+);
+
+assertSectionDependency(
+    $values($resolver->affectedBy(
+        CheckoutMutation::CarrierSelected,
+        new Context(new Cart(true)),
+    )) === ['payment', 'agreements', 'summary'],
+    'virtual dependency filtering must not require a nonexistent delivery DOM section',
+);
+
+assertSectionDependency(
+    $values($resolver->affectedBy(CheckoutMutation::CarrierSelected))
+        === ['delivery', 'payment', 'agreements', 'summary'],
+    'context-free carrier dependency inspection must stay conservative',
 );
 
 fwrite(STDOUT, "Checkout section dependency context smoke tests passed.\n");

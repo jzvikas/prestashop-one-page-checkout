@@ -109,6 +109,7 @@ $requiredFragments = [
     'data-jzopc-state-version="',
     'data-jzopc-address-url="',
     'data-jzopc-address-save-url="',
+    'data-jzopc-carrier-url="',
     'data-jzopc-payment-url="',
     'data-jzopc-agreements-url="',
 ];
@@ -145,7 +146,7 @@ if (substr_count($html, $cartBinding) !== 1) {
     $fail('Rendered checkout bootstrap is not uniquely bound to the runtime cart.');
 }
 
-foreach (['csrf-token', 'state-version', 'address-url', 'address-save-url', 'payment-url', 'agreements-url'] as $attribute) {
+foreach (['csrf-token', 'state-version', 'address-url', 'address-save-url', 'carrier-url', 'payment-url', 'agreements-url'] as $attribute) {
     if (!preg_match('/data-jzopc-' . preg_quote($attribute, '/') . '="([^"]+)"/', $html, $matches)) {
         $fail(sprintf('Rendered checkout bootstrap attribute %s is unavailable.', $attribute));
     }
@@ -157,6 +158,7 @@ foreach (['csrf-token', 'state-version', 'address-url', 'address-save-url', 'pay
 $controllerTargets = [
     'address' => 'addressselection',
     'address-save' => 'addresssave',
+    'carrier' => 'carrierselection',
     'payment' => 'paymentselection',
     'agreements' => 'agreements',
 ];
