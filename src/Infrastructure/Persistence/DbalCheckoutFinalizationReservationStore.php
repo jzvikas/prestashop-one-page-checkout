@@ -99,16 +99,20 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
     {
         $attemptId = $this->normalizeAttemptId($attemptId);
         [$shopId, $cartId, $customerId] = $this->identity($context);
-        if ($customerId <= 0 || $this->orderExistsForCart($cartId)) {
+        if ($customerId <= 0) {
             return;
         }
 
         $this->connection->executeStatement(
             sprintf(
-                'DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ? AND id_customer = ? AND attempt_id = ?',
+                'DELETE reservation FROM `%1$s` reservation '
+                . 'WHERE reservation.id_shop = ? AND reservation.id_cart = ? '
+                . 'AND reservation.id_customer = ? AND reservation.attempt_id = ? '
+                . 'AND NOT EXISTS (SELECT 1 FROM `%2$s` orders WHERE orders.id_cart = ?)',
                 $this->tableName(),
+                $this->ordersTableName(),
             ),
-            [$shopId, $cartId, $customerId, $attemptId],
+            [$shopId, $cartId, $customerId, $attemptId, $cartId],
         );
     }
 
@@ -202,17 +206,6 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         return [$shopId, $cartId, $customerId];
     }
 
-    private function orderExistsForCart(int $cartId): bool
-    {
-        try {
-            return (int) \Order::getIdByCartId($cartId) > 0;
-        } catch (Throwable) {
-            // Releasing a duplicate-handoff barrier is not safe when Core order state cannot be
-            // determined. The reservation will still expire through its bounded TTL.
-            return true;
-        }
-    }
-
     private function deleteByIdentity(int $shopId, int $cartId): void
     {
         $this->connection->executeStatement(
@@ -223,11 +216,21 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
 
     private function tableName(): string
     {
+        return $this->prefixedTableName('jzopc_checkout_finalization');
+    }
+
+    private function ordersTableName(): string
+    {
+        return $this->prefixedTableName('orders');
+    }
+
+    private function prefixedTableName(string $table): string
+    {
         $prefix = defined('_DB_PREFIX_') ? (string) constant('_DB_PREFIX_') : '';
         if (preg_match('/\A[A-Za-z0-9_]*\z/D', $prefix) !== 1) {
             throw new RuntimeException('Invalid database prefix for checkout finalization storage.');
         }
 
-        return $prefix . 'jzopc_checkout_finalization';
+        return $prefix . $table;
     }
 }
