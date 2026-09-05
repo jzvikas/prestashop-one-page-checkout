@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for the `build/core-address-persistence` implementation. Promotion to the integration-ready mainline remains blocked until the repository quality gates and installed PrestaShop runtime contracts can execute.
+Accepted. The implementation may live on `main`, but the checkout readiness gate remains closed and the executable verification listed below is still deferred while the repository's GitHub Actions quota is exhausted.
 
 ## Context
 
@@ -31,7 +31,11 @@ The native address form also carries its own Core persister token. That token is
 - Rendering depends on the active theme providing the standard PrestaShop address-form template contract. This must be exercised in the installed PrestaShop 9.1/9.2 runtime matrix and representative themes before the integration gate can open.
 - Anonymous carts cannot save an address until a real cart-bound Core customer/guest identity exists; the service fails closed with `address_customer_required`.
 
-## Required verification before promotion
+## Verification status
+
+The checks below are required but have not been executed for this delta. GitHub Actions reports no run for the working branch because the free Actions quota remains exhausted, and the current execution environment cannot clone the GitHub repository for local PHP/Node execution. Their test/contract code was added or updated normally; no unexecuted check is treated as passing.
+
+## Required verification before readiness can advance
 
 - PHP syntax checks for the new/changed PHP sources.
 - `CheckoutAddressFormContractSmokeTest.php`.
