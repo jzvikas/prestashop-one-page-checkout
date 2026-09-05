@@ -28,38 +28,46 @@ final readonly class CheckoutIdentityService
     public function present(\Context $context): array
     {
         $this->assertContext($context);
-
-        $cartCustomerId = max(0, (int) $context->cart->id_customer);
-        $contextCustomerId = max(0, (int) $context->customer->id);
-        if ($cartCustomerId > 0 || $contextCustomerId > 0) {
-            if ($cartCustomerId <= 0 || $contextCustomerId !== $cartCustomerId) {
-                throw new CheckoutIdentityException('identity_customer_mismatch', 'Checkout customer state is inconsistent.');
-            }
-
-            return [
-                'bound' => true,
-                'guestAllowed' => $this->guestAllowed(),
-                'isGuest' => (bool) $context->customer->is_guest,
-                'firstName' => (string) $context->customer->firstname,
-                'lastName' => (string) $context->customer->lastname,
-                'email' => (string) $context->customer->email,
-                'registerFormHtml' => '',
-                'loginFormHtml' => '',
-            ];
+        $bound = $this->boundIdentityVariables($context);
+        if ($bound !== null) {
+            return $bound;
         }
 
         [$registerForm, $loginForm] = $this->createForms($context);
 
-        return [
-            'bound' => false,
-            'guestAllowed' => $this->guestAllowed(),
-            'isGuest' => false,
-            'firstName' => '',
-            'lastName' => '',
-            'email' => '',
-            'registerFormHtml' => $registerForm->render(),
-            'loginFormHtml' => $loginForm->render(),
-        ];
+        return $this->anonymousIdentityVariables(
+            $registerForm->render(),
+            $loginForm->render(),
+        );
+    }
+
+    /**
+     * Reuses already-submitted Core form instances rendered by submit(). This avoids
+     * recreating forms (and their hook-provided fields) just to display validation errors.
+     *
+     * @return array{
+     *   bound:bool,
+     *   guestAllowed:bool,
+     *   isGuest:bool,
+     *   firstName:string,
+     *   lastName:string,
+     *   email:string,
+     *   registerFormHtml:string,
+     *   loginFormHtml:string
+     * }
+     */
+    public function presentWithRenderedForms(
+        \Context $context,
+        string $registerFormHtml,
+        string $loginFormHtml,
+    ): array {
+        $this->assertContext($context);
+        $bound = $this->boundIdentityVariables($context);
+        if ($bound !== null) {
+            return $bound;
+        }
+
+        return $this->anonymousIdentityVariables($registerFormHtml, $loginFormHtml);
     }
 
     /** @param array<string,mixed> $request */
@@ -149,6 +157,67 @@ final readonly class CheckoutIdentityService
         $loginForm->setAction('');
 
         return [$registerForm, $loginForm];
+    }
+
+    /**
+     * @return array{
+     *   bound:true,
+     *   guestAllowed:bool,
+     *   isGuest:bool,
+     *   firstName:string,
+     *   lastName:string,
+     *   email:string,
+     *   registerFormHtml:'',
+     *   loginFormHtml:''
+     * }|null
+     */
+    private function boundIdentityVariables(\Context $context): ?array
+    {
+        $cartCustomerId = max(0, (int) $context->cart->id_customer);
+        $contextCustomerId = max(0, (int) $context->customer->id);
+        if ($cartCustomerId <= 0 && $contextCustomerId <= 0) {
+            return null;
+        }
+        if ($cartCustomerId <= 0 || $contextCustomerId !== $cartCustomerId) {
+            throw new CheckoutIdentityException('identity_customer_mismatch', 'Checkout customer state is inconsistent.');
+        }
+
+        return [
+            'bound' => true,
+            'guestAllowed' => $this->guestAllowed(),
+            'isGuest' => (bool) $context->customer->is_guest,
+            'firstName' => (string) $context->customer->firstname,
+            'lastName' => (string) $context->customer->lastname,
+            'email' => (string) $context->customer->email,
+            'registerFormHtml' => '',
+            'loginFormHtml' => '',
+        ];
+    }
+
+    /**
+     * @return array{
+     *   bound:false,
+     *   guestAllowed:bool,
+     *   isGuest:false,
+     *   firstName:'',
+     *   lastName:'',
+     *   email:'',
+     *   registerFormHtml:string,
+     *   loginFormHtml:string
+     * }
+     */
+    private function anonymousIdentityVariables(string $registerFormHtml, string $loginFormHtml): array
+    {
+        return [
+            'bound' => false,
+            'guestAllowed' => $this->guestAllowed(),
+            'isGuest' => false,
+            'firstName' => '',
+            'lastName' => '',
+            'email' => '',
+            'registerFormHtml' => $registerFormHtml,
+            'loginFormHtml' => $loginFormHtml,
+        ];
     }
 
     /** @return array<string,mixed> */
