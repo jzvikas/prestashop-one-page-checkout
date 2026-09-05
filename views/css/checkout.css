@@ -1,0 +1,35 @@
+.jzopc-checkout {
+  --jzopc-gap: 1.5rem;
+  width: 100%;
+}
+
+.jzopc-checkout__status:empty {
+  display: none;
+}
+
+.jzopc-checkout__layout {
+  display: grid;
+  gap: var(--jzopc-gap);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.jzopc-checkout__main,
+.jzopc-checkout__summary {
+  min-width: 0;
+}
+
+.jzopc-checkout [data-jzopc-section] + [data-jzopc-section] {
+  margin-top: var(--jzopc-gap);
+}
+
+@media (min-width: 64rem) {
+  .jzopc-checkout__layout {
+    align-items: start;
+    grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  }
+
+  .jzopc-checkout__summary {
+    position: sticky;
+    top: 1rem;
+  }
+}
