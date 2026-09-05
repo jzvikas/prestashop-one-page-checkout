@@ -78,7 +78,7 @@ jobs:
         working-directory: /tmp/prestashop
         run: |
           php install-dev/index_cli.php -- \
-            --domain=localhost \
+            --domain=localhost:8080 \
             --base_uri=/ \
             --db_server=127.0.0.1:3306 \
             --db_name=prestashop \
