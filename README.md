@@ -37,10 +37,11 @@ Every checkout mutation runs through the shared guard/orchestrator boundary:
 4. acquire the same-cart DB advisory mutex;
 5. reload server-persisted payment/agreement authority;
 6. reject stale state inside the lock;
-7. execute fresh Core-backed validation/mutation;
-8. require every dependency-mandated section before persistence;
-9. rebuild the authoritative state version;
-10. release the mutex in `finally`.
+7. reject non-finalization mutations while a finalization reservation is active;
+8. execute fresh Core-backed validation/mutation;
+9. require every dependency-mandated section before persistence;
+10. rebuild the authoritative state version;
+11. release the mutex in `finally`.
 
 Browser transport adds `AbortController`, monotonic latest-intent sequencing, bounded stale retry and all-or-nothing section replacement validation.
 
@@ -80,13 +81,15 @@ Immediately before handoff, preflight revalidates:
 - fresh payment-option eligibility;
 - exact fresh mandatory agreements.
 
-A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
+A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The effective installed/default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
 
-An explicit release can clear only its own customer/attempt reservation and now refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
+An explicit release can clear only its own customer/attempt reservation and refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
 
-Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
+Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback. Once native module-owned activation has begun, a thrown handler is treated as ambiguous progress and the reservation is preserved rather than automatically released.
 
-Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module.
+Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module. Binary failures publish the same guarded validation lifecycle as ordinary checkout.
+
+Reservation state also converges in the browser without becoming browser-authoritative. A fresh reload/back render exposes only a boolean active-reservation marker and immediately locks mutable checkout controls. If another pre-opened tab acquires the reservation later, guarded operations return the stable `finalization_in_progress` machine code; generic checkout mutations and ordinary/binary final submit all publish that failure, and the losing tab converges to the same fail-closed lock after local controller cleanup. The browser guard does not poll, release reservations, submit payment or create orders.
 
 Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationController::checkFreeOrder()`.
 
@@ -142,7 +145,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
 - verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
-- verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
+- verify zero-total free order, two-tab finalization races, losing-tab live/reload convergence, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
 

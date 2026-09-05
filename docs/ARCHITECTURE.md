@@ -31,6 +31,8 @@ This document describes architecture that exists in the repository now. It delib
 - opaque server state version;
 - server-generated identity/address/address-form/carrier/payment/agreement/finalization endpoint URLs.
 
+The shell also asks the finalization reservation store whether the current cart/customer has an active reservation. Only a boolean `data-jzopc-finalization-reserved="1|0"` marker crosses the browser boundary; attempt IDs, payment selection and expiry timestamps remain server-only.
+
 No browser-authoritative totals, payment eligibility or canonical selection state is exported.
 
 ## 3. Front service-container boundary
@@ -38,6 +40,8 @@ No browser-authoritative totals, payment eligibility or canonical selection stat
 Checkout hooks and legacy module front controllers resolve services through `Module::get()`. One canonical graph is stored in `config/common/services.yml`; root and front service files import that graph so the Symfony/module and legacy front containers do not drift.
 
 Only intentional entry services are public. DBAL, presenters, validators and other dependencies remain private by default.
+
+The installed service graph explicitly wires the finalization reservation TTL to 900 seconds, matching the store default. The store rejects code-level overrides below 60 or above 3600 seconds.
 
 ## 4. Server-authoritative checkout state
 
@@ -73,14 +77,17 @@ The critical section is:
 2. acquire `CheckoutCartMutex` for the loaded cart;
 3. load authoritative persisted selections;
 4. rerun full CSRF/cart/customer/stale-state guard inside the lock;
-5. resolve the required dependency sections for the current cart topology;
-6. execute the concrete Core-backed mutation;
-7. reject a successful result missing any mandatory section;
-8. persist selections only for structurally complete success;
-9. rebuild authoritative state/version;
-10. release the lock in `finally`.
+5. if a finalization reservation is active, reject every non-finalization mutation with `finalization_in_progress`;
+6. resolve the required dependency sections for the current cart topology;
+7. execute the concrete Core-backed mutation;
+8. reject a successful result missing any mandatory section;
+9. persist selections only for structurally complete success;
+10. rebuild authoritative state/version;
+11. release the lock in `finally`.
 
 `CheckoutCartMutex` uses parameterized MySQL/MariaDB advisory locking through Doctrine DBAL.
+
+Finalization itself is exempt from the ordinary reservation rejection so the same exact attempt can be idempotently retried and an attempt-scoped recovery release can reach the reservation store. A different active attempt is rejected by the reservation store and mapped to the same `finalization_in_progress` machine code.
 
 Concrete module front controllers are POST-only and inherit the same activation gate. Current mutation endpoints include identity, saved-address selection, native address save/refresh, carrier selection, payment selection, agreements and finalization.
 
@@ -133,7 +140,7 @@ A browser payment selection becomes authoritative only after an exact fresh modu
 
 Agreements delegate discovery to `ConditionsToApproveFinder::getConditionsToApproveForTemplate()`. Approval succeeds only when the submitted normalized key set exactly matches every currently required Core/module condition.
 
-## 11. Browser mutation lifecycle
+## 11. Browser mutation and reservation lifecycle
 
 `views/js/checkout-mutation-client.js` is dormant unless a complete trusted `[data-jzopc-checkout]` bootstrap exists.
 
@@ -149,6 +156,10 @@ It provides:
 - `jzopc:section:updated` and checkout lifecycle events for reentrant controllers.
 
 A slower superseded response cannot overwrite newer checkout state.
+
+Generic checkout mutations and ordinary final submit publish `jzopc:checkout:validation-failed` with the guarded server error list. Binary final submit now publishes the same lifecycle before its local failure cleanup. `payment-handoff-ambiguity-guard.js` listens for the exact `finalization_in_progress` error and schedules the fail-closed lock in a microtask so controller cleanup cannot re-enable the losing tab afterwards.
+
+If the page was rendered after a reservation already existed, the same guard consumes the trusted boolean shell marker and locks immediately. If the reservation is acquired later by another tab, the machine error provides live convergence without polling. The browser records only a local boolean reserved fact, disables mutable controls, keeps `aria-busy=true` and announces the translated payment-progress warning. This browser state is defense in depth; it cannot release a reservation or authorize payment/order creation.
 
 `payment-controller.js` synchronizes selected payment UI and reinitializes after payment-section replacement but never places an order.
 
@@ -170,7 +181,7 @@ A successful begin reserves the handoff in module DB state using shop/cart/state
 
 Reservation recovery is deliberately payment-safe rather than aggressively short:
 
-- default TTL is 900 seconds (15 minutes);
+- effective installed/default TTL is 900 seconds (15 minutes);
 - code-level overrides are bounded to 60..3600 seconds;
 - expiry is based on database/server time;
 - release is exact shop/cart/customer/attempt scoped;
@@ -188,13 +199,15 @@ This reduces the chance that a slow redirect/payment initialization reopens a se
 2. `requestSubmit()`;
 3. raw `HTMLFormElement.prototype.submit.call()` only as a final compatibility fallback.
 
+Once one of those module-owned submit lifecycles has started, a synchronous exception is considered ambiguous progress. The browser preserves the reservation, emits `jzopc:checkout:payment-handoff-ambiguous` and leaves recovery to Core successful-order cleanup or bounded TTL rather than automatically releasing the barrier.
+
 The OPC module does not call `PaymentModule::validateOrder()` as a shortcut.
 
 ### Binary/self-submitting options
 
 `binary-payment-controller.js` follows Core's `data-module-name` → `.js-payment-{module}` surface identity. It intercepts click/form-submit activation during capture, obtains finalization reservation, then replays the exact original module-owned control/form. Unexpected section replacement immediately before replay fails closed to avoid destroying third-party runtime state.
 
-A remaining browser-hardening boundary is partial native activation: a third-party handler can theoretically start network/payment work and then throw. The browser matrix must prove that recovery never assumes release is safe after module-owned activation has begun; successful Core cleanup or bounded TTL recovery is the conservative fallback when progress is ambiguous.
+The adapter explicitly marks native activation before replay. Errors before activation may release the exact attempt when safe; exceptions after activation preserve the reservation because third-party payment/order work may already have begun. Binary preflight failures publish the same validation lifecycle as ordinary checkout so a competing-tab `finalization_in_progress` response also converges to the shared browser lock.
 
 ### Free orders
 
@@ -202,7 +215,7 @@ A zero-total cart remains Core-owned. Core's `free_order` option points to `orde
 
 ### Successful-order cleanup
 
-`actionValidateOrderAfter` calls `CheckoutOrderLifecycleCleanup` only after a real order exists for the cart. Cleanup removes selection and finalization reservation state. Cleanup/logging failure is contained so it cannot turn an already-created Core order into a customer-visible payment failure.
+`actionValidateOrderAfter` calls `CheckoutOrderLifecycleCleanup` only after a real Core order exists for the cart. Cleanup removes selection and finalization reservation state. Cleanup/logging failure is contained so it cannot turn an already-created Core order into a customer-visible payment failure.
 
 ## 13. Back Office activation and multistore
 
@@ -233,14 +246,14 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
+4. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
 

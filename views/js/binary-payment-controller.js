@@ -239,6 +239,10 @@
             this.fail(this.message('review-checkout'));
             return;
           }
+          this.dispatch('jzopc:checkout:validation-failed', {
+            errors: payload.errors,
+            stateVersion: this.root.dataset.jzopcStateVersion || '',
+          });
           this.fail(this.firstErrorMessage(payload.errors) || this.message('review-checkout'));
           return;
         }

@@ -5,6 +5,7 @@
   const STATUS_SELECTOR = '[data-jzopc-final-status]';
   const MESSAGE_SELECTOR = '[data-jzopc-final-message="handoff-ambiguous"]';
   const INTERACTIVE_SELECTOR = 'button, input, select, textarea';
+  const FINALIZATION_IN_PROGRESS_CODE = 'finalization_in_progress';
 
   function lockAmbiguousCheckout(root) {
     if (!(root instanceof HTMLElement) || root.hasAttribute('data-jzopc-payment-handoff-ambiguous')) {
@@ -37,6 +38,30 @@
     }));
   }
 
+  function rootForEvent(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return null;
+    }
+
+    const root = target.closest(ROOT_SELECTOR);
+    return root instanceof HTMLElement ? root : null;
+  }
+
+  function hasErrorCode(event, code) {
+    const detail = event.detail || {};
+    return Array.isArray(detail.errors)
+      && detail.errors.some((error) => error && error.code === code);
+  }
+
+  function scheduleAmbiguousLock(root) {
+    // Submit/mutation controllers finish synchronous failure cleanup after publishing lifecycle
+    // events. Lock in the next microtask so that cleanup cannot re-enable controls afterwards.
+    Promise.resolve().then(function () {
+      lockAmbiguousCheckout(root);
+    });
+  }
+
   function lockServerReservedCheckout(scope) {
     const root = scope instanceof HTMLElement && scope.matches(ROOT_SELECTOR)
       ? scope
@@ -49,22 +74,28 @@
   }
 
   document.addEventListener('jzopc:checkout:payment-handoff-ambiguous', function (event) {
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const root = target.closest(ROOT_SELECTOR);
+    const root = rootForEvent(event);
     if (!(root instanceof HTMLElement)) {
       return;
     }
 
-    // Existing submit controllers finish their synchronous error cleanup immediately after emitting
-    // the ambiguity event. Lock in the next microtask so their normal failure cleanup cannot
-    // accidentally re-enable checkout controls while the server reservation is still authoritative.
-    Promise.resolve().then(function () {
-      lockAmbiguousCheckout(root);
-    });
+    scheduleAmbiguousLock(root);
+  });
+
+  document.addEventListener('jzopc:checkout:validation-failed', function (event) {
+    if (!hasErrorCode(event, FINALIZATION_IN_PROGRESS_CODE)) {
+      return;
+    }
+
+    const root = rootForEvent(event);
+    if (!(root instanceof HTMLElement)) {
+      return;
+    }
+
+    // The exact machine error came from the guarded server reservation boundary. Remember only
+    // the boolean fact locally so remounts in this page cannot present an unlocked retry surface.
+    root.dataset.jzopcFinalizationReserved = '1';
+    scheduleAmbiguousLock(root);
   });
 
   if (document.readyState === 'loading') {
