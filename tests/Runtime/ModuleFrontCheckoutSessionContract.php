@@ -57,15 +57,25 @@ $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
-// Deliberately remove the OrderController capability. Real module mutation controllers do not
-// expose getCheckoutSession(), so the private provider dependency must construct the same Core
-// session shape itself. ADR-0011 deliberately keeps such dependencies private; only the actual
-// hook/controller entry services may be fetched through Module::get().
-$context->controller = new stdClass();
+// Module::get() resolves front-scope module services through the active front controller's
+// container. Bootstrap exactly that container boundary first, mirroring a normal FO request while
+// avoiding full Controller::init() side effects. Once the public entry graph has been resolved we
+// deliberately replace the controller with one that has no getCheckoutSession() capability so the
+// private provider must exercise its module-front fallback branch.
+$frontBootstrapController = new class extends OrderController {
+    public function initializeRuntimeContainer(): void
+    {
+        if ($this->getContainer() === null) {
+            $this->container = $this->buildContainer();
+        }
+    }
+};
+$frontBootstrapController->initializeRuntimeContainer();
+$context->controller = $frontBootstrapController;
 
 $builder = $module->get(CheckoutProcessBuilder::class);
 if (!$builder instanceof CheckoutProcessBuilder) {
-    $fail('CheckoutProcessBuilder public front entry service is unavailable.');
+    $fail('CheckoutProcessBuilder public front entry service is unavailable after front-container bootstrap.');
 }
 
 /**
@@ -135,6 +145,10 @@ if (!$provider instanceof CheckoutSessionProviderInterface) {
     $fail('CheckoutSessionProviderInterface dependency could not be resolved from the public entry graph.');
 }
 
+// Deliberately remove OrderController::getCheckoutSession() after DI resolution. Real module front
+// controllers expose no such method, so this request context must use the provider's Core-session
+// construction fallback rather than borrowing the bootstrap controller's existing session.
+$context->controller = new stdClass();
 $session = $provider->get($context);
 if (!$session instanceof CheckoutSession) {
     $fail('Module-front fallback did not create a Core CheckoutSession.');
