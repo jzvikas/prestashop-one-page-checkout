@@ -219,7 +219,7 @@ jobs:
           cat /tmp/jzopc-prestashop-active-http.log
           exit 1
 
-      - name: Execute active checkout persistence fallback HTTP contract
+      - name: Execute active checkout failure fallback HTTP contract
         run: |
           php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCheckoutFallbackHttpContract.php \
             http://localhost:8080 \
