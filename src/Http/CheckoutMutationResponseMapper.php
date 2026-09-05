@@ -91,6 +91,11 @@ final readonly class CheckoutMutationResponseMapper
                 'Your checkout changed in another request. Please review the updated information and try again.',
                 true,
             ],
+            CheckoutMutationBlockReason::FinalizationInProgress => [
+                409,
+                'Order submission is already in progress for this cart. Please wait before changing checkout details.',
+                false,
+            ],
         };
 
         return CheckoutJsonResponse::error(

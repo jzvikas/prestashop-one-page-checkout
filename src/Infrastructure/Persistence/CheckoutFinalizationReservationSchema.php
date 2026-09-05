@@ -23,6 +23,7 @@ final class CheckoutFinalizationReservationSchema
             . '`id_customer` INT UNSIGNED NOT NULL DEFAULT 0,'
             . '`state_version` VARCHAR(128) NOT NULL,'
             . '`selected_payment_option` VARCHAR(255) NOT NULL,'
+            . '`attempt_id` CHAR(32) NOT NULL,'
             . '`expires_at` BIGINT UNSIGNED NOT NULL,'
             . '`date_add` DATETIME NOT NULL,'
             . 'PRIMARY KEY (`id_shop`, `id_cart`),'

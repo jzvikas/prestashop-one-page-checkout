@@ -6,7 +6,12 @@ namespace Jzvikas\OnePageCheckout\Checkout\Finalization;
 
 interface CheckoutFinalizationReservationStoreInterface
 {
-    public function acquire(\Context $context, string $stateVersion, string $paymentSelection): void;
+    public function acquire(
+        \Context $context,
+        string $stateVersion,
+        string $paymentSelection,
+        string $attemptId,
+    ): void;
 
     public function isActive(\Context $context): bool;
 

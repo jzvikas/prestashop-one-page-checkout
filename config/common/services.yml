@@ -42,6 +42,8 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Agreements\CheckoutAgreementSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Agreements\CheckoutAgreementSelectionService: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationPreflightService: ~
+
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider
@@ -123,6 +125,9 @@ services:
     public: true
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAgreementSelectionMutation:
+    public: true
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutFinalizationMutation:
     public: true
 
   Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper:

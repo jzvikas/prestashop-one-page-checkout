@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jzvikas\OnePageCheckout\Checkout;
 
 use Closure;
+use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface;
 use Jzvikas\OnePageCheckout\Concurrency\CheckoutCartLockUnavailable;
 use Jzvikas\OnePageCheckout\Concurrency\CheckoutCartMutexInterface;
 use Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator;
@@ -22,6 +23,7 @@ final readonly class CheckoutMutationOrchestrator
         private PrestaShopCheckoutStateFactory $stateFactory,
         private CheckoutStateVersioner $stateVersioner,
         private CheckoutServerSelectionsStoreInterface $serverSelectionsStore,
+        private CheckoutFinalizationReservationStoreInterface $finalizationReservationStore,
     ) {
     }
 
@@ -65,6 +67,18 @@ final readonly class CheckoutMutationOrchestrator
 
                     $currentState = $guardResult->currentState
                         ?? throw new LogicException('Allowed mutation guard result has no current state.');
+
+                    // Once final checkout handoff is reserved, no other OPC mutation may alter the
+                    // cart/payment/agreement state under the native payment submission. The final
+                    // preflight itself is exempt so the same attempt can be idempotently retried.
+                    if ($mutation !== CheckoutMutation::FinalizationStarted
+                        && $this->finalizationReservationStore->isActive($context)) {
+                        return CheckoutMutationExecutionResult::rejected(
+                            CheckoutMutationBlockReason::FinalizationInProgress,
+                            $currentState,
+                        );
+                    }
+
                     $requiredSections = $this->dependencyResolver->affectedBy($mutation, $context);
                     $outcome = $mutationHandler($currentState, $requiredSections, $currentSelections);
 

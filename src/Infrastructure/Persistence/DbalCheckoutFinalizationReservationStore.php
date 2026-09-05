@@ -21,15 +21,23 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         }
     }
 
-    public function acquire(\Context $context, string $stateVersion, string $paymentSelection): void
-    {
+    public function acquire(
+        \Context $context,
+        string $stateVersion,
+        string $paymentSelection,
+        string $attemptId,
+    ): void {
         $stateVersion = trim($stateVersion);
         $paymentSelection = trim($paymentSelection);
+        $attemptId = strtolower(trim($attemptId));
         if ($stateVersion === '' || strlen($stateVersion) > 128) {
             throw new RuntimeException('Checkout finalization state version is invalid.');
         }
         if ($paymentSelection === '' || strlen($paymentSelection) > 255) {
             throw new RuntimeException('Checkout finalization payment selection is invalid.');
+        }
+        if (preg_match('/\A[a-f0-9]{32}\z/D', $attemptId) !== 1) {
+            throw new RuntimeException('Checkout finalization attempt identifier is invalid.');
         }
 
         [$shopId, $cartId, $customerId] = $this->identity($context);
@@ -45,17 +53,30 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             [$shopId, $cartId, $customerId],
         );
 
+        $existing = $this->activeReservation($shopId, $cartId, $customerId);
+        if ($existing !== null) {
+            if ($this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)) {
+                return;
+            }
+
+            throw new CheckoutFinalizationReservationAlreadyActive('Checkout finalization is already reserved for this cart.');
+        }
+
         try {
             $this->connection->executeStatement(
                 sprintf(
-                    'INSERT INTO `%s` (id_shop, id_cart, id_customer, state_version, selected_payment_option, expires_at, date_add) '
-                    . 'VALUES (?, ?, ?, ?, ?, UNIX_TIMESTAMP() + ?, NOW())',
+                    'INSERT INTO `%s` (id_shop, id_cart, id_customer, state_version, selected_payment_option, attempt_id, expires_at, date_add) '
+                    . 'VALUES (?, ?, ?, ?, ?, ?, UNIX_TIMESTAMP() + ?, NOW())',
                     $this->tableName(),
                 ),
-                [$shopId, $cartId, $customerId, $stateVersion, $paymentSelection, $this->ttlSeconds],
+                [$shopId, $cartId, $customerId, $stateVersion, $paymentSelection, $attemptId, $this->ttlSeconds],
             );
         } catch (Throwable $exception) {
-            if ($this->isActive($context)) {
+            $existing = $this->activeReservation($shopId, $cartId, $customerId);
+            if ($existing !== null && $this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)) {
+                return;
+            }
+            if ($existing !== null) {
                 throw new CheckoutFinalizationReservationAlreadyActive(
                     'Checkout finalization is already reserved for this cart.',
                     0,
@@ -71,10 +92,22 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
     {
         [$shopId, $cartId, $customerId] = $this->identity($context);
 
+        return $this->activeReservation($shopId, $cartId, $customerId) !== null;
+    }
+
+    public function clear(\Context $context): void
+    {
+        [$shopId, $cartId] = $this->identity($context);
+        $this->deleteByIdentity($shopId, $cartId);
+    }
+
+    /** @return array<string,mixed>|null */
+    private function activeReservation(int $shopId, int $cartId, int $customerId): ?array
+    {
         $row = $this->connection
             ->executeQuery(
                 sprintf(
-                    'SELECT id_customer, (expires_at > UNIX_TIMESTAMP()) AS is_active FROM `%s` '
+                    'SELECT id_customer, state_version, selected_payment_option, attempt_id, expires_at FROM `%s` '
                     . 'WHERE id_shop = ? AND id_cart = ? LIMIT 1',
                     $this->tableName(),
                 ),
@@ -83,22 +116,36 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             ->fetchAssociative();
 
         if ($row === false) {
-            return false;
+            return null;
         }
 
-        if ((int) ($row['id_customer'] ?? -1) !== $customerId || (int) ($row['is_active'] ?? 0) !== 1) {
+        $expiresAt = (int) ($row['expires_at'] ?? 0);
+        if ((int) ($row['id_customer'] ?? -1) !== $customerId || $expiresAt <= time()) {
             $this->deleteByIdentity($shopId, $cartId);
 
-            return false;
+            return null;
         }
 
-        return true;
+        return $row;
     }
 
-    public function clear(\Context $context): void
-    {
-        [$shopId, $cartId] = $this->identity($context);
-        $this->deleteByIdentity($shopId, $cartId);
+    /** @param array<string,mixed> $row */
+    private function matchesAttempt(
+        array $row,
+        string $stateVersion,
+        string $paymentSelection,
+        string $attemptId,
+    ): bool {
+        $storedState = $row['state_version'] ?? null;
+        $storedPayment = $row['selected_payment_option'] ?? null;
+        $storedAttempt = $row['attempt_id'] ?? null;
+
+        return is_string($storedState)
+            && is_string($storedPayment)
+            && is_string($storedAttempt)
+            && hash_equals($storedState, $stateVersion)
+            && hash_equals($storedPayment, $paymentSelection)
+            && hash_equals(strtolower($storedAttempt), $attemptId);
     }
 
     /** @return array{0:int,1:int,2:int} */
