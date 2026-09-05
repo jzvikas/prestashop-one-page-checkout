@@ -7,6 +7,7 @@ namespace Jzvikas\OnePageCheckout\Checkout;
 enum CheckoutMutation: string
 {
     case IdentityUpdated = 'identity_updated';
+    case AddressSelectionUpdated = 'address_selection_updated';
     case DeliveryAddressUpdated = 'delivery_address_updated';
     case InvoiceAddressUpdated = 'invoice_address_updated';
     case InvoiceModeToggled = 'invoice_mode_toggled';
