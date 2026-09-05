@@ -42,11 +42,19 @@ final readonly class CheckoutFrontendAssetRegistrar
             ],
         );
         $controller->registerJavascript(
+            'module-jzonepagecheckout-ordinary-payment-submit-guard',
+            self::MODULE_PATH . 'views/js/ordinary-payment-submit-guard.js',
+            [
+                'position' => 'bottom',
+                'priority' => 153,
+            ],
+        );
+        $controller->registerJavascript(
             'module-jzonepagecheckout-binary-payment',
             self::MODULE_PATH . 'views/js/binary-payment-controller.js',
             [
                 'position' => 'bottom',
-                'priority' => 153,
+                'priority' => 154,
             ],
         );
     }
