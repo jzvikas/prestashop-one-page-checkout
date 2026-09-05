@@ -45,17 +45,13 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         }
 
         $this->purgeExpired();
-        $this->connection->executeStatement(
-            sprintf(
-                'DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ? AND id_customer <> ?',
-                $this->tableName(),
-            ),
-            [$shopId, $cartId, $customerId],
-        );
 
-        $existing = $this->activeReservation($shopId, $cartId, $customerId);
+        $existing = $this->activeReservation($shopId, $cartId);
         if ($existing !== null) {
-            if ($this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)) {
+            if (
+                (int) ($existing['id_customer'] ?? -1) === $customerId
+                && $this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)
+            ) {
                 return;
             }
 
@@ -72,8 +68,12 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
                 [$shopId, $cartId, $customerId, $stateVersion, $paymentSelection, $attemptId, $this->ttlSeconds],
             );
         } catch (Throwable $exception) {
-            $existing = $this->activeReservation($shopId, $cartId, $customerId);
-            if ($existing !== null && $this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)) {
+            $existing = $this->activeReservation($shopId, $cartId);
+            if (
+                $existing !== null
+                && (int) ($existing['id_customer'] ?? -1) === $customerId
+                && $this->matchesAttempt($existing, $stateVersion, $paymentSelection, $attemptId)
+            ) {
                 return;
             }
             if ($existing !== null) {
@@ -90,9 +90,9 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
 
     public function isActive(\Context $context): bool
     {
-        [$shopId, $cartId, $customerId] = $this->identity($context);
+        [$shopId, $cartId] = $this->identity($context);
 
-        return $this->activeReservation($shopId, $cartId, $customerId) !== null;
+        return $this->activeReservation($shopId, $cartId) !== null;
     }
 
     public function releaseAttempt(\Context $context, string $attemptId): void
@@ -123,7 +123,7 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
     }
 
     /** @return array<string,mixed>|null */
-    private function activeReservation(int $shopId, int $cartId, int $customerId): ?array
+    private function activeReservation(int $shopId, int $cartId): ?array
     {
         $row = $this->connection
             ->executeQuery(
@@ -141,7 +141,7 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             return null;
         }
 
-        if ((int) ($row['id_customer'] ?? -1) !== $customerId || (int) ($row['is_active'] ?? 0) !== 1) {
+        if ((int) ($row['is_active'] ?? 0) !== 1) {
             $this->deleteByIdentity($shopId, $cartId);
 
             return null;
