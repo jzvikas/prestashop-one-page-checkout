@@ -28,7 +28,9 @@ The module does not hard-load one checkout API on every PrestaShop 9 release.
 
 Fallback logging contains only an internal stage, exception class and numeric shop/cart identifiers; exception messages and request/payment payloads are deliberately excluded. See ADR-0027.
 
-The installed-runtime matrix now also contains `IntegrationFailureIsolationContract.php`. On 9.0/9.1 it injects a test-local shell persistence-read failure and requires the exact original Core process/session to remain untouched. On 9.2 it requires eager preparation failure to happen before provider exposure and proves that a provider given already-prepared HTML does not re-enter risky shell dependencies later. This test adds no production readiness bypass. See ADR-0028.
+The installed-runtime matrix also contains `IntegrationFailureIsolationContract.php`. On 9.0/9.1 it injects a test-local shell persistence-read failure and requires the exact original Core process/session to remain untouched. On 9.2 it requires eager preparation failure to happen before provider exposure and proves that a provider given already-prepared HTML does not re-enter risky shell dependencies later. This test adds no production readiness bypass. See ADR-0028.
+
+A second controlled request-path layer is configured in ADR-0029. The normal source-mounted module first proves the production `INTEGRATION_SHELL_READY=false` boundary. Only afterwards does the runtime workflow create `/tmp/jzopc-active-fixture*`, open readiness in that disposable copy, and inject test-only persistence/service/Smarty-template/asset failures. One Core-created cart/cookie session must show healthy OPC, Core native fallback during each failure and healthy OPC recovery afterwards. Production integration classes contain no failure markers, and the active fixture never calls payment finalization or creates an order.
 
 ## Server-authoritative state and mutation safety
 
@@ -142,7 +144,9 @@ bash scripts/run-smoke-tests.sh
 
 `scripts/run-smoke-tests.sh` is the canonical local/CI smoke runner. It forces `zend.assertions=1` and `assert.exception=1` so older smoke files that still use PHP `assert()` cannot silently become no-ops when the local PHP configuration has assertions disabled. It also fails if no smoke test files are found.
 
-The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families. The installed shell contract now also requires the finalization URL, final submit/status surface and server-derived inactive reservation marker for a fresh runtime cart.
+The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families. The installed shell contract requires the finalization URL, final submit/status surface and server-derived inactive reservation marker for a fresh runtime cart. The same workflow is configured to execute the controlled active HTTP persistence/service/template/assets fallback matrix only after the normal closed-readiness HTTP boundary succeeds.
+
+The temporary failure instrumenter was syntax-checked and executed against a synthetic `/tmp` source layout; its injected service/template/assets snippets remained syntax-valid. This checks the patch mechanism only. The current container could not clone GitHub because DNS resolution is unavailable, so no full local repository suite is claimed from that environment.
 
 GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted / no checks are being created for the current branch. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
 
@@ -150,7 +154,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 
 - `INTEGRATION_SHELL_READY` remains `false`;
 - execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs and `IntegrationFailureIsolationContract.php`, after Actions runners become available and fix every failure;
-- execute controlled HTTP/browser takeover and native-fallback tests, including injected DB/persistence, template/renderer/service and asset-registration failures on the 9.0/9.1 and 9.2 integration families;
+- execute the configured active HTTP takeover/native-fallback matrix for DB/persistence, template, renderer/service and asset-registration failures across the 9.0/9.1 and 9.2 integration families and fix every failure;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
 - verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
