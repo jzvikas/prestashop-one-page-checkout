@@ -16,7 +16,7 @@ This document describes architecture that exists in the repository today. It int
 
 `CheckoutProcessBuilder` creates a real Core `CheckoutProcess` around a single `CheckoutShellStep`. The step extends `AbstractCheckoutStep`, stays reachable/current as the one-page surface and calls Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`. `CheckoutShellRenderer` then renders the trusted module root from the same Core cart/session and persisted server selections used by mutation guards.
 
-`CheckoutBrowserBootstrapFactory` builds the initial browser binding from the loaded cart, `Tools::getToken(false)`, `PrestaShopCheckoutStateFactory`, `CheckoutStateVersioner` and PrestaShop-generated module links. The shell exposes only cart ID, CSRF token, state version and address/payment/agreement endpoint URLs. It does not expose client-authoritative totals or a browser copy of server selections.
+`CheckoutBrowserBootstrapFactory` builds the initial browser binding from the loaded cart, `Tools::getToken(false)`, `PrestaShopCheckoutStateFactory`, `CheckoutStateVersioner` and PrestaShop-generated module links. The shell exposes only cart ID, CSRF token, state version and address/carrier/payment/agreement endpoint URLs. It does not expose client-authoritative totals or a browser copy of server selections.
 
 `actionFrontControllerSetMedia` is installed in addition to the version-specific checkout hook. It is restricted to `OrderController`, must pass the same activation policy, and delegates to `CheckoutFrontendAssetRegistrar`. Existing installations receive that hook through idempotent `upgrade/upgrade-0.3.0.php`; the version is therefore `0.3.0`.
 
@@ -33,7 +33,7 @@ See ADR-0001, ADR-0008, ADR-0009 and ADR-0010.
 - the 9.1+ provider is stored as a class-name string and instantiated dynamically so PrestaShop 9.0 never acquires a hard reference to a class that does not exist there;
 - Object/Cart presenters are reused from a compatible front controller when available, otherwise Core presenter instances are constructed from the active `Context`.
 
-This boundary is used by both delivery rendering and saved-address mutation. See ADR-0013.
+This boundary is shared by delivery rendering, saved-address mutation and carrier selection. See ADR-0013 and ADR-0014.
 
 ## Server-authoritative checkout state
 
@@ -83,15 +83,17 @@ Stale, CSRF-rejected, failed or incomplete mutations do not overwrite persisted 
 
 `CheckoutMutationResponseMapper` maps application results to stable HTTP semantics. `JzOnePageCheckoutAbstractJsonModuleFrontController` owns no-store JSON headers plus exception containment/logging, while `JzOnePageCheckoutAbstractMutationModuleFrontController` owns POST-only transport and the fail-closed activation gate.
 
-Concrete mutation controllers currently exist for `addressselection`, `paymentselection` and `agreements`. Controllers collect request values but do not authorize carts, prices, addresses, modules or agreements. State-sensitive parsing and validation run inside `CheckoutMutationOrchestrator`, after mutex acquisition and fresh-state validation.
+Concrete mutation controllers currently exist for `addressselection`, `carrierselection`, `paymentselection` and `agreements`. Controllers collect request values but do not authorize carts, prices, addresses, carrier options, modules or agreements. State-sensitive parsing and validation run inside `CheckoutMutationOrchestrator`, after mutex acquisition and fresh-state validation.
 
 ## Browser mutation transport
 
-`views/js/checkout-mutation-client.js` is the shared browser transport for the implemented address/payment/agreement endpoints. It activates only inside the trusted module-owned `[data-jzopc-checkout]` root with positive cart ID, non-empty CSRF/state tokens and explicit endpoint URLs.
+`views/js/checkout-mutation-client.js` is the shared browser transport for the implemented address/carrier/payment/agreement endpoints. It activates only inside the trusted module-owned `[data-jzopc-checkout]` root with positive cart ID, non-empty CSRF/state tokens and explicit endpoint URLs.
 
 Every mutation sends `token`, `cartId`, prior `stateVersion` and only operation-specific identifiers. It never sends client-calculated money or a browser copy of `CheckoutServerSelections`.
 
 Address radio/checkbox changes are delegated from the stable checkout root. Delivery address, invoice mode and optional separate invoice address are serialized into one address intent and sent to one endpoint, avoiding independent requests that could race against each other. Missing separate-invoice input is intentionally left for the server parser to reject with a translated canonical error rather than fabricating untranslated browser validation text.
+
+Delivery-option radio changes are delegated from the same stable root. The browser sends only the opaque Core delivery-option key to the trusted carrier endpoint. It does not send a carrier price, label, id list or calculated total. The server revalidates the key against the fresh Core session before any cart change.
 
 A newer mutation increments a local sequence and aborts the prior request where `AbortController` is available; every response is also compared with the latest sequence. A slower old response therefore cannot overwrite newer checkout state even if cancellation races or is unavailable.
 
@@ -99,9 +101,9 @@ A `409 stale_state` response with `retryable=true` and a current server version 
 
 Before changing DOM, the client validates the complete returned section map. Every response key must map to a current section and returned HTML must contain exactly one matching `data-jzopc-section` root. If any replacement is invalid, none is applied. Successful application updates the root state version and emits `jzopc:section:updated` for each replaced section.
 
-The client publishes checkout lifecycle events including `jzopc:address:selected`, but does not submit payment forms or place orders.
+The client publishes checkout lifecycle events including `jzopc:address:selected` and `jzopc:carrier:selected`, but does not submit payment forms or place orders.
 
-See ADR-0007, ADR-0008 and ADR-0013.
+See ADR-0007, ADR-0008, ADR-0013 and ADR-0014.
 
 ## Section rendering
 
@@ -115,7 +117,7 @@ See ADR-0007, ADR-0008 and ADR-0013.
 
 `AddressesSectionRenderer` uses `PrestaShopCheckoutAddressBookPresenter`. It reads only the cart-bound customer, fails on cart/customer mismatch, filters addresses through `Customer::customerHasAddress()`, loads Core `Address` objects and formats them with `AddressFormat::generateAddress()`.
 
-Saved-address selection now has a public guarded `addressselection` mutation path. `CheckoutAddressSelectionParser` normalizes delivery/invoice/same-address intent and rejects malformed/ambiguous inputs. `CheckoutAddressSelectionService` validates every submitted target against the cart-bound customer and applies changes through Core `CheckoutSession::setIdAddressDelivery()` / `setIdAddressInvoice()`. This preserves `Cart::updateAddressId()` delivery associations and reuses Core's linked delivery/invoice side effects rather than editing only cart header IDs.
+Saved-address selection has a public guarded `addressselection` mutation path. `CheckoutAddressSelectionParser` normalizes delivery/invoice/same-address intent and rejects malformed/ambiguous inputs. `CheckoutAddressSelectionService` validates every submitted target against the cart-bound customer and applies changes through Core `CheckoutSession::setIdAddressDelivery()` / `setIdAddressInvoice()`. This preserves `Cart::updateAddressId()` delivery associations and reuses Core's linked delivery/invoice side effects rather than editing only cart header IDs.
 
 A real address change clears prior persisted payment/agreement selections before dependent sections are rendered. An idempotent address request preserves current validated selections.
 
@@ -125,7 +127,11 @@ Address add/edit forms, address creation/update persistence and guest/customer i
 
 `DeliverySectionRenderer` uses `PrestaShopCheckoutDeliveryOptionsPresenter`. Physical carts execute `actionCarrierProcess` before discovery and obtain the active Core checkout session through `CheckoutSessionProviderInterface`. This preserves Core delivery keys, pricing/delay presentation, `displayCarrierExtraContent`, `displayBeforeCarrier` and `displayAfterCarrier`. Virtual carts emit no shipping section.
 
-The same session provider now has a version-safe module-front construction path matching Core's legacy/improved-shipment split. A concrete carrier-selection mutation endpoint is still not implemented and remains a release blocker.
+Carrier selection now has a guarded `carrierselection` path. `CheckoutCarrierSelectionParser` accepts only a bounded delivery-option-key syntax. `CheckoutCarrierSelectionService` obtains the fresh Core `CheckoutSession::getDeliveryOptions()` set, requires an exact key match and applies a real change through `CheckoutSession::setDeliveryOption()`. An already-selected option is idempotent. Forged/stale options and virtual-cart carrier mutations fail closed.
+
+A real carrier change clears prior persisted payment/agreement selections and refreshes delivery, payment, agreements and summary because shipping can change totals, payment eligibility and module-provided requirements. The browser uses the same stale-safe delegated mutation transport, so delivery-section replacement does not require rebinding listeners.
+
+See ADR-0014.
 
 ### Payment
 
@@ -163,13 +169,13 @@ Those raw boundaries must never be widened to browser-controlled or arbitrary cu
 
 ## Refresh graph
 
-The dependency resolver is conservative. Address/cart changes refresh addresses, delivery (physical carts only), payment, agreements and summary; payment selection refreshes payment, agreements and summary; agreement changes refresh agreements. Correctness is preferred over micro-optimizing renders.
+The dependency resolver is conservative. Address/cart changes refresh addresses, delivery (physical carts only), payment, agreements and summary; carrier selection refreshes delivery, payment, agreements and summary; payment selection refreshes payment, agreements and summary; agreement changes refresh agreements. Correctness is preferred over micro-optimizing renders.
 
-The atomic saved-address mutation uses the same downstream set for delivery-address, invoice-address and same-address-mode changes because each can affect taxes, carrier/payment eligibility or legal state.
+Address and carrier business-state changes invalidate prior payment/agreement authority when they actually change server state. Idempotent mutations preserve current validated selections.
 
 ## Testing state
 
-The smoke suite contains coverage for capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contracts, response mapping, Core-backed address/delivery/payment/agreement presenters, Core-session saved-address semantics, payment JavaScript behavior, payment selection validation, agreement exact-set validation, authoritative selection restoration, guarded address/payment/agreement endpoint contracts, virtual-cart dependency filtering and stale-safe browser mutation transport.
+The smoke suite contains coverage for capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contracts, response mapping, Core-backed address/delivery/payment/agreement presenters, Core-session saved-address semantics, carrier-option validation/idempotency, payment JavaScript behavior, payment selection validation, agreement exact-set validation, authoritative selection restoration, guarded mutation endpoint contracts, virtual-cart dependency filtering and stale-safe browser mutation transport.
 
 Version-specific source-contract coverage also verifies the 9.2 provider shape/isolation, 9.0/9.1 Core-session reuse, module shell step construction, Core `renderTemplate()` lifecycle, readiness gate, media registration and `0.3.0` upgrade path.
 
@@ -177,18 +183,18 @@ GitHub Actions baseline CI is designed to validate Composer metadata and product
 
 The separate `PrestaShop Runtime` workflow provisions MariaDB 11.4 and source-tree installations for PrestaShop 9.1.5 and 9.2.0-beta.1. It contains contracts for module installation/capability/conflict behavior, real Core process/session adapters, installed Smarty shell rendering and a module-front `CheckoutSession` fallback.
 
-The newly added Smarty/session/address-related contracts have not been executed in the current milestone because the repository's GitHub Actions free quota is exhausted. They remain required and must be executed after quota reset; their presence is not recorded as a passing runtime result.
+The newly added Smarty/session/address/carrier-related contracts and source changes have not received a new GitHub Actions run because the repository's GitHub Actions free quota is exhausted. They remain required and must be executed after quota reset; their presence is not recorded as a passing runtime result. Focused local PHP 8.4/Node.js 22 checks for the carrier milestone were executed separately and are recorded in ADR-0014.
 
-The runtime suite still does not cover PrestaShop 9.0, live HTTP/browser navigation, active provider/reference-hook takeover with readiness open, real address mutation over HTTP, representative carrier/payment modules, or final order placement. Schema/media-hook upgrade execution against an older installed module version also remains to be added.
+The runtime suite still does not cover PrestaShop 9.0, live HTTP/browser navigation, active provider/reference-hook takeover with readiness open, representative carrier/payment modules, no-carrier transitions, address add/edit, identity or final order placement. Schema/media-hook upgrade execution against an older installed module version also remains to be added.
 
 ## Next application boundary
 
-Saved-address selection is now wired through the production mutation architecture, but activation remains deliberately fail-closed. The next highest-priority application work is:
+Saved-address and carrier selection are now wired through the production mutation architecture, but activation remains deliberately fail-closed. The next highest-priority application work is:
 
-1. implement a fresh-Core carrier-selection validator/mutation endpoint using the same cart mutex and session boundary;
-2. implement guest/logged-in identity and address add/edit flows using Core forms/persisters rather than placeholder markup;
-3. after Actions quota reset, execute all deferred smoke/runtime contracts and fix every failure before using those results to reconsider checkout readiness;
-4. build the controlled live HTTP/browser harness proving native fallback, shell/assets, stale-safe mutations and representative payment/carrier lifecycle;
-5. implement Phase 5 final validation, duplicate-order/idempotency protection, selection cleanup and native payment-module handoff.
+1. implement guest/logged-in identity and address add/edit flows using Core forms/persisters rather than placeholder markup;
+2. after Actions quota reset, execute all deferred smoke/runtime contracts and fix every failure before using those results to reconsider checkout readiness;
+3. build the controlled live HTTP/browser harness proving native fallback, shell/assets, stale-safe mutations, no-carrier behavior and representative payment/carrier lifecycle;
+4. implement Phase 5 final validation, duplicate-order/idempotency protection, selection cleanup and native payment-module handoff;
+5. only after those gates, add Back Office activation/rollout controls and reconsider `INTEGRATION_SHELL_READY`.
 
 `INTEGRATION_SHELL_READY` must remain `false` until those safety gates justify production takeover.

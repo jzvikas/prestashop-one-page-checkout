@@ -20,7 +20,8 @@ The module already has a shared mutation boundary that provides POST-only transp
 6. A real carrier change invalidates previously persisted payment and agreement authority. Carrier choice can change payable totals, payment eligibility and module-provided requirements, so `CarrierSelected` refreshes delivery, payment, agreements and summary from the new server state.
 7. Invalid/stale/forged carrier keys return the current authoritative sections and a translated `carrier_selection_invalid` error; they do not mutate the cart or persisted selection authority.
 8. Virtual carts reject carrier mutation because the trusted shell intentionally has no delivery section for them.
-9. `INTEGRATION_SHELL_READY` remains `false`; implementing this guarded endpoint does not by itself enable checkout takeover.
+9. The trusted browser bootstrap now includes only a server-generated carrier mutation URL in addition to its existing bindings. The stale-safe delegated mutation client observes delivery-option radio changes, sends the selected opaque Core key to that URL, publishes `jzopc:carrier:selected`, and keeps the same AbortController/sequence/state-version protections as other checkout mutations.
+10. `INTEGRATION_SHELL_READY` remains `false`; implementing and wiring this guarded endpoint does not by itself enable checkout takeover.
 
 ## Security consequences
 
@@ -28,18 +29,20 @@ The module already has a shared mutation boundary that provides POST-only transp
 - browser-supplied shipping price, carrier label and totals remain ignored;
 - prior payment/agreement approval cannot silently survive a real carrier-state transition;
 - a submitted cart id is still only a binding assertion and never loads another cart;
-- CSRF, cross-cart/customer and stale-state protections remain centralized in the existing orchestrator/controller boundary.
+- CSRF, cross-cart/customer and stale-state protections remain centralized in the existing orchestrator/controller boundary;
+- the carrier URL is emitted only by the same trusted shell/bootstrap path as existing mutation endpoints.
 
 ## Compatibility consequences
 
 - carrier persistence follows the same `CheckoutSession::setDeliveryOption()` contract used by Core `CheckoutDeliveryStep`;
 - PrestaShop 9.0 keeps the legacy `DeliveryOptionsFinder` session path while 9.1+ may use the improved-shipment provider through the existing guarded session adapter;
-- third-party carrier hook content remains rendered by the existing delivery presenter; no individual carrier module is hard-coded into mutation logic.
+- third-party carrier hook content remains rendered by the existing delivery presenter; no individual carrier module is hard-coded into mutation logic;
+- delivery section replacement stays compatible with the existing delegated browser listener, so replaced carrier DOM does not require per-fragment event rebinding.
 
 ## Testing
 
-`CheckoutCarrierSelectionSmokeTest` covers bounded parsing, exact fresh-option validation, idempotency, Core-session persistence, forged-option rejection and virtual-cart rejection. The PHP 8.4 syntax gate and this focused smoke test were executed locally for the implementation. Repository-wide GitHub Actions and installed-runtime contracts remain deferred while the repository's Actions quota is exhausted and must not be treated as passing until they actually run.
+`CheckoutCarrierSelectionSmokeTest` covers bounded parsing, exact fresh-option validation, idempotency, Core-session persistence, forged-option rejection and virtual-cart rejection. Focused bootstrap/JavaScript contract checks cover the carrier URL and stale-safe browser payload/lifecycle, and `node --check` validates the updated client syntax. These focused checks were executed locally on PHP 8.4 / Node.js 22. Repository-wide GitHub Actions and installed-runtime contracts remain deferred while the repository's Actions quota is exhausted and must not be treated as passing until they actually run.
 
 ## Remaining work
 
-The carrier mutation must be connected to the trusted browser bootstrap/stale-safe mutation client before live checkout activation. Representative carrier modules, no-carrier transitions and real HTTP/browser behavior still require the controlled runtime matrix. Identity/address add-edit and final-submit/idempotency/payment handoff remain release blockers.
+Representative carrier modules, no-carrier transitions and real HTTP/browser behavior still require the controlled runtime matrix. Identity/customer flow, address add/edit, final validation/idempotency and native payment handoff remain release blockers. `INTEGRATION_SHELL_READY` remains `false` until those activation requirements and the deferred runtime gates are satisfied.
