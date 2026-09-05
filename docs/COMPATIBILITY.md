@@ -18,7 +18,9 @@ This matrix records what the repository currently implements and what has actual
 
 The module uses `actionCheckoutRender`. Core has already built the native `CheckoutProcess` when this hook executes. `LegacyCheckoutRenderAdapter` reuses the exact Core `CheckoutSession`, prepares the complete OPC shell/replacement process first, and only then assigns the replacement to the reference-bearing hook parameter. If persistence/template/presenter/third-party shell rendering throws, the assignment never happens and Core's original process remains intact.
 
-The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
+The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new `IntegrationFailureIsolationContract.php` additionally injects a test-local selection-store read failure into eager shell preparation and requires the exact original Core process object and exact Core `CheckoutSession` to remain unchanged after the legacy adapter throws.
+
+The 9.0.3 job and this latest failure-isolation contract have not yet executed because GitHub is currently creating no Actions checks for the branch, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
 
 PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/fallback deltas; those newer changes still require a fresh run.
 
@@ -28,6 +30,8 @@ The module uses `actionCheckoutBuildProcess` only when the provider interface an
 
 Before the module returns a valid provider it eagerly prepares the OPC shell. If that preparation fails, the hook returns `null`; Core's `CheckoutProcessProviderResolver` therefore has no valid module provider and `OrderController` builds native checkout. Once a provider has been returned, its later `buildCheckoutProcess()` consumes the prepared shell while still using the exact `CheckoutSession` and translator supplied by Core.
 
+The installed failure-isolation runtime contract checks the two installed-object properties behind that design without weakening the private readiness gate: a controlled persistence read failure must occur during `prepareShell()`, and a provider subsequently constructed with already-prepared HTML must build a real Core process without touching the failing selection store again. The actual module-hook `catch -> null -> Core native process` request path still requires controlled HTTP/browser failure injection.
+
 An enabled native `ps_onepagecheckout` provider blocks this module's takeover. Core fallback remains untouched when no unique custom provider is active.
 
 The repository previously exercised installed-runtime capability/process behavior on PrestaShop 9.2.0-beta.1, including native-provider conflict detection. The latest checkout/finalization/failure-containment deltas still require a fresh runtime/browser run.
@@ -36,9 +40,13 @@ The repository previously exercised installed-runtime capability/process behavio
 
 The current installed module contract requires module version `>=0.4.0`, matching the finalization-reservation schema baseline, and verifies both frontend media registration and the `actionValidateOrderAfter` successful-order cleanup hook. A source smoke contract locks the 9.0/9.1/9.2 workflow-family matrix so future version/test drift is caught before runtime evidence is interpreted.
 
-`CheckoutIntegrationFailureContainmentContractSmokeTest.php` additionally records the source-level native-fallback contract. It does not replace installed failure injection.
+`IntegrationFailureIsolationContract.php` now runs in every configured runtime family and `CheckoutInstalledIntegrationFailureIsolationContractSmokeTest.php` locks that workflow/source boundary. The test contains no production activation override, configuration write, finalization call or order creation.
 
-These source checks are not a substitute for executing the installed matrix.
+The installed Smarty shell contract now also requires the current finalization browser bootstrap: a non-empty server-generated finalization URL targeting `finalize`, exactly one final-submit/status surface and exactly one fresh-cart `data-jzopc-finalization-reserved="0"` marker.
+
+`CheckoutIntegrationFailureContainmentContractSmokeTest.php` continues to record the source-level module-hook circuit-breaker/native-fallback ordering. The installed failure-isolation contract adds real Core process/session object coverage but does not replace request-path failure injection.
+
+These source/installed contracts are not a substitute for actually executing the installed matrix.
 
 ## Themes
 
@@ -106,10 +114,18 @@ Still requiring real browser verification:
 
 When the module is eligible for takeover, integration failure is request-contained: required asset registration failure trips a request-local circuit breaker; shell composition is completed before provider exposure or legacy process assignment; failures fall back to Core native checkout rather than deliberately constructing a partial OPC process. Fallback logging excludes exception messages and request/payment payloads.
 
+The installed failure-isolation test adds a real Core object-level regression gate for legacy reference preservation and 9.2 no-late-render behavior, but it intentionally does not patch the private readiness constant or create an active production test provider. Full request-path fallback remains a controlled HTTP/browser gate.
+
 `INTEGRATION_SHELL_READY` is currently `false`, so production checkout takeover remains intentionally disabled even though the underlying code paths exist. This is the decisive safety gate until the deferred installed-runtime/browser matrix succeeds.
 
-Real failure-containment verification must inject asset, DB/persistence, template and renderer/service failures on both the 9.0/9.1 legacy and 9.2+ provider families and prove Core native `/order` remains functional.
+Real failure-containment verification must still inject asset, DB/persistence, template and renderer/service failures on both the 9.0/9.1 legacy and 9.2+ provider families and prove Core native `/order` remains functional.
+
+## Test-runner reliability
+
+Local and CI smoke execution share `scripts/run-smoke-tests.sh`. The runner forces `zend.assertions=1` and `assert.exception=1`, so older smoke files that use PHP `assert()` remain executable even when the ambient CLI `php.ini` disables assertion code generation. It also fails when no smoke files are found.
+
+The assertion mechanism itself was directly checked with PHP 8.4.23 in the current execution environment: a true assertion returned success and a false assertion raised `AssertionError` with a non-zero process exit. This validates the runner mechanism, not the full repository suite.
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contracts, live concurrent-tab convergence/locked-activation contracts, integration-failure containment contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub is currently creating no workflow checks/statuses for the branch, consistent with the existing Actions availability/quota limitation. The PrestaShop 9.0.3 matrix job, installed integration failure isolation, strengthened Smarty finalization bootstrap, reservation-recovery contracts, live concurrent-tab convergence/locked-activation contracts, integration-failure containment contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
