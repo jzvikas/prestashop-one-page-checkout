@@ -11,6 +11,9 @@ services:
 
   Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector: ~
   Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy: ~
+  Jzvikas\OnePageCheckout\Integration\CheckoutBrowserBootstrapFactory: ~
+  Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar: ~
+  Jzvikas\OnePageCheckout\Integration\CheckoutShellRenderer: ~
 
   Jzvikas\OnePageCheckout\Checkout\CheckoutStateVersioner: ~
   Jzvikas\OnePageCheckout\Checkout\StaleCheckoutStateGuard: ~

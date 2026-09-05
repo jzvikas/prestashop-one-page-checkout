@@ -1,0 +1,37 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Jzvikas\OnePageCheckout\Integration;
+
+use RuntimeException;
+
+final readonly class CheckoutFrontendAssetRegistrar
+{
+    private const MODULE_PATH = 'modules/jzonepagecheckout/';
+
+    public function register(\Context $context): void
+    {
+        $controller = $context->controller ?? null;
+        if (!is_object($controller) || !method_exists($controller, 'registerJavascript')) {
+            throw new RuntimeException('Front controller JavaScript registration is unavailable.');
+        }
+
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-payment',
+            self::MODULE_PATH . 'views/js/payment-controller.js',
+            [
+                'position' => 'bottom',
+                'priority' => 150,
+            ],
+        );
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-mutations',
+            self::MODULE_PATH . 'views/js/checkout-mutation-client.js',
+            [
+                'position' => 'bottom',
+                'priority' => 151,
+            ],
+        );
+    }
+}
