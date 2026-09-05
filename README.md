@@ -28,6 +28,8 @@ The module does not hard-load one checkout API on every PrestaShop 9 release.
 
 Fallback logging contains only an internal stage, exception class and numeric shop/cart identifiers; exception messages and request/payment payloads are deliberately excluded. See ADR-0027.
 
+The installed-runtime matrix now also contains `IntegrationFailureIsolationContract.php`. On 9.0/9.1 it injects a test-local shell persistence-read failure and requires the exact original Core process/session to remain untouched. On 9.2 it requires eager preparation failure to happen before provider exposure and proves that a provider given already-prepared HTML does not re-enter risky shell dependencies later. This test adds no production readiness bypass. See ADR-0028.
+
 ## Server-authoritative state and mutation safety
 
 `PrestaShopCheckoutStateFactory` builds state from the loaded Core cart/context. The browser never supplies authoritative prices, taxes, shipping, totals, payment eligibility or canonical server selections.
@@ -135,17 +137,19 @@ composer install
 composer validate --strict --no-check-publish
 find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
 find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
-for test in tests/Smoke/*Test.php; do php "$test"; done
+bash scripts/run-smoke-tests.sh
 ```
 
-The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families.
+`scripts/run-smoke-tests.sh` is the canonical local/CI smoke runner. It forces `zend.assertions=1` and `assert.exception=1` so older smoke files that still use PHP `assert()` cannot silently become no-ops when the local PHP configuration has assertions disabled. It also fails if no smoke test files are found.
 
-GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
+The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families. The installed shell contract now also requires the finalization URL, final submit/status surface and server-derived inactive reservation marker for a fresh runtime cart.
+
+GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted / no checks are being created for the current branch. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
 
 ## Remaining release blockers
 
 - `INTEGRATION_SHELL_READY` remains `false`;
-- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs, after Actions quota resets and fix every failure;
+- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs and `IntegrationFailureIsolationContract.php`, after Actions runners become available and fix every failure;
 - execute controlled HTTP/browser takeover and native-fallback tests, including injected DB/persistence, template/renderer/service and asset-registration failures on the 9.0/9.1 and 9.2 integration families;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
