@@ -16,7 +16,8 @@ $requiredWorkflowFragments = [
     "ps_ref: '9.0.3'",
     "ps_ref: '9.1.5'",
     "ps_ref: '9.2.0-beta.1'",
-    'Start Front Office HTTP server',
+    '--domain=localhost:8080',
+    'Start fail-closed Front Office HTTP server',
     'php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php',
     'curl --fail --silent --show-error http://localhost:8080/',
     'Execute fail-closed Front Office HTTP contract',
@@ -27,6 +28,10 @@ foreach ($requiredWorkflowFragments as $fragment) {
     if (!str_contains($workflow, $fragment)) {
         throw new RuntimeException('Runtime workflow is missing fail-closed HTTP fragment: ' . $fragment);
     }
+}
+
+if (str_contains($workflow, '--domain=localhost \\')) {
+    throw new RuntimeException('Runtime shop domain must include the loopback HTTP port used by the browser/server contracts.');
 }
 
 $requiredContractFragments = [
