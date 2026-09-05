@@ -57,6 +57,16 @@ assertOrdinaryPaymentSubmitGuardContract(
     'handoff authorization must fail closed after form replacement or option mismatch',
 );
 assertOrdinaryPaymentSubmitGuardContract(
+    str_contains($guard, "if (this.isAuthorized(form, selected.id)) {\n        // Authorization is deliberately one observable submit only.")
+        && str_contains($guard, 'this.clearAuthorization();'),
+    'an observable authorized native submit must consume its authorization immediately',
+);
+assertOrdinaryPaymentSubmitGuardContract(
+    str_contains($guard, 'Promise.resolve().then(() => {')
+        && str_contains($guard, 'this.authorizedForm === form && this.authorizedPaymentOptionId === paymentOptionId'),
+    'handoff authorization must also expire after the current synchronous stack when jQuery emits no native submit event',
+);
+assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, "this.root.addEventListener('jzopc:section:updated', this.onCheckoutStateChanged)"),
     'section replacement must revoke stale ordinary-form authorization',
 );
