@@ -20,9 +20,10 @@ The contract:
 - initializes the real `OrderController` front container and obtains its Core `CheckoutSession`;
 - resolves the module `CheckoutProcessBuilder` from the actual front-office module container;
 - builds the real module Core `CheckoutProcess` and renders its `CheckoutShellStep`;
-- requires the module step and checkout root markers to exist;
-- requires address, payment, agreement and summary section roots to be present;
-- requires the bootstrap cart ID to equal the persisted server cart;
+- requires the module step and checkout root markers to exist exactly once;
+- requires address, payment, agreement and summary section roots exactly once and requires delivery exactly once for a physical cart while forbidding it for a virtual cart;
+- requires the rendered process to preserve the exact supplied Core `CheckoutSession`;
+- requires the bootstrap cart ID to equal the persisted server cart exactly once;
 - requires non-empty CSRF token, state version and payment/agreement mutation URLs;
 - requires those URLs to target the module's concrete mutation controllers;
 - cleans up the runtime cart after the contract.
@@ -35,7 +36,7 @@ The same contract runs on PrestaShop 9.1.5 and 9.2.0-beta.1 in the MariaDB-backe
 - CSRF, state version and endpoint values are asserted for presence/targeting but never printed by the contract.
 - The test exercises the explicit Core/module raw-HTML trust boundaries through real Smarty rendering without adding a new browser-controlled raw HTML path.
 - Native `ps_onepagecheckout` remains installed in the 9.2 conflict fixture; direct rendering is a test-only capability check and does not change the shared activation policy.
-- An empty runtime cart is sufficient for this render boundary. Product/carrier/payment behavior with a realistic non-empty checkout remains part of the subsequent HTTP/browser integration matrix.
+- The empty runtime cart still exercises the physical/virtual delivery rendering decision, but realistic products, carrier eligibility, carrier-module content and payment behavior remain part of the subsequent HTTP/browser integration matrix.
 
 ## Activation rule
 
