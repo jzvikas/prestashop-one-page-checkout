@@ -13,6 +13,7 @@ final readonly class CheckoutShellRenderer
 {
     /** @var list<CheckoutSection> */
     private const RENDERABLE_SECTIONS = [
+        CheckoutSection::Identity,
         CheckoutSection::Addresses,
         CheckoutSection::Delivery,
         CheckoutSection::Payment,
