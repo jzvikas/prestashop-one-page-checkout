@@ -114,9 +114,7 @@ if ((int) ($cart->id ?? 0) > 0 && !$cart->delete()) {
 }
 
 $db = Db::getInstance();
-$selectionTable = _DB_PREFIX_ . 'jzopc_checkout_selection';
-$reservationTable = _DB_PREFIX_ . 'jzopc_checkout_finalization';
-foreach ([$selectionTable, $reservationTable] as $table) {
+foreach (['jzopc_checkout_selection', 'jzopc_checkout_finalization'] as $table) {
     $where = sprintf('id_shop = %d AND id_cart = %d', $shopId, $cartId);
     if (!$db->delete($table, $where, 0, false)) {
         $fail(sprintf('Unable to clear module runtime state from %s.', $table));
