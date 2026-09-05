@@ -14,8 +14,8 @@ foreach ([$paymentController, $agreementController, $abstractMutation, $paymentM
     assert(is_string($source));
 }
 
-assert(str_contains($abstractMutation, "isCustomCheckoutActive"));
-assert(strpos($abstractMutation, 'isCustomCheckoutActive') < strpos($abstractMutation, 'REQUEST_METHOD'));
+assert(str_contains($abstractMutation, 'isCustomCheckoutActive'));
+assert(strpos($abstractMutation, 'REQUEST_METHOD') < strpos($abstractMutation, 'isCustomCheckoutActive'));
 assert(str_contains($paymentController, 'Tools::getAllValues()'));
 assert(str_contains($paymentController, 'CheckoutPaymentSelectionMutation::class'));
 assert(str_contains($agreementController, 'Tools::getAllValues()'));
