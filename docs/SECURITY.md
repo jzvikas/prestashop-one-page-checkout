@@ -44,7 +44,11 @@ The state factory has no browser monetary inputs. Cart/totals fingerprints are d
 
 ### Rendering / XSS boundary
 
-Module-owned address, delivery and summary markup escapes ordinary presented strings according to HTML context. The delivery template intentionally renders only Core/module hook HTML (`displayCarrierExtraContent`, `displayBeforeCarrier`, `displayAfterCarrier`) without escaping; these values originate from PrestaShop's trusted hook execution boundary and are not browser-submitted HTML. New renderers must keep raw HTML boundaries explicit and must not widen them to request data or arbitrary stored customer input.
+Module-owned address, delivery, payment and summary markup escapes ordinary presented strings according to HTML context. The delivery template intentionally renders only Core/module hook HTML (`displayCarrierExtraContent`, `displayBeforeCarrier`, `displayAfterCarrier`) without escaping. The payment template similarly treats `displayPaymentTop`, `PaymentOption::additionalInformation` and module-provided payment forms as explicit trusted payment-module HTML boundaries because those fields are defined by PrestaShop as module HTML content.
+
+Payment option IDs, module names, customer-visible call-to-action text, logo/action attributes and generated hidden input names/values are escaped by module-owned markup. None of the trusted raw-HTML boundaries may be populated from browser request data. Future renderers must keep raw hook/module HTML boundaries explicit and must not widen them to arbitrary stored customer input.
+
+Payment rendering does not authorize a browser payment choice. `PrestaShopCheckoutPaymentOptionsPresenter` discovers the current server-valid options through Core `PaymentOptionsFinder::present()`, but no payment-selection endpoint exists yet. Any future payment mutation must compare the requested option identifier/module against a freshly generated Core option set inside the stale-state guard and cart mutex before persisting or acting on that choice.
 
 ## Threat status
 
@@ -55,13 +59,13 @@ Module-owned address, delivery and summary markup escapes ordinary presented str
 | Customer mismatch | Generic guard implemented | Add resource ownership checks per handler |
 | Address IDOR | Selection/parser guard implemented | Concrete address endpoint must use orchestrator + selection service |
 | Forged carrier | Rendering uses current Core options; mutation authorization not implemented yet | Validate the submitted delivery-option key against the freshly generated server delivery options before selection |
-| Forged payment option | Not implemented yet | Validate against current `PaymentOptionsFinder` output |
+| Forged payment option | Rendering is Core-discovered; mutation authorization not implemented yet | Validate requested payment option/module against a fresh `PaymentOptionsFinder` result inside the guarded mutation critical section |
 | Stale browser state | Guard implemented | Return conflict/recovery response and prevent stale mutation |
 | Concurrent same-state writes | Per-cart mutex implemented | All mutation execution must occur inside the mutex |
-| XSS | Module-owned rendering escapes normal values; carrier hook HTML is an explicit trusted boundary | Keep raw hook/module HTML isolated; never render browser-controlled HTML with `nofilter` |
+| XSS | Module-owned rendering escapes normal values; carrier/payment module HTML is isolated to explicit trusted boundaries | Keep raw hook/module HTML isolated; never render browser-controlled HTML with `nofilter` |
 | SQL/injection | Parameterized advisory-lock SQL only | Parameterize any future SQL; justify direct SQL |
 | Duplicate order submission | Not implemented yet | Final-submit idempotency/order guard is a release blocker |
-| Payment tampering | Not implemented yet | Recompute server state and use PrestaShop payment option/order validation flow |
+| Payment tampering | Server-side payment discovery implemented for rendering; selection/submission validation not implemented | Recompute server state, revalidate current payment eligibility and use PrestaShop payment option/order validation flow |
 
 ## Concurrency ordering rule
 
