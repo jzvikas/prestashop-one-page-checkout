@@ -53,6 +53,30 @@ final class JzOnePageCheckout extends Module
         return true;
     }
 
+    public function getContent()
+    {
+        $pageClass = \Jzvikas\OnePageCheckout\BackOffice\CheckoutActivationConfigurationPage::class;
+        if (!class_exists($pageClass)) {
+            return $this->displayError($this->trans(
+                'The One Page Checkout configuration service is unavailable. Reinstall the complete module package.',
+                [],
+                'Modules.Jzonepagecheckout.Admin'
+            ));
+        }
+
+        $page = new \Jzvikas\OnePageCheckout\BackOffice\CheckoutActivationConfigurationPage(
+            module: $this,
+            capabilityDetector: new \Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector(
+                new \Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe()
+            ),
+            activationPolicy: new \Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy(),
+            configurationKey: self::CONFIG_CHECKOUT_ENABLED,
+            integrationShellReady: self::INTEGRATION_SHELL_READY,
+        );
+
+        return $page->render();
+    }
+
     public function install()
     {
         if (!$this->integrationClassesAvailable()) {
