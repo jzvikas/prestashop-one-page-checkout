@@ -70,6 +70,23 @@ final readonly class CheckoutIdentityMutation
                     );
                 }
 
+                // Context::updateCustomer() is allowed by Core to restore a customer's previous
+                // non-ordered cart when PS_CART_FOLLOWING applies. The orchestrator currently owns
+                // the lock for the cart that started this request, not for a newly restored cart.
+                // Do not render or persist module selection state under an unlocked replacement cart.
+                // The front controller recognizes this completed Core transition and performs a
+                // full order-page reload, which establishes a fresh cart/token/state binding.
+                if ((int) ($context->cart->id ?? 0) !== $state->cartId) {
+                    return CheckoutMutationOutcome::failure(
+                        $currentSelections,
+                        [new CheckoutError(
+                            'identity_cart_reloaded',
+                            $translate('Your saved cart was restored. Checkout will reload safely.'),
+                            'identity',
+                        )],
+                    );
+                }
+
                 // Customer creation/login can change groups, cart rules, prices, addresses and
                 // eligibility. Never carry payment or agreement authority across that transition.
                 $nextSelections = new CheckoutServerSelections();
