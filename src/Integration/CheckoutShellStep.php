@@ -13,7 +13,7 @@ final class CheckoutShellStep extends \AbstractCheckoutStep
     public function __construct(
         \Context $context,
         TranslatorInterface $translator,
-        private readonly CheckoutShellRenderer $shellRenderer,
+        private readonly string $shellHtml,
     ) {
         parent::__construct($context, $translator);
     }
@@ -37,7 +37,7 @@ final class CheckoutShellStep extends \AbstractCheckoutStep
         return $this->renderTemplate(
             $this->getTemplate(),
             $extraParams,
-            ['jzopc_shell_html' => $this->shellRenderer->render($this->context)],
+            ['jzopc_shell_html' => $this->shellHtml],
         );
     }
 }

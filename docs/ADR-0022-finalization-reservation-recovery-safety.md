@@ -10,41 +10,38 @@ The finalization reservation is the cross-tab/process barrier between a successf
 
 A second recovery concern exists around explicit browser release. Release is useful before native payment handoff has begun, but it must never remove the barrier after Core has already created an order. If Core order state cannot be read reliably, deleting the reservation is less safe than leaving it to expire.
 
-The browser boundary is stricter still: a third-party payment handler can start network/payment work and then throw synchronously. Once module-owned native activation has begun, the OPC adapter cannot prove that no side effect occurred. Treating such a throw as a normal local failure and automatically releasing the reservation could reopen a second payment handoff while the first one is already progressing.
-
 ## Decision
 
-1. The default finalization reservation TTL is 900 seconds (15 minutes).
-2. Constructor customization remains bounded to 60..3600 seconds so configuration/code changes cannot accidentally create effectively unbounded reservations or a dangerously tiny duplicate-protection window.
-3. Expiry remains based on database/server time (`UNIX_TIMESTAMP()`), avoiding browser-clock authority.
-4. Explicit release remains scoped to the current shop/cart/customer plus the exact cryptographically random attempt ID.
-5. Before an attempt-scoped release, the store asks Core `Order::getIdByCartId()` whether an order already exists for the cart. If an order exists, the reservation is preserved for normal successful-order cleanup.
-6. If the Core order lookup throws or cannot be trusted, release fails closed and preserves the reservation. Its bounded TTL remains the recovery path.
-7. Browser adapters may automatically release only while native module-owned activation is known not to have started. This includes preflight/network/DOM-validation failures and a payment form/control that disappears before invocation.
-8. Immediately before invoking an ordinary payment form submit lifecycle or replaying a binary module click/form submit, the adapter crosses an explicit handoff-started boundary.
-9. A synchronous third-party handler failure after that boundary does **not** call the release endpoint. The reservation remains active, the checkout is marked `data-jzopc-handoff-uncertain`, and all checkout controls are frozen so the browser cannot immediately submit a second payment attempt.
-10. Recovery from an uncertain started handoff is owned by successful Core order lifecycle cleanup or the bounded reservation TTL. The OPC module does not guess that a thrown handler performed no side effects.
-11. Expired-row cleanup remains bounded to at most 100 rows per purge operation.
-12. No schema, hook or configuration migration is introduced, so the module version remains `0.4.0`.
+1. The effective finalization reservation TTL is 900 seconds (15 minutes).
+2. Both the store constructor default and the installed service-container wiring use 900 seconds. The DI configuration must not retain a shorter legacy override that silently defeats the store default.
+3. Constructor customization remains bounded to 60..3600 seconds so configuration/code changes cannot accidentally create effectively unbounded reservations or a dangerously tiny duplicate-protection window.
+4. Expiry remains based on database/server time (`UNIX_TIMESTAMP()`), avoiding browser-clock authority.
+5. Explicit release remains scoped to the current shop/cart/customer plus the exact cryptographically random attempt ID.
+6. Before an attempt-scoped release, the store asks Core `Order::getIdByCartId()` whether an order already exists for the cart. If an order exists, the reservation is preserved for normal successful-order cleanup.
+7. If the Core order lookup throws or cannot be trusted, release fails closed and preserves the reservation. Its bounded TTL remains the recovery path.
+8. Expired-row cleanup remains bounded to at most 100 rows per purge operation.
+9. No schema, hook or configuration migration is introduced, so the module version remains `0.4.0`.
 
 ## Security rationale
 
-The downside of a longer reservation or a fail-closed uncertain-handoff state is a temporary retry delay after a hard browser/payment failure. The downside of releasing too early is materially worse: a second tab or retry can enter the native payment path while the first attempt may still be progressing out of process.
+The downside of a longer reservation is a temporary retry delay after a hard browser/payment crash. The downside of a reservation that expires too soon is materially worse: a second tab or retry can enter the native payment path while the first attempt may still be progressing out of process.
 
-Likewise, an explicit release after Core order creation, an unknown Core order state, or ambiguous post-activation JavaScript failure would weaken the duplicate-handoff barrier exactly when checkout state is most sensitive. Failing closed prefers bounded temporary unavailability over duplicate order/payment risk.
+Likewise, an explicit release after Core order creation would weaken the duplicate-handoff barrier exactly when checkout state is most sensitive. Failing closed on unknown order state prefers bounded temporary unavailability over duplicate order/payment risk.
 
-The browser lock is defense in depth, not the security authority. Cross-tab/process protection remains the DB-backed reservation and Core order state. A page reload cannot remove that server-side barrier.
+A DI override is part of the runtime security boundary. Changing only a constructor default is insufficient if `services.yml` still injects a legacy value. The recovery contract therefore asserts both source default and installed container wiring.
 
-## Browser boundary after this change
+## Browser ambiguity follow-up
 
-The ordinary and binary adapters now encode the conservative source rule instead of leaving it only as a future browser requirement. Pre-handoff failures can release their exact attempt; once native `submit`/`click` invocation begins, a synchronous throw preserves the reservation and freezes the checkout.
+The store layer cannot prove whether a third-party JavaScript handler that throws has already initiated network/payment work. ADR-0023 applies the conservative rule in both browser adapters: automatic attempt release remains available only while native module-owned activation definitely has not started. Once an ordinary submit lifecycle, binary click or binary form replay has begun, a thrown exception preserves the reservation for successful Core cleanup or bounded TTL recovery.
 
-Controlled browser verification is still mandatory because source inspection cannot prove the behavior of representative third-party handlers, redirects, embedded SDKs, popup flows or asynchronous payment initialization. The runtime matrix must verify that a partially acting handler cannot reopen a second handoff and that successful Core cleanup or TTL expiry restores the expected recovery path.
+The browser also remains visibly fail-closed after ambiguous activation through the dedicated ambiguity guard, so the UI does not immediately advertise a retry while the server reservation is intentionally active.
+
+This source hardening does not replace the required controlled browser verification of thrown/partial native handlers.
 
 ## Verification
 
-`CheckoutFinalizationReservationRecoveryContractSmokeTest.php` records the TTL, bounded-release and Core-order-aware fail-closed store contract. `CheckoutFinalSubmitBrowserContractSmokeTest.php` now additionally records the browser source contract that automatic release stops at the native-activation boundary and that uncertain ordinary/binary handoffs remain frozen behind the reservation.
+`CheckoutFinalizationReservationRecoveryContractSmokeTest.php` records the effective TTL at both the store and service-container layers, bounded-release and Core-order-aware fail-closed source contract. `CheckoutNativePaymentHandoffAmbiguityContractSmokeTest.php` separately locks the browser-side pre-activation versus post-activation release boundary introduced by ADR-0023.
 
-These tests were updated but not executed in this change because GitHub Actions quota remains exhausted and the connected environment has no local installed PrestaShop/browser runtime. They must not be treated as passing evidence until actually executed.
+These latest contracts have not been executed because GitHub Actions quota remains exhausted and the connected environment has no local installed PrestaShop/browser runtime.
 
-Real runtime/browser verification must still prove concurrent tabs, slow/abandoned payment initialization, successful lifecycle cleanup, explicit pre-handoff release, thrown/partial third-party handlers and retry after TTL expiry before the readiness gate can be reconsidered.
+Real runtime/browser verification must still prove concurrent tabs, slow/abandoned payment initialization, successful lifecycle cleanup, explicit pre-handoff release, thrown/partial native handlers and retry after TTL expiry before the readiness gate can be reconsidered.

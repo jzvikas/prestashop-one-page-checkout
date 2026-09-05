@@ -5,6 +5,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 $client = file_get_contents($root . '/views/js/final-submit-controller.js');
 $binary = file_get_contents($root . '/views/js/binary-payment-controller.js');
+$ambiguityGuard = file_get_contents($root . '/views/js/payment-handoff-ambiguity-guard.js');
 $shell = file_get_contents($root . '/views/templates/front/checkout-shell.tpl');
 $payment = file_get_contents($root . '/views/templates/front/sections/payment.tpl');
 $assets = file_get_contents($root . '/src/Integration/CheckoutFrontendAssetRegistrar.php');
@@ -18,13 +19,14 @@ function assertFinalSubmitBrowserContract(bool $condition, string $message): voi
     }
 }
 
-foreach ([$client, $binary, $shell, $payment, $assets, $module] as $source) {
-    assertFinalSubmitBrowserContract(is_string($source), 'final submit browser contract source must be readable');
+foreach ([$client, $binary, $ambiguityGuard, $shell, $payment, $assets, $module] as $source) {
+    assertFinalSubmitBrowserContract(is_string($source) && $source !== '', 'final submit browser contract source must be readable');
 }
 
 assertFinalSubmitBrowserContract(str_contains($shell, 'data-jzopc-finalization-url'), 'finalization URL must be trusted server bootstrap data');
 assertFinalSubmitBrowserContract(str_contains($shell, 'data-jzopc-final-submit'), 'checkout must expose one explicit non-binary final order action');
 assertFinalSubmitBrowserContract(str_contains($shell, 'aria-live="polite"'), 'final submit status must be announced accessibly');
+assertFinalSubmitBrowserContract(str_contains($shell, 'data-jzopc-final-message="handoff-ambiguous"'), 'ambiguous native handoff must have translated fail-closed messaging');
 assertFinalSubmitBrowserContract(str_contains($client, 'cryptoObject.getRandomValues(bytes)'), 'submission attempt ID must use browser cryptographic randomness');
 assertFinalSubmitBrowserContract(str_contains($client, "body.set('submissionAttempt', attemptId)"), 'final preflight must bind the idempotency attempt');
 assertFinalSubmitBrowserContract(str_contains($client, "body.set('finalizationAction', action)"), 'finalization requests must distinguish begin from recovery release');
@@ -42,16 +44,20 @@ assertFinalSubmitBrowserContract(str_contains($client, "this.root.toggleAttribut
 assertFinalSubmitBrowserContract(str_contains($client, 'control.disabled = true'), 'checkout controls must be frozen while the reserved handoff is in progress');
 assertFinalSubmitBrowserContract(str_contains($client, 'paymentForm.contains(control)'), 'native payment form inputs must not be disabled before handoff');
 assertFinalSubmitBrowserContract(str_contains($client, "data-jzopc-final-message"), 'user-facing client messages must be read from translated server markup');
-assertFinalSubmitBrowserContract(str_contains($client, "this.root.setAttribute('data-jzopc-handoff-uncertain', 'true')"), 'uncertain native handoff must be marked explicitly');
-assertFinalSubmitBrowserContract(str_contains($client, 'this.freezeAllControls()'), 'uncertain native handoff must freeze every checkout control');
-assertFinalSubmitBrowserContract(str_contains($client, 'this.failClosedHandoff(this.message(\'handoff-failed\'))'), 'native handler throw after activation must fail closed instead of reopening checkout');
+assertFinalSubmitBrowserContract(str_contains($client, "jzopc:checkout:payment-handoff-ambiguous"), 'ordinary native handler throw must publish the shared ambiguous-handoff lifecycle');
 
 $ordinaryHandoffStart = strpos($client, 'async handoffToNativePayment(attemptId)');
 $ordinaryHandoffEnd = strpos($client, 'findPaymentForm(optionId)', $ordinaryHandoffStart === false ? 0 : $ordinaryHandoffStart);
 assertFinalSubmitBrowserContract($ordinaryHandoffStart !== false && $ordinaryHandoffEnd !== false, 'ordinary native handoff method must remain discoverable');
 $ordinaryHandoff = substr($client, $ordinaryHandoffStart, $ordinaryHandoffEnd - $ordinaryHandoffStart);
-assertFinalSubmitBrowserContract(!str_contains($ordinaryHandoff, "catch (error) {\n        await this.bestEffortRelease(attemptId)"), 'ordinary native handler throw must not automatically release an already-started reservation');
-assertFinalSubmitBrowserContract(str_contains($ordinaryHandoff, 'this.failClosedHandoff'), 'ordinary native handler throw must preserve the reservation behind fail-closed UI state');
+assertFinalSubmitBrowserContract(
+    !str_contains($ordinaryHandoff, "catch (error) {\n        await this.bestEffortRelease(attemptId)"),
+    'ordinary native handler throw must not automatically release an already-started reservation',
+);
+assertFinalSubmitBrowserContract(
+    str_contains($ordinaryHandoff, "this.dispatch('jzopc:checkout:payment-handoff-ambiguous'"),
+    'ordinary post-activation exception must defer fail-closed locking to the shared ambiguity guard',
+);
 
 assertFinalSubmitBrowserContract(str_contains($binary, "this.root.addEventListener('click', this.onCaptureClick, true)"), 'binary activation must be intercepted in capture phase before module click handlers');
 assertFinalSubmitBrowserContract(str_contains($binary, "this.root.addEventListener('submit', this.onCaptureSubmit, true)"), 'binary self-submitting forms must be intercepted in capture phase');
@@ -66,14 +72,31 @@ assertFinalSubmitBrowserContract(str_contains($binary, "form.requestSubmit()"), 
 assertFinalSubmitBrowserContract(str_contains($binary, "'.js-payment-' + CSS.escape(moduleName)"), 'binary control discovery must follow Core js-payment-{module} container semantics');
 assertFinalSubmitBrowserContract(str_contains($binary, "finalSubmit.hidden = selected instanceof HTMLInputElement"), 'generic final button must be hidden while a binary payment option owns final activation');
 assertFinalSubmitBrowserContract(str_contains($binary, 'this.managedDisabledControls.set(control, control.disabled)'), 'agreement gating must preserve pre-existing payment-module disabled state');
-assertFinalSubmitBrowserContract(str_contains($binary, 'let handoffStarted = false;'), 'binary controller must track whether module-owned activation has begun');
-assertFinalSubmitBrowserContract(substr_count($binary, 'handoffStarted = true;') >= 2, 'binary click and submit replay must mark handoff started before invoking module code');
-assertFinalSubmitBrowserContract(str_contains($binary, 'if (handoffStarted) {'), 'binary throw recovery must distinguish post-activation uncertainty from safe pre-handoff failure');
-assertFinalSubmitBrowserContract(str_contains($binary, 'this.failClosedHandoff(this.message(\'handoff-failed\'))'), 'binary handler throw after activation must preserve reservation and fail closed');
-assertFinalSubmitBrowserContract(str_contains($binary, "this.root.setAttribute('data-jzopc-handoff-uncertain', 'true')"), 'binary uncertain handoff must be marked explicitly');
-assertFinalSubmitBrowserContract(str_contains($binary, 'this.freezeAllControls()'), 'binary uncertain handoff must freeze every checkout control');
+assertFinalSubmitBrowserContract(str_contains($binary, 'let nativeActivationStarted = false;'), 'binary controller must track whether module-owned native activation has begun');
+assertFinalSubmitBrowserContract(substr_count($binary, 'nativeActivationStarted = true;') >= 2, 'binary click and submit replay must mark native activation started before invoking module code');
+assertFinalSubmitBrowserContract(str_contains($binary, 'if (!nativeActivationStarted) {'), 'binary throw recovery must distinguish safe pre-activation failure from post-activation uncertainty');
+assertFinalSubmitBrowserContract(str_contains($binary, "jzopc:checkout:payment-handoff-ambiguous"), 'binary post-activation throw must publish the shared ambiguous-handoff lifecycle');
 assertFinalSubmitBrowserContract(!str_contains($binary, 'validateOrder('), 'binary browser adapter must never create the PrestaShop order itself');
 assertFinalSubmitBrowserContract(str_contains($assets, 'views/js/binary-payment-controller.js'), 'binary payment interception must be registered in the checkout asset set');
+assertFinalSubmitBrowserContract(str_contains($assets, 'views/js/payment-handoff-ambiguity-guard.js'), 'shared ambiguity guard must be registered in the checkout asset set');
+
+assertFinalSubmitBrowserContract(
+    str_contains($ambiguityGuard, "document.addEventListener('jzopc:checkout:payment-handoff-ambiguous'")
+        && str_contains($ambiguityGuard, 'scheduleAmbiguousLock(root);'),
+    'shared guard must consume ambiguous native-handoff events and schedule fail-closed locking after controller cleanup',
+);
+assertFinalSubmitBrowserContract(
+    str_contains($ambiguityGuard, 'Promise.resolve().then(function ()')
+        && str_contains($ambiguityGuard, "root.setAttribute('data-jzopc-payment-handoff-ambiguous', 'true')")
+        && str_contains($ambiguityGuard, "root.setAttribute('aria-busy', 'true')")
+        && str_contains($ambiguityGuard, 'control.disabled = true'),
+    'ambiguous handoff lock must run after controller cleanup and freeze the checkout locally',
+);
+assertFinalSubmitBrowserContract(
+    str_contains($ambiguityGuard, "document.addEventListener('click', suppressLockedActivation, true)")
+        && str_contains($ambiguityGuard, "document.addEventListener('submit', suppressLockedActivation, true)"),
+    'locked checkout must suppress link/form payment activation before third-party handlers',
+);
 
 assertFinalSubmitBrowserContract(str_contains($payment, 'js-payment-option-form'), 'payment section must preserve native-form containers used by handoff');
 assertFinalSubmitBrowserContract(str_contains($payment, 'data-module-name='), 'payment option must preserve Core module-name identity for binary container resolution');

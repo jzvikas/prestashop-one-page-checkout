@@ -49,5 +49,13 @@ final readonly class CheckoutFrontendAssetRegistrar
                 'priority' => 153,
             ],
         );
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-payment-handoff-ambiguity',
+            self::MODULE_PATH . 'views/js/payment-handoff-ambiguity-guard.js',
+            [
+                'position' => 'bottom',
+                'priority' => 154,
+            ],
+        );
     }
 }

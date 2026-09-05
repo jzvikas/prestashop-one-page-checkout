@@ -32,7 +32,11 @@ final readonly class LegacyCheckoutRenderAdapter
             return false;
         }
 
-        $params['checkoutProcess'] = $this->processBuilder->build($context, $session, $translator);
+        // Build the complete replacement, including shell rendering, before touching Core's
+        // reference. If any module/template/DB dependency throws, the original Core process
+        // remains intact and the module hook can fail back to native checkout safely.
+        $replacementProcess = $this->processBuilder->build($context, $session, $translator);
+        $params['checkoutProcess'] = $replacementProcess;
 
         return true;
     }

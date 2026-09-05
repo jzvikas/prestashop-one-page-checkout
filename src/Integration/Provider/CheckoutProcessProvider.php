@@ -16,6 +16,7 @@ final readonly class CheckoutProcessProvider implements CheckoutProcessProviderI
     public function __construct(
         private \Context $context,
         private CheckoutProcessBuilder $processBuilder,
+        private string $preparedShellHtml,
     ) {
     }
 
@@ -28,6 +29,11 @@ final readonly class CheckoutProcessProvider implements CheckoutProcessProviderI
         \CheckoutSession $session,
         TranslatorComponent $translator,
     ): \CheckoutProcess {
-        return $this->processBuilder->build($this->context, $session, $translator);
+        return $this->processBuilder->buildPrepared(
+            $this->context,
+            $session,
+            $translator,
+            $this->preparedShellHtml,
+        );
     }
 }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface;
+use Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder;
 
 $shopRoot = $argv[1] ?? '';
 $expectedFamily = $argv[2] ?? '';
@@ -51,19 +52,103 @@ if (!$cart->add()) {
 }
 
 $context->cart = $cart;
+$context->customer = new Customer();
 $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
-// Deliberately remove the OrderController capability. Module mutation controllers do not expose
-// getCheckoutSession(), so the provider must construct the same Core session shape itself.
-$context->controller = new stdClass();
+// Module::get() resolves front-scope module services through the active front controller's
+// container. Bootstrap exactly that container boundary first, mirroring a normal FO request while
+// avoiding full Controller::init() side effects. Once the public entry graph has been resolved we
+// deliberately replace the controller with one that has no getCheckoutSession() capability so the
+// private provider must exercise its module-front fallback branch.
+$frontBootstrapController = new class extends OrderController {
+    public function initializeRuntimeContainer(): void
+    {
+        if ($this->getContainer() === null) {
+            $this->container = $this->buildContainer();
+        }
+    }
+};
+$frontBootstrapController->initializeRuntimeContainer();
+$context->controller = $frontBootstrapController;
 
-$provider = $module->get(CheckoutSessionProviderInterface::class);
-if (!$provider instanceof CheckoutSessionProviderInterface) {
-    $fail('CheckoutSessionProviderInterface service is unavailable in the module front container.');
+$builder = $module->get(CheckoutProcessBuilder::class);
+if (!$builder instanceof CheckoutProcessBuilder) {
+    $fail('CheckoutProcessBuilder public front entry service is unavailable after front-container bootstrap.');
 }
 
+/**
+ * Walk only the module-owned DI object graph rooted at a public entry service. This verifies the
+ * real front container compiled the private session-provider dependency without making that
+ * dependency public merely for a test.
+ *
+ * @param array<int,true> $seen
+ * @param array<int,CheckoutSessionProviderInterface> $providers
+ */
+$collectProviders = static function (mixed $value, array &$seen, array &$providers, int $depth = 0) use (&$collectProviders): void {
+    if ($depth > 12) {
+        return;
+    }
+
+    if (is_array($value)) {
+        foreach ($value as $item) {
+            $collectProviders($item, $seen, $providers, $depth + 1);
+        }
+
+        return;
+    }
+
+    if (!is_object($value)) {
+        return;
+    }
+
+    $objectId = spl_object_id($value);
+    if (isset($seen[$objectId])) {
+        return;
+    }
+    $seen[$objectId] = true;
+
+    if ($value instanceof CheckoutSessionProviderInterface) {
+        $providers[$objectId] = $value;
+
+        return;
+    }
+
+    $className = get_class($value);
+    if (!str_starts_with($className, 'Jzvikas\\OnePageCheckout\\')) {
+        return;
+    }
+
+    $reflection = new ReflectionObject($value);
+    foreach ($reflection->getProperties() as $property) {
+        if ($property->isStatic() || !$property->isInitialized($value)) {
+            continue;
+        }
+
+        $collectProviders($property->getValue($value), $seen, $providers, $depth + 1);
+    }
+};
+
+$seen = [];
+$providers = [];
+$collectProviders($builder, $seen, $providers);
+if (count($providers) !== 1) {
+    $fail(sprintf(
+        'Public checkout entry graph must contain exactly one private CheckoutSessionProviderInterface dependency; found %d.',
+        count($providers),
+    ));
+}
+
+$provider = reset($providers);
+if (!$provider instanceof CheckoutSessionProviderInterface) {
+    $fail('CheckoutSessionProviderInterface dependency could not be resolved from the public entry graph.');
+}
+
+// Deliberately remove OrderController::getCheckoutSession() after DI resolution. Real module front
+// controllers expose no such method, so this request context must use the provider's Core-session
+// construction fallback rather than borrowing the bootstrap controller's existing session.
+$context->controller = new stdClass();
 $session = $provider->get($context);
 if (!$session instanceof CheckoutSession) {
     $fail('Module-front fallback did not create a Core CheckoutSession.');
@@ -87,7 +172,8 @@ if (!$cart->delete()) {
 }
 
 fwrite(STDOUT, sprintf(
-    "Module-front CheckoutSession contract OK: PrestaShop %s, cart=%d\n",
+    "Module-front CheckoutSession contract OK: PrestaShop %s, cart=%d, provider=%s\n",
     _PS_VERSION_,
     $cartId,
+    get_class($provider),
 ));

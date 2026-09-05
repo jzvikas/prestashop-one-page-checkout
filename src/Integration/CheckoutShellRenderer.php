@@ -6,6 +6,7 @@ namespace Jzvikas\OnePageCheckout\Integration;
 
 use Jzvikas\OnePageCheckout\Checkout\CheckoutSection;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelectionsStoreInterface;
+use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface;
 
@@ -23,6 +24,7 @@ final readonly class CheckoutShellRenderer
 
     public function __construct(
         private CheckoutServerSelectionsStoreInterface $selectionsStore,
+        private CheckoutFinalizationReservationStoreInterface $finalizationReservationStore,
         private CheckoutBrowserBootstrapFactory $bootstrapFactory,
         private CheckoutSectionRendererRegistry $sectionRendererRegistry,
         private CheckoutTemplateRendererInterface $templateRenderer,
@@ -45,6 +47,7 @@ final readonly class CheckoutShellRenderer
             [
                 'jzopc_bootstrap' => $bootstrap->toTemplateVariables(),
                 'jzopc_sections' => $sections,
+                'jzopc_finalization_reserved' => $this->finalizationReservationStore->isActive($context),
             ],
         );
     }

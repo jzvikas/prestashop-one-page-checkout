@@ -11,6 +11,7 @@
   data-jzopc-payment-url="{$jzopc_bootstrap.paymentUrl|escape:'htmlall':'UTF-8'}"
   data-jzopc-agreements-url="{$jzopc_bootstrap.agreementsUrl|escape:'htmlall':'UTF-8'}"
   data-jzopc-finalization-url="{$jzopc_bootstrap.finalizationUrl|escape:'htmlall':'UTF-8'}"
+  data-jzopc-finalization-reserved="{if $jzopc_finalization_reserved}1{else}0{/if}"
 >
   {foreach $jzopc_sections as $jzopc_section_html}
     {$jzopc_section_html nofilter}
@@ -37,6 +38,7 @@
       <span data-jzopc-final-message="submission-failed">{l s='Order submission failed. Please try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="review-checkout">{l s='The order could not be submitted. Please review your checkout and try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="handoff-failed">{l s='The payment method could not be opened. Please try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
+      <span data-jzopc-final-message="handoff-ambiguous">{l s='Payment processing may already have started. Do not submit the order again. Check the payment result or refresh this page later.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="payment-changed">{l s='The selected payment method is no longer available. Please refresh the checkout.' d='Modules.Jzonepagecheckout.Shop'}</span>
     </div>
   </div>

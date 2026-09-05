@@ -11,7 +11,12 @@ assert(str_contains($source, 'private const ABANDONED_PURGE_CHANCE_DENOMINATOR =
 assert(str_contains($source, '$this->maybePurgeAbandoned();'));
 assert(str_contains($source, "WHERE date_upd < DATE_SUB(NOW(), INTERVAL %d DAY) LIMIT %d"));
 assert(str_contains($source, 'mt_rand(1, self::ABANDONED_PURGE_CHANCE_DENOMINATOR)'));
-assert(strpos($source, '$this->maybePurgeAbandoned();') < strpos($source, "'INSERT INTO `%1$s`"));
+
+$purgePosition = strpos($source, '$this->maybePurgeAbandoned();');
+$insertPosition = strpos($source, '\'INSERT INTO `%1$s`');
+assert($purgePosition !== false);
+assert($insertPosition !== false);
+assert($purgePosition < $insertPosition);
 
 // GC must remain transient-state-only. It must not inspect/delete Core carts or orders and must
 // not turn old browser selections into authority.

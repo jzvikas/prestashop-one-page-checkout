@@ -215,8 +215,8 @@
       this.setBusyState(true, binaryContainer);
       this.showStatus('');
       this.dispatch('jzopc:checkout:binary-preflight-started', { paymentOptionId: selected.id });
-      let handoffStarted = false;
 
+      let nativeActivationStarted = false;
       try {
         const result = await this.request(attemptId, false);
         if (!result) {
@@ -239,6 +239,10 @@
             this.fail(this.message('review-checkout'));
             return;
           }
+          this.dispatch('jzopc:checkout:validation-failed', {
+            errors: payload.errors,
+            stateVersion: this.root.dataset.jzopcStateVersion || '',
+          });
           this.fail(this.firstErrorMessage(payload.errors) || this.message('review-checkout'));
           return;
         }
@@ -266,10 +270,10 @@
         this.replaying = true;
         try {
           if (activation.type === 'click' && activation.target instanceof HTMLElement) {
-            handoffStarted = true;
+            nativeActivationStarted = true;
             activation.target.click();
           } else if (activation.type === 'submit' && activation.target instanceof HTMLFormElement) {
-            handoffStarted = true;
+            nativeActivationStarted = true;
             this.submitForm(activation.target);
           } else {
             throw new Error('Binary payment activation is unavailable.');
@@ -278,19 +282,17 @@
           this.replaying = false;
         }
       } catch (error) {
-        if (error && error.name === 'AbortError') {
+        if (!nativeActivationStarted && error && error.name === 'AbortError') {
           return;
         }
 
-        if (handoffStarted) {
-          // Once the payment module's own click/submit path has started, a synchronous throw is
-          // ambiguous: the handler may already have initiated remote/payment work. Preserve the
-          // reservation and freeze checkout until Core cleanup or the bounded TTL recovery path.
-          this.failClosedHandoff(this.message('handoff-failed'));
-          return;
+        if (!nativeActivationStarted) {
+          await this.bestEffortRelease(attemptId);
+        } else {
+          // The module-owned handler may already have initiated payment/order work before throwing.
+          // Preserve the duplicate-handoff barrier until Core cleanup or bounded TTL recovery.
+          this.dispatch('jzopc:checkout:payment-handoff-ambiguous', { paymentOptionId: selected.id });
         }
-
-        await this.bestEffortRelease(attemptId);
         this.fail(this.message('handoff-failed'));
       }
     }
@@ -483,17 +485,6 @@
       }
     }
 
-    freezeAllControls() {
-      for (const control of this.root.querySelectorAll('button, input, select, textarea')) {
-        if (control instanceof HTMLButtonElement
-          || control instanceof HTMLInputElement
-          || control instanceof HTMLSelectElement
-          || control instanceof HTMLTextAreaElement) {
-          control.disabled = true;
-        }
-      }
-    }
-
     restoreControls() {
       for (const entry of this.lockedControls) {
         if (entry.control && entry.control.isConnected) {
@@ -501,14 +492,6 @@
         }
       }
       this.lockedControls = [];
-    }
-
-    failClosedHandoff(message) {
-      this.busy = true;
-      this.root.setAttribute('data-jzopc-handoff-uncertain', 'true');
-      this.root.setAttribute('aria-busy', 'true');
-      this.freezeAllControls();
-      this.showStatus(message);
     }
 
     fail(message) {

@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup and shop-scoped Back Office activation controls exist in source. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the deferred installed-runtime/browser matrix is executed successfully.
+> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup, native-checkout integration failure containment and shop-scoped Back Office activation controls exist in source. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the deferred installed-runtime/browser matrix is executed successfully.
 
 ## Runtime targets
 
@@ -17,13 +17,20 @@ See `docs/COMPATIBILITY.md` for the exact verified/pending matrix.
 
 The module does not hard-load one checkout API on every PrestaShop 9 release.
 
-- PrestaShop 9.0/9.1: `actionCheckoutRender` replaces only the Core checkout process and reuses the exact active `CheckoutSession`.
-- PrestaShop 9.2+: `actionCheckoutBuildProcess` returns the isolated Core `CheckoutProcessProviderInterface` implementation only when that capability exists.
+- PrestaShop 9.0/9.1: `actionCheckoutRender` receives Core's already-built process. The module reuses its exact `CheckoutSession`, fully prepares the OPC replacement first and assigns the reference only after preparation succeeds.
+- PrestaShop 9.2+: `actionCheckoutBuildProcess` returns the isolated Core `CheckoutProcessProviderInterface` implementation only when the capability exists and the OPC shell has already been prepared successfully. Preparation failure returns no provider so Core can build native checkout.
 - Native `ps_onepagecheckout` conflict detection is part of the shared activation policy.
 - Unsupported or ambiguous runtime capability fails closed to native checkout.
+- Required asset/process preparation failure trips a request-local circuit breaker so later hooks in the same request cannot partially take over checkout.
 - `INTEGRATION_SHELL_READY=false` currently prevents all production takeover.
 
-`CheckoutProcessBuilder` builds a real Core `CheckoutProcess` around one module `CheckoutShellStep`. The step renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+`CheckoutProcessBuilder::prepareShell()` completes the risky DB/template/presenter/third-party shell composition before process takeover. `CheckoutProcessBuilder::buildPrepared()` then builds a real Core `CheckoutProcess` around the exact Core session supplied by the active version path. `CheckoutShellStep` stores the prepared shell but still renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+
+Fallback logging contains only an internal stage, exception class and numeric shop/cart identifiers; exception messages and request/payment payloads are deliberately excluded. See ADR-0027.
+
+The installed-runtime matrix also contains `IntegrationFailureIsolationContract.php`. On 9.0/9.1 it injects a test-local shell persistence-read failure and requires the exact original Core process/session to remain untouched. On 9.2 it requires eager preparation failure to happen before provider exposure and proves that a provider given already-prepared HTML does not re-enter risky shell dependencies later. This test adds no production readiness bypass. See ADR-0028.
+
+A second controlled request-path layer is configured in ADR-0029. The normal source-mounted module first proves the production `INTEGRATION_SHELL_READY=false` boundary. Only afterwards does the runtime workflow create `/tmp/jzopc-active-fixture*`, open readiness in that disposable copy, and inject test-only persistence/service/Smarty-template/asset failures. One Core-created cart/cookie session must show healthy OPC, Core native fallback during each failure and healthy OPC recovery afterwards. Production integration classes contain no failure markers, and the active fixture never calls payment finalization or creates an order.
 
 ## Server-authoritative state and mutation safety
 
@@ -37,10 +44,11 @@ Every checkout mutation runs through the shared guard/orchestrator boundary:
 4. acquire the same-cart DB advisory mutex;
 5. reload server-persisted payment/agreement authority;
 6. reject stale state inside the lock;
-7. execute fresh Core-backed validation/mutation;
-8. require every dependency-mandated section before persistence;
-9. rebuild the authoritative state version;
-10. release the mutex in `finally`.
+7. reject non-finalization mutations while a finalization reservation is active;
+8. execute fresh Core-backed validation/mutation;
+9. require every dependency-mandated section before persistence;
+10. rebuild the authoritative state version;
+11. release the mutex in `finally`.
 
 Browser transport adds `AbortController`, monotonic latest-intent sequencing, bounded stale retry and all-or-nothing section replacement validation.
 
@@ -80,15 +88,17 @@ Immediately before handoff, preflight revalidates:
 - fresh payment-option eligibility;
 - exact fresh mandatory agreements.
 
-A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
+A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The effective installed/default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
 
 An explicit release can clear only its own customer/attempt reservation and refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
 
-Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
+Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback. Once native module-owned activation has begun, a thrown handler is treated as ambiguous progress and the reservation is preserved rather than automatically released.
 
-Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module.
+Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module. Binary failures publish the same guarded validation lifecycle as ordinary checkout.
 
-For both ordinary and binary paths, automatic reservation release is limited to failures that are known to occur before native module-owned activation starts. Once the selected module's `submit`/`click` path has been invoked, a synchronous third-party handler error is treated as an ambiguous partial handoff: the reservation stays active and checkout controls remain frozen until successful Core cleanup or bounded TTL recovery. This avoids reopening a second payment attempt when the first handler may already have performed side effects.
+Reservation state also converges in the browser without becoming browser-authoritative. A fresh reload/back render exposes only a boolean active-reservation marker and immediately locks mutable checkout controls. If another pre-opened tab acquires the reservation later, guarded operations return the stable `finalization_in_progress` machine code; generic checkout mutations and ordinary/binary final submit all publish that failure, and the losing tab converges to the same fail-closed lock after local controller cleanup. The browser guard does not poll, release reservations, submit payment or create orders.
+
+A locked checkout suppresses activation as well as disabling native form controls. Link-style payment activators (`a[href]`) and ARIA button surfaces are marked disabled and removed from normal tab order, while capture-phase `click` and `submit` listeners stop events only inside an already locked checkout root before third-party payment handlers or browser default navigation can run. Unlocked third-party hooks/forms keep their native lifecycle.
 
 Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationController::checkFreeOrder()`.
 
@@ -129,22 +139,26 @@ composer install
 composer validate --strict --no-check-publish
 find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
 find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
-for test in tests/Smoke/*Test.php; do php "$test"; done
+bash scripts/run-smoke-tests.sh
 ```
 
-The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families.
+`scripts/run-smoke-tests.sh` is the canonical local/CI smoke runner. It forces `zend.assertions=1` and `assert.exception=1` so older smoke files that still use PHP `assert()` cannot silently become no-ops when the local PHP configuration has assertions disabled. It also fails if no smoke test files are found.
 
-GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
+The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families. The installed shell contract requires the finalization URL, final submit/status surface and server-derived inactive reservation marker for a fresh runtime cart. The same workflow is configured to execute the controlled active HTTP persistence/service/template/assets fallback matrix only after the normal closed-readiness HTTP boundary succeeds.
+
+The temporary failure instrumenter was syntax-checked and executed against a synthetic `/tmp` source layout; its injected service/template/assets snippets remained syntax-valid. This checks the patch mechanism only. The current container could not clone GitHub because DNS resolution is unavailable, so no full local repository suite is claimed from that environment.
+
+GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted / no checks are being created for the current branch. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
 
 ## Remaining release blockers
 
 - `INTEGRATION_SHELL_READY` remains `false`;
-- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs, after Actions quota resets and fix every failure;
-- execute controlled HTTP/browser takeover and native-fallback tests;
+- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs and `IntegrationFailureIsolationContract.php`, after Actions runners become available and fix every failure;
+- execute the configured active HTTP takeover/native-fallback matrix for DB/persistence, template, renderer/service and asset-registration failures across the 9.0/9.1 and 9.2 integration families and fix every failure;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
-- prove in a controlled browser that thrown/partial third-party handlers remain blocked behind the preserved reservation after native activation starts, and recover only through successful Core cleanup or TTL;
-- verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
+- verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
+- verify zero-total free order, two-tab finalization races, losing-tab live/reload convergence, locked link/form activation suppression, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
 

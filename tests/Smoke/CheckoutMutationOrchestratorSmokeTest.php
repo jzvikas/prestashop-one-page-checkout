@@ -96,7 +96,6 @@ final class Context
 
 require dirname(__DIR__) . '/bootstrap.php';
 
-use Closure;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutError;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutation;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationExecutionStatus;
@@ -107,6 +106,7 @@ use Jzvikas\OnePageCheckout\Checkout\CheckoutSectionDependencyResolver;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelections;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelectionsStoreInterface;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutStateVersioner;
+use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface;
 use Jzvikas\OnePageCheckout\Checkout\PrestaShopCheckoutStateFactory;
 use Jzvikas\OnePageCheckout\Checkout\StaleCheckoutStateGuard;
 use Jzvikas\OnePageCheckout\Concurrency\CheckoutCartLockUnavailable;
@@ -120,7 +120,7 @@ final class FakeCheckoutCartMutex implements CheckoutCartMutexInterface
     public int $calls = 0;
     public bool $busy = false;
 
-    public function synchronized(int $cartId, Closure $criticalSection): mixed
+    public function synchronized(int $cartId, \Closure $criticalSection): mixed
     {
         ++$this->calls;
         if ($this->busy) {
@@ -168,6 +168,35 @@ final class FakeCheckoutServerSelectionsStore implements CheckoutServerSelection
     }
 }
 
+final class FakeCheckoutFinalizationReservationStore implements CheckoutFinalizationReservationStoreInterface
+{
+    public bool $active = false;
+    public int $isActiveCalls = 0;
+
+    public function acquire(Context $context, string $stateVersion, string $paymentSelection, string $attemptId): void
+    {
+        $this->active = true;
+    }
+
+    public function isActive(Context $context): bool
+    {
+        assertOrchestrator(OrchestratorLockState::$held, 'finalization reservation must be checked while cart mutex is held');
+        ++$this->isActiveCalls;
+
+        return $this->active;
+    }
+
+    public function releaseAttempt(Context $context, string $attemptId): void
+    {
+        $this->active = false;
+    }
+
+    public function clear(Context $context): void
+    {
+        $this->active = false;
+    }
+}
+
 function assertOrchestrator(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -190,6 +219,7 @@ $cart = new Cart();
 $context = new Context($cart, new Customer(9));
 $mutex = new FakeCheckoutCartMutex();
 $store = new FakeCheckoutServerSelectionsStore();
+$reservations = new FakeCheckoutFinalizationReservationStore();
 $csrf = new CheckoutCsrfTokenValidator();
 $stateFactory = new PrestaShopCheckoutStateFactory();
 $versioner = new CheckoutStateVersioner();
@@ -202,6 +232,7 @@ $orchestrator = new CheckoutMutationOrchestrator(
     $stateFactory,
     $versioner,
     $store,
+    $reservations,
 );
 
 OrchestratorLockState::$held = true;
@@ -221,8 +252,8 @@ $result = $orchestrator->execute(
         assertOrchestrator($currentSelections->selectedPaymentOption === null, 'handler must receive server-loaded selections');
         assertOrchestrator(
             array_map(static fn (CheckoutSection $section): string => $section->value, $requiredSections)
-                === ['delivery', 'payment', 'summary'],
-            'handler must receive dependency-resolved sections'
+                === ['delivery', 'payment', 'agreements', 'summary'],
+            'handler must receive dependency-resolved carrier/payment/legal/totals sections'
         );
         $handlerRan = true;
 
@@ -251,6 +282,25 @@ assertOrchestrator($paymentResult->refreshResult?->success === true, 'payment se
 assertOrchestrator($store->selections->selectedPaymentOption === 'demo:payment-option-1', 'validated handler output must be persisted server-side');
 $newVersion = $paymentResult->refreshResult?->stateVersion;
 assertOrchestrator(is_string($newVersion) && $newVersion !== $initialVersion, 'persisted payment selection must change authoritative state version');
+
+$reservations->active = true;
+$reservedHandlerRan = false;
+$reservedSavesBefore = $store->saves;
+$reservedResult = $orchestrator->execute(
+    $context,
+    array_replace($request, ['stateVersion' => $newVersion]),
+    CheckoutMutation::CarrierSelected,
+    static function () use (&$reservedHandlerRan): CheckoutMutationOutcome {
+        $reservedHandlerRan = true;
+        throw new RuntimeException('must not run');
+    },
+);
+assertOrchestrator(!$reservedHandlerRan, 'ordinary mutation handler must not run while finalization is reserved');
+assertOrchestrator($reservedResult->status === CheckoutMutationExecutionStatus::Rejected, 'reserved checkout mutation must be rejected');
+assertOrchestrator($reservedResult->blockReason === CheckoutMutationBlockReason::FinalizationInProgress, 'reservation rejection reason must remain finalization_in_progress');
+assertOrchestrator($store->saves === $reservedSavesBefore, 'reserved checkout mutation must not persist selections');
+assertOrchestrator($reservations->isActiveCalls > 0, 'orchestrator must consult finalization reservation state under the cart lock');
+$reservations->active = false;
 
 $staleHandlerRan = false;
 $staleSavesBefore = $store->saves;
