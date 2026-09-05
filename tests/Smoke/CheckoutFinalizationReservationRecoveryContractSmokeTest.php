@@ -40,20 +40,20 @@ assertFinalizationReservationRecoveryContract(
     'reservation expiry must remain server/database-time based'
 );
 assertFinalizationReservationRecoveryContract(
-    str_contains($store, 'id_customer = ? AND attempt_id = ?'),
+    str_contains($store, 'reservation.id_customer = ? AND reservation.attempt_id = ?'),
     'browser recovery release must remain customer and attempt scoped'
 );
 assertFinalizationReservationRecoveryContract(
-    str_contains($store, '$this->orderExistsForCart($cartId)'),
-    'attempt release must refuse to remove the barrier after Core order creation'
+    str_contains($store, 'AND NOT EXISTS (SELECT 1 FROM `%2$s` orders WHERE orders.id_cart = ?)'),
+    'attempt release and Core-order absence must be evaluated in the same SQL statement'
 );
 assertFinalizationReservationRecoveryContract(
-    str_contains($store, '\\Order::getIdByCartId($cartId)'),
-    'release safety must consult Core order-by-cart state'
+    !str_contains($store, '\\Order::getIdByCartId($cartId)'),
+    'release safety must not regress to a separate Core order lookup with a TOCTOU window'
 );
 assertFinalizationReservationRecoveryContract(
-    str_contains($store, 'catch (Throwable)') && str_contains($store, 'return true;'),
-    'unknown Core order state must fail closed and preserve the reservation'
+    str_contains($store, "private function ordersTableName(): string"),
+    'atomic release must resolve the prefixed Core orders table through validated table naming'
 );
 assertFinalizationReservationRecoveryContract(
     str_contains($store, 'EXPIRED_PURGE_LIMIT = 100'),
