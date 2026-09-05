@@ -39,11 +39,11 @@ assertFinalizationReservationContract(
     'reservation store interface must be wired in the front container',
 );
 assertFinalizationReservationContract(
-    str_contains($services, '$ttlSeconds: 900'),
+    preg_match('/^\s+\$ttlSeconds:\s*900\s*$/m', $services) === 1,
     'installed reservation TTL must match the payment-safe 900-second recovery window',
 );
 assertFinalizationReservationContract(
-    !str_contains($services, '$ttlSeconds: 90'),
+    preg_match('/^\s+\$ttlSeconds:\s*90\s*$/m', $services) !== 1,
     'obsolete 90-second reservation TTL must not be reintroduced',
 );
 assertFinalizationReservationContract(str_contains($module, "$" . "this->version = '0.4.0';"), 'schema change must keep the 0.4.0 module baseline');
