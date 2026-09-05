@@ -86,6 +86,10 @@ An explicit release can clear only its own customer/attempt reservation and refu
 
 Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
 
+Because Core-presented `PaymentOption::form` markup can contain its own submit control, `ordinary-payment-submit-guard.js` now captures ordinary native form submissions before third-party submit handlers. A direct submit is blocked until the server-backed finalization reservation has succeeded and the final-submit controller synchronously authorizes the exact selected option/form at the native handoff boundary. Authorization is one-shot and also expires after the current synchronous stack or any payment/section change. Payment form fields are not disabled or rewritten, preserving hidden successful controls, embedded fields and tokenization integrations.
+
+This ordinary-form guard is browser defense in depth, not server authority: low-level script-driven submission that intentionally avoids an observable submit event remains a third-party compatibility/browser-test concern and is not treated as production-proven.
+
 Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module.
 
 For both ordinary and binary paths, automatic reservation release is limited to failures that are known to occur before native module-owned activation starts. Once the selected module's `submit`/`click` path has been invoked, a synchronous third-party handler error is treated as an ambiguous partial handoff: the reservation stays active and checkout controls remain frozen until successful Core cleanup or bounded TTL recovery. This avoids reopening a second payment attempt when the first handler may already have performed side effects.
@@ -143,6 +147,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 - execute controlled HTTP/browser takeover and native-fallback tests;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
+- verify direct ordinary-form visible submit/Enter-key blocking while preserving jQuery/native handlers and embedded/tokenization fields during the authorized handoff;
 - prove in a controlled browser that thrown/partial third-party handlers remain blocked behind the preserved reservation after native activation starts, and recover only through successful Core cleanup or TTL;
 - verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
