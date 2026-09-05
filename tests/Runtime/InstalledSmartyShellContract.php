@@ -89,9 +89,17 @@ if (!$process instanceof CheckoutProcess || $process->getCheckoutSession() !== $
     $fail('Checkout process did not preserve the real Core CheckoutSession.');
 }
 
+// Mirror the real Core checkout lifecycle before rendering. AbstractCheckoutStep starts
+// unreachable and getTemplate() intentionally returns Core's unreachable.tpl until
+// CheckoutProcess::handleRequest() delegates to the module step.
+$process->handleRequest([]);
+
 $steps = $process->getSteps();
 if (count($steps) !== 1 || !$steps[0] instanceof CheckoutShellStep) {
     $fail('Module process did not expose exactly one CheckoutShellStep.');
+}
+if (!$steps[0]->isReachable() || !$steps[0]->isCurrent() || $steps[0]->isComplete()) {
+    $fail('CheckoutShellStep did not establish the expected reachable/current/incomplete Core lifecycle state.');
 }
 
 $html = $steps[0]->render();
