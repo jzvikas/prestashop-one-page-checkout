@@ -39,6 +39,22 @@ if grep -Fq "$opened" "$source_module"; then
   exit 2
 fi
 
+source_runtime_files=(
+  "$source_root/src/Integration/CheckoutShellRenderer.php"
+  "$source_root/src/Checkout/Rendering/PrestaShopCheckoutTemplateRenderer.php"
+  "$source_root/src/Integration/CheckoutFrontendAssetRegistrar.php"
+)
+for source_file in "${source_runtime_files[@]}"; do
+  if [[ ! -f "$source_file" ]]; then
+    echo "Required production runtime source is missing: $source_file" >&2
+    exit 2
+  fi
+  if grep -Fq '.jzopc-runtime-failure-' "$source_file"; then
+    echo "Production source unexpectedly contains runtime failure instrumentation: $source_file" >&2
+    exit 2
+  fi
+done
+
 rm -rf "$target_root"
 mkdir -p "$target_root"
 tar -C "$source_root" --exclude='.git' -cf - . | tar -C "$target_root" -xf -
@@ -60,6 +76,10 @@ if ($count !== 1 || file_put_contents($path, $updated) === false) {
 }
 ' "$target_module"
 
+JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php \
+  "$target_root/tests/Runtime/InstrumentActiveCheckoutFailureFixture.php" \
+  "$target_root"
+
 if ! grep -Fq "$opened" "$target_module"; then
   echo "Temporary fixture readiness gate was not opened." >&2
   exit 3
@@ -68,5 +88,11 @@ if ! grep -Fq "$closed" "$source_module" || grep -Fq "$opened" "$source_module";
   echo "Source readiness gate changed while creating temporary fixture." >&2
   exit 3
 fi
+for source_file in "${source_runtime_files[@]}"; do
+  if grep -Fq '.jzopc-runtime-failure-' "$source_file"; then
+    echo "Source runtime code changed while instrumenting temporary fixture: $source_file" >&2
+    exit 3
+  fi
+done
 
 printf 'Active checkout runtime fixture created at %s; source readiness remains closed.\n' "$target_root"
