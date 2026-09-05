@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService;
+use Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAddressSelectionMutation;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface;
 
 $shopRoot = $argv[1] ?? '';
@@ -56,12 +58,37 @@ $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
 // Deliberately remove the OrderController capability. Module mutation controllers do not expose
-// getCheckoutSession(), so the provider must construct the same Core session shape itself.
+// getCheckoutSession(), so the private provider dependency must construct the Core session shape.
 $context->controller = new stdClass();
 
-$provider = $module->get(CheckoutSessionProviderInterface::class);
+// ADR-0011 intentionally keeps helper dependencies private. Resolve the actual public module-front
+// entry service, then inspect the already-autowired dependency chain instead of weakening the
+// container boundary merely to make this runtime test convenient.
+$entry = $module->get(CheckoutAddressSelectionMutation::class);
+if (!$entry instanceof CheckoutAddressSelectionMutation) {
+    $fail('CheckoutAddressSelectionMutation entry service is unavailable in the module front container.');
+}
+
+$readPrivateProperty = static function (object $object, string $property) use ($fail): mixed {
+    $reflection = new ReflectionObject($object);
+    if (!$reflection->hasProperty($property)) {
+        $fail(sprintf('Runtime service graph is missing expected dependency property %s::%s.', $object::class, $property));
+    }
+
+    $reflectionProperty = $reflection->getProperty($property);
+    $reflectionProperty->setAccessible(true);
+
+    return $reflectionProperty->getValue($object);
+};
+
+$addressSelectionService = $readPrivateProperty($entry, 'addressSelectionService');
+if (!$addressSelectionService instanceof CheckoutAddressSelectionService) {
+    $fail('Public address mutation entry did not receive CheckoutAddressSelectionService.');
+}
+
+$provider = $readPrivateProperty($addressSelectionService, 'checkoutSessionProvider');
 if (!$provider instanceof CheckoutSessionProviderInterface) {
-    $fail('CheckoutSessionProviderInterface service is unavailable in the module front container.');
+    $fail('Private CheckoutSessionProviderInterface dependency was not autowired into the module-front entry graph.');
 }
 
 $session = $provider->get($context);
