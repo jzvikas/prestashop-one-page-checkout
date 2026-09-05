@@ -64,11 +64,24 @@ page.on('response', (response) => {
 
 await page.addInitScript(() => {
   window.__jzopcLifecycle = [];
+
   document.addEventListener('jzopc:checkout:initialized', (event) => {
     const detail = event && event.detail && typeof event.detail === 'object' ? event.detail : {};
     window.__jzopcLifecycle.push({
       type: 'initialized',
       stateVersion: typeof detail.stateVersion === 'string' ? detail.stateVersion : null,
+    });
+  });
+
+  document.addEventListener('jzopc:checkout:validation-failed', (event) => {
+    const detail = event && event.detail && typeof event.detail === 'object' ? event.detail : {};
+    const errors = Array.isArray(detail.errors) ? detail.errors : [];
+    window.__jzopcLifecycle.push({
+      type: 'validation-failed',
+      stateVersion: typeof detail.stateVersion === 'string' ? detail.stateVersion : null,
+      errors: errors.map((error) => ({
+        code: error && typeof error.code === 'string' ? error.code : null,
+      })),
     });
   });
 });
@@ -166,6 +179,64 @@ async function assertHealthyCheckout(stage, requireAssetNetwork = false) {
   return state;
 }
 
+async function assertIdentityValidationFailure(expectedCartId) {
+  currentStage = 'identity-validation';
+  const errorsBefore = pageErrors.length;
+  const pathBefore = new URL(page.url()).pathname;
+  const validationCountBefore = await page.evaluate(() => (
+    Array.isArray(window.__jzopcLifecycle)
+      ? window.__jzopcLifecycle.filter((event) => event && event.type === 'validation-failed').length
+      : 0
+  ));
+
+  const createForm = page.locator('[data-jzopc-identity-form="create"] form');
+  const loginForm = page.locator('[data-jzopc-identity-form="login"] form');
+  if (await createForm.count() !== 1 || await loginForm.count() !== 1) {
+    fail('identity-validation: expected exactly one Core create form and one Core login form.');
+  }
+
+  await createForm.evaluate((form) => {
+    form.noValidate = true;
+    form.requestSubmit();
+  });
+
+  await page.waitForFunction((previousCount) => (
+    Array.isArray(window.__jzopcLifecycle)
+    && window.__jzopcLifecycle.filter((event) => event && event.type === 'validation-failed').length > previousCount
+  ), validationCountBefore, { timeout: 10000 });
+
+  const result = await page.locator('[data-jzopc-checkout]').evaluate((root) => {
+    const failures = Array.isArray(window.__jzopcLifecycle)
+      ? window.__jzopcLifecycle.filter((event) => event && event.type === 'validation-failed')
+      : [];
+
+    return {
+      cartId: root.getAttribute('data-jzopc-cart-id') || '',
+      stateVersion: root.getAttribute('data-jzopc-state-version') || '',
+      latestFailure: failures.length > 0 ? failures[failures.length - 1] : null,
+    };
+  });
+
+  if (result.cartId !== expectedCartId) {
+    fail('identity-validation: server validation changed the active Core cart binding.');
+  }
+  if (!result.stateVersion) {
+    fail('identity-validation: validated response did not preserve a server state version.');
+  }
+  if (!result.latestFailure || !Array.isArray(result.latestFailure.errors) || result.latestFailure.errors.length === 0) {
+    fail('identity-validation: empty identity submit did not return server validation errors.');
+  }
+  if (new URL(page.url()).pathname !== pathBefore || pathBefore !== '/order') {
+    fail('identity-validation: validation failure unexpectedly navigated away from /order.');
+  }
+  if (await page.locator('[data-jzopc-identity-form="create"] form').count() !== 1) {
+    fail('identity-validation: Core create form disappeared after recoverable server validation failure.');
+  }
+  if (pageErrors.length !== errorsBefore) {
+    fail(`identity-validation: browser JavaScript error: ${pageErrors.slice(errorsBefore).join(' | ')}`);
+  }
+}
+
 async function assertNativeFallback(stage) {
   const rootCount = await page.locator('[data-jzopc-checkout]').count();
   if (rootCount !== 0) {
@@ -194,6 +265,7 @@ try {
 
   await navigate(`${baseUrl}/order`, 'healthy-opc');
   const initialState = await assertHealthyCheckout('healthy-opc', true);
+  await assertIdentityValidationFailure(initialState.cartId);
 
   fs.writeFileSync(serviceFailureMarker, 'browser\n', { flag: 'wx' });
   try {
@@ -212,7 +284,7 @@ try {
   }
 
   process.stdout.write(
-    `Active browser takeover/fallback contract OK: cart=${initialState.cartId}, assets=${requiredAssets.size}, origin=${baseOrigin}\n`,
+    `Active browser identity/takeover/fallback contract OK: cart=${initialState.cartId}, assets=${requiredAssets.size}, origin=${baseOrigin}\n`,
   );
 } finally {
   if (fs.existsSync(serviceFailureMarker)) {
