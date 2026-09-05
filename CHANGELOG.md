@@ -6,6 +6,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Added
 
+- `CheckoutPaymentHandoffAmbiguityUiLockContractSmokeTest.php` and `payment-handoff-ambiguity-guard.js`, which keep the browser checkout visibly fail-closed after ambiguous native payment activation instead of presenting an immediate retry path.
 - `CheckoutNativePaymentHandoffAmbiguityContractSmokeTest.php` and ADR-0023 documenting the fail-closed boundary between safe pre-activation release and ambiguous post-activation native payment progress.
 - Front Office fail-closed HTTP runtime contract covering native `/order` non-takeover, absent OPC checkout assets/root and direct finalization-endpoint rejection while readiness remains closed.
 - Source smoke contract locking the fail-closed HTTP workflow wiring and the production `INTEGRATION_SHELL_READY=false` boundary.
@@ -21,6 +22,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Changed
 
+- After an ambiguous native payment exception, the browser now waits until submit-controller cleanup finishes, marks the checkout as ambiguous, disables mutable checkout controls, keeps `aria-busy=true`, and announces a translated assertive warning that the order must not be submitted again while payment progress is unknown.
 - Ordinary native payment-form exceptions no longer automatically release the finalization reservation after the module-owned submit lifecycle has started; ambiguous progress now preserves the duplicate-handoff barrier for Core cleanup or bounded TTL recovery.
 - Binary payment replay now explicitly tracks whether the original module-owned click/form activation has started. Pre-activation errors may release their exact attempt; exceptions after activation starts preserve the reservation and emit the `jzopc:checkout:payment-handoff-ambiguous` lifecycle event.
 - Finalization reservation default TTL increased from 90 seconds to 900 seconds, with constructor overrides bounded to 60..3600 seconds, so slow redirect/payment initialization cannot reopen the handoff barrier prematurely.
@@ -33,6 +35,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 ### Verification
 
+- Ambiguous-handoff UI locking and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real DOM/event ordering and payment-handler behavior remain browser gates rather than verified evidence.
 - Native handoff ambiguity hardening and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; real ordinary/binary thrown-handler behavior remains a browser gate, not verified compatibility evidence.
 - Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime evidence.
@@ -41,7 +44,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 ### Safety
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
-- Browser-side release is now intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
+- The ambiguity UI guard is defense in depth only and never sends finalization release, submits payment or creates an order; the DB reservation remains authoritative.
+- Browser-side release is intentionally forbidden once native payment activation may have started; bounded temporary retry blocking is preferred over reopening a duplicate native handoff.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state preserves the duplicate-handoff barrier instead of weakening it.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
 - No module version bump: reservation policy, payment-handoff browser safety, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.

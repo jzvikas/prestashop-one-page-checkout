@@ -37,6 +37,7 @@
       <span data-jzopc-final-message="submission-failed">{l s='Order submission failed. Please try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="review-checkout">{l s='The order could not be submitted. Please review your checkout and try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="handoff-failed">{l s='The payment method could not be opened. Please try again.' d='Modules.Jzonepagecheckout.Shop'}</span>
+      <span data-jzopc-final-message="handoff-ambiguous">{l s='Payment processing may already have started. Do not submit the order again. Check the payment result or refresh this page later.' d='Modules.Jzonepagecheckout.Shop'}</span>
       <span data-jzopc-final-message="payment-changed">{l s='The selected payment method is no longer available. Please refresh the checkout.' d='Modules.Jzonepagecheckout.Shop'}</span>
     </div>
   </div>
