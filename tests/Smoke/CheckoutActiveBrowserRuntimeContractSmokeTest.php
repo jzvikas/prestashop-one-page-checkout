@@ -7,6 +7,7 @@ $package = file_get_contents($root . '/tests/Browser/package.json');
 $browser = file_get_contents($root . '/tests/Browser/active-checkout-browser-contract.mjs');
 $workflow = file_get_contents($root . '/.github/workflows/prestashop-runtime.yml');
 $mutationClient = file_get_contents($root . '/views/js/checkout-mutation-client.js');
+$identityTemplate = file_get_contents($root . '/views/templates/front/sections/identity.tpl');
 $module = file_get_contents($root . '/jzonepagecheckout.php');
 
 function assertActiveBrowserRuntime(bool $condition, string $message): void
@@ -17,7 +18,7 @@ function assertActiveBrowserRuntime(bool $condition, string $message): void
     }
 }
 
-foreach ([$package, $browser, $workflow, $mutationClient, $module] as $source) {
+foreach ([$package, $browser, $workflow, $mutationClient, $identityTemplate, $module] as $source) {
     assertActiveBrowserRuntime(
         is_string($source) && $source !== '',
         'active browser runtime source must be readable',
@@ -56,6 +57,27 @@ assertActiveBrowserRuntime(
         && str_contains($browser, "document.addEventListener('jzopc:checkout:initialized'")
         && str_contains($browser, 'page.addInitScript'),
     'browser contract must observe the real checkout initialized lifecycle before module scripts run',
+);
+assertActiveBrowserRuntime(
+    str_contains($mutationClient, "this.dispatch('jzopc:checkout:validation-failed'")
+        && str_contains($browser, "document.addEventListener('jzopc:checkout:validation-failed'")
+        && str_contains($browser, "type: 'validation-failed'"),
+    'browser contract must observe guarded server validation failures through the real checkout lifecycle',
+);
+assertActiveBrowserRuntime(
+    str_contains($identityTemplate, 'data-jzopc-identity-form="create"')
+        && str_contains($identityTemplate, 'data-jzopc-identity-form="login"')
+        && str_contains($browser, "'[data-jzopc-identity-form=\"create\"] form'")
+        && str_contains($browser, "'[data-jzopc-identity-form=\"login\"] form'"),
+    'identity browser coverage must use stable OPC wrappers around the Core create/login forms',
+);
+assertActiveBrowserRuntime(
+    str_contains($browser, 'form.noValidate = true;')
+        && str_contains($browser, 'form.requestSubmit();')
+        && str_contains($browser, 'empty identity submit did not return server validation errors')
+        && str_contains($browser, 'validation failure unexpectedly navigated away from /order')
+        && str_contains($browser, 'server validation changed the active Core cart binding'),
+    'identity validation browser path must reach the server mutation endpoint while preserving page/cart state on recoverable validation errors',
 );
 assertActiveBrowserRuntime(
     str_contains($browser, "page.locator('[data-jzopc-checkout]')")
@@ -109,7 +131,7 @@ assertActiveBrowserRuntime(
         && !str_contains($browser, 'data-jzopc-final-submit]')
         && !str_contains($browser, "'/module/jzonepagecheckout/finalize'")
         && !str_contains($browser, 'PaymentModule'),
-    'takeover/fallback browser gate must never initiate finalization, payment or order creation',
+    'identity/takeover/fallback browser gate must never initiate finalization, payment or order creation',
 );
 
 $activeServerPosition = strpos($workflow, 'Start active Front Office HTTP server');
