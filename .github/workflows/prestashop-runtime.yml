@@ -18,6 +18,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - ps_ref: '9.0.3'
+            family: '9.0'
+            native_opc: '0'
           - ps_ref: '9.1.5'
             family: '9.1'
             native_opc: '0'
