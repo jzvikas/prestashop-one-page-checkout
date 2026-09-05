@@ -12,13 +12,15 @@ This document describes architecture that exists in the repository today. It int
 - `CheckoutActivationPolicy` blocks custom takeover when native `ps_onepagecheckout` is enabled and fails closed on unsupported capability combinations.
 - `INTEGRATION_SHELL_READY` remains `false`, so neither adapter can currently take over live checkout. Public mutation controllers therefore still return `checkout_unavailable`.
 
+`PrestaShopRuntimeProbe` asks whether Core capabilities are autoloadable, not merely whether their classes have already been touched in the current process. Installed-runtime CI caught and fixed a false-negative caused by `class_exists('Hook', false)`: clean PrestaShop CLI processes legitimately had not loaded `Hook` yet, so normal autoload-capable `class_exists()` is required for capability detection.
+
 `CheckoutProcessBuilder` creates a real Core `CheckoutProcess` around a single `CheckoutShellStep`. The step extends `AbstractCheckoutStep`, stays reachable/current as the one-page surface and calls Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`. `CheckoutShellRenderer` then renders the trusted module root from the same Core cart/session and persisted server selections used by mutation guards.
 
 `CheckoutBrowserBootstrapFactory` builds the initial browser binding from the loaded cart, `Tools::getToken(false)`, `PrestaShopCheckoutStateFactory`, `CheckoutStateVersioner` and PrestaShop-generated module links. The shell exposes only cart ID, CSRF token, state version and payment/agreement endpoint URLs. It does not expose client-authoritative totals or a browser copy of server selections.
 
 `actionFrontControllerSetMedia` is installed in addition to the version-specific checkout hook. It is restricted to `OrderController`, must pass the same activation policy, and delegates to `CheckoutFrontendAssetRegistrar`. Existing installations receive that hook through idempotent `upgrade/upgrade-0.3.0.php`; the version is therefore `0.3.0`.
 
-See ADR-0001, ADR-0008 and ADR-0009.
+See ADR-0001, ADR-0008, ADR-0009 and ADR-0010.
 
 ## Server-authoritative checkout state
 
@@ -146,29 +148,26 @@ The dependency resolver is conservative. Address/cart changes refresh addresses,
 
 The smoke suite covers capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contracts, response mapping, address selection/rendering, Core-backed address/delivery/payment/agreement presenters, payment JavaScript behavior, payment selection validation, agreement exact-set validation, authoritative selection restoration, guarded endpoint contracts and stale-safe browser mutation transport.
 
-Version-specific integration contract coverage now also verifies:
+Version-specific source-contract coverage also verifies the 9.2 provider shape/isolation, 9.0/9.1 Core-session reuse, module shell step construction, Core `renderTemplate()` lifecycle, readiness gate, media registration and `0.3.0` upgrade path.
 
-- the 9.2 provider implements the exact provider methods and remains isolated from the generic 9.x bootstrap path;
-- 9.0/9.1 process replacement reuses Core's current `CheckoutSession`;
-- the module process contains the real shell step;
-- shell-step rendering goes through Core `renderTemplate()`;
-- the readiness gate remains closed;
-- frontend media registration stays OrderController-only and activation-gated;
-- `0.3.0` has an idempotent media-hook upgrade path.
+GitHub Actions baseline CI validates Composer metadata and production autoload installation, PHP 8.4 syntax, JavaScript syntax with Node.js 22 and the full smoke suite.
 
-GitHub Actions validates Composer metadata and production autoload installation, PHP 8.4 syntax, JavaScript syntax with Node.js 22 and the full smoke suite.
+A separate `PrestaShop Runtime` workflow now provisions MariaDB 11.4 and boots real source-tree installations for:
 
-CI does **not** yet boot real PrestaShop 9.0/9.1/9.2 installations, execute schema/media-hook upgrades against MySQL/MariaDB, exercise real provider resolution or reference-hook replacement, render Smarty in a real theme, or run browser E2E with representative carrier/payment modules. Those are required before production readiness.
+- PrestaShop 9.1.5, proving module installation/enabled state, `actionCheckoutRender` registration, absence of the 9.2 provider interface, media-hook registration and fail-closed activation;
+- PrestaShop 9.2.0-beta.1, proving module installation/enabled state, `actionCheckoutBuildProcess` registration, presence of the provider interface, media-hook registration, pinned native `ps_onepagecheckout` installation/enabled detection and fail-closed activation.
+
+The real runtime matrix also guards clean-process Core autoload behavior in `PrestaShopRuntimeProbe`. It does **not** yet open the readiness gate, perform live `actionCheckoutRender` reference replacement/provider resolution, render the shell through a real HTTP/Smarty checkout page, exercise mutation front controllers over HTTP, or run browser E2E with representative carrier/payment modules. Schema/media-hook upgrade execution against an older installed module version also remains to be added.
 
 ## Next application boundary
 
-The code-level version-specific checkout process adapters now exist, but activation remains deliberately fail-closed. The next highest-priority milestone is a deterministic PrestaShop runtime integration harness proving:
+Installed capability/hook/conflict coverage is now green on PrestaShop 9.1.5 and 9.2.0-beta.1, but activation remains deliberately fail-closed. The next highest-priority milestone is a controlled live checkout harness proving:
 
-1. 9.0/9.1 `actionCheckoutRender` replacement with the original Core checkout session;
-2. 9.2+ provider resolution and Core fallback when zero/multiple providers are active;
-3. native `ps_onepagecheckout` conflict-safe disable/fallback behavior;
-4. real Smarty shell/bootstrap rendering and frontend asset registration;
-5. disabled module/configuration always preserves native checkout;
-6. browser mutation lifecycle works without breaking payment/carrier hooks.
+1. native checkout remains intact with the module disabled, feature disabled, or native `ps_onepagecheckout` conflict active;
+2. 9.0/9.1 `actionCheckoutRender` reference replacement preserves the original Core checkout session when takeover is explicitly test-enabled;
+3. 9.2+ provider resolution returns the module process only when exactly one eligible provider exists and otherwise falls back to Core;
+4. real HTTP/Smarty rendering emits the trusted shell/bootstrap and registers frontend assets only in the active checkout path;
+5. browser mutation lifecycle works without stale-response corruption or breaking payment/carrier hooks;
+6. representative payment/carrier modules survive section replacement and re-initialization.
 
 Only after those gates are green may `INTEGRATION_SHELL_READY` be reconsidered. Identity/customer flow, address/carrier mutations, Phase 5 final validation, duplicate-order/idempotency protection, selection cleanup and native payment-module handoff remain release blockers after the integration harness.
