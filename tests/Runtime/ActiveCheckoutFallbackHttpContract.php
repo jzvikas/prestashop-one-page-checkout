@@ -35,6 +35,25 @@ if (!is_string($modulePath) || !str_starts_with($modulePath, '/tmp/jzopc-active-
     exit(2);
 }
 
+$fixtureRoot = dirname($modulePath);
+if ($fixtureRoot !== '/tmp/jzopc-active-fixture'
+    && !str_starts_with($fixtureRoot, '/tmp/jzopc-active-fixture-')) {
+    fwrite(STDERR, "Active HTTP fallback markers must live inside the temporary fixture root.\n");
+    exit(2);
+}
+
+$failureMarkers = [
+    'service' => $fixtureRoot . '/.jzopc-runtime-failure-service',
+    'template' => $fixtureRoot . '/.jzopc-runtime-failure-template',
+    'assets' => $fixtureRoot . '/.jzopc-runtime-failure-assets',
+];
+foreach ($failureMarkers as $mode => $markerPath) {
+    if (file_exists($markerPath)) {
+        fwrite(STDERR, sprintf("Runtime failure marker is unexpectedly active before the test: %s\n", $mode));
+        exit(2);
+    }
+}
+
 $cookieJar = tempnam(sys_get_temp_dir(), 'jzopc-http-cookie-');
 if (!is_string($cookieJar) || $cookieJar === '') {
     fwrite(STDERR, "Unable to create runtime HTTP cookie jar.\n");
@@ -126,11 +145,37 @@ function expectNativeFallback(array $response, string $stage): void
     );
 }
 
+function activateFailureMarker(string $markerPath, string $fixtureRoot, string $mode): void
+{
+    $expectedPath = $fixtureRoot . '/.jzopc-runtime-failure-' . $mode;
+    expectActiveHttp(
+        hash_equals($expectedPath, $markerPath),
+        sprintf('Refusing unexpected runtime failure marker path for %s.', $mode),
+    );
+    expectActiveHttp(!file_exists($markerPath), sprintf('%s failure marker is already active.', $mode));
+    expectActiveHttp(
+        file_put_contents($markerPath, $mode . "\n", LOCK_EX) !== false,
+        sprintf('Unable to activate %s failure marker.', $mode),
+    );
+    expectActiveHttp(is_file($markerPath), sprintf('%s failure marker was not created.', $mode));
+}
+
+function deactivateFailureMarker(string $markerPath, string $mode): void
+{
+    if (!file_exists($markerPath)) {
+        return;
+    }
+
+    expectActiveHttp(@unlink($markerPath), sprintf('Unable to remove %s failure marker.', $mode));
+    expectActiveHttp(!file_exists($markerPath), sprintf('%s failure marker remained after cleanup.', $mode));
+}
+
 $schema = new CheckoutServerSelectionsSchema();
 $schemaDropped = false;
 $product = new Product($productId);
 $failure = null;
 $successMessage = null;
+$stageStatuses = [];
 
 try {
     expectActiveHttp(Validate::isLoadedObject($product), 'Runtime checkout product is not loaded.');
@@ -150,6 +195,7 @@ try {
 
     $healthy = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
     expectHealthyOpc($healthy, 'Initial');
+    $stageStatuses['healthy'] = $healthy['status'];
 
     // Inject a real module persistence failure. Shell preparation starts by loading canonical
     // server selections, so a missing module-owned table must be contained before process takeover.
@@ -158,25 +204,57 @@ try {
 
     $fallback = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
     expectNativeFallback($fallback, 'Persistence-failure');
+    $stageStatuses['persistence'] = $fallback['status'];
 
-    // Restore the module-owned table and use the same browser/cart cookie. A fresh request must be
-    // eligible for OPC again, proving the circuit breaker is request-local rather than sticky state.
     expectActiveHttp($schema->install(), 'Unable to restore checkout-selection schema after failure injection.');
     $schemaDropped = false;
 
     $recovered = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
-    expectHealthyOpc($recovered, 'Recovered');
+    expectHealthyOpc($recovered, 'Persistence-recovered');
+    $stageStatuses['persistence_recovered'] = $recovered['status'];
+
+    // The remaining failure modes are instrumented only in the disposable active fixture. Each
+    // marker is request-observed at the actual production boundary it represents, then removed.
+    // The same Core cart/cookie must return to healthy OPC after every failure, proving the latch is
+    // request-local and no failure leaves sticky checkout takeover state behind.
+    foreach ($failureMarkers as $mode => $markerPath) {
+        activateFailureMarker($markerPath, $fixtureRoot, $mode);
+
+        try {
+            $modeFallback = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
+            expectNativeFallback($modeFallback, ucfirst($mode) . '-failure');
+            $stageStatuses[$mode] = $modeFallback['status'];
+        } finally {
+            deactivateFailureMarker($markerPath, $mode);
+        }
+
+        $modeRecovered = activeCheckoutRequest($baseUrl . '/order', $cookieJar);
+        expectHealthyOpc($modeRecovered, ucfirst($mode) . '-recovered');
+        $stageStatuses[$mode . '_recovered'] = $modeRecovered['status'];
+    }
 
     $successMessage = sprintf(
-        "Active checkout persistence fallback HTTP contract OK: product=%d, healthy=%d, fallback=%d, recovered=%d\n",
+        "Active checkout fallback HTTP contract OK: product=%d; %s\n",
         $productId,
-        $healthy['status'],
-        $fallback['status'],
-        $recovered['status'],
+        implode(', ', array_map(
+            static fn (string $stage, int $status): string => sprintf('%s=%d', $stage, $status),
+            array_keys($stageStatuses),
+            array_values($stageStatuses),
+        )),
     );
 } catch (Throwable $exception) {
     $failure = $exception;
 } finally {
+    foreach ($failureMarkers as $mode => $markerPath) {
+        try {
+            if (file_exists($markerPath) && !@unlink($markerPath) && $failure === null) {
+                $failure = new RuntimeException(sprintf('Cleanup could not remove %s failure marker.', $mode));
+            }
+        } catch (Throwable $cleanupException) {
+            $failure ??= $cleanupException;
+        }
+    }
+
     if ($schemaDropped) {
         try {
             if (!$schema->install() && $failure === null) {
@@ -224,4 +302,4 @@ if ($failure instanceof Throwable) {
     exit(1);
 }
 
-fwrite(STDOUT, $successMessage ?? "Active checkout persistence fallback HTTP contract completed.\n");
+fwrite(STDOUT, $successMessage ?? "Active checkout fallback HTTP contract completed.\n");
