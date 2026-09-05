@@ -2,11 +2,11 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration-shell + server-authoritative state/security/concurrency/transport/address-domain + address/delivery/payment/summary section-rendering foundation. Checkout takeover remains deliberately fail-closed until the real provider/legacy adapter is implemented and tested.
+> Current status: safe integration shell plus server-authoritative checkout state, mutation security/concurrency/transport foundations, concrete address/delivery/payment/agreement/summary rendering, re-entrant payment interaction, and server validation for payment/agreement selections. Checkout takeover remains deliberately fail-closed until the real version-specific checkout provider/legacy adapter, mutation endpoints and final order handoff are implemented and tested.
 
 ## Runtime targets
 
-- PrestaShop 9.x (current verified strategy is bounded to `>=9.0 <10.0`)
+- PrestaShop 9.x (`>=9.0 <10.0` while this compatibility matrix is under active verification)
 - PHP 8.4+
 - multistore and multilingual architecture required
 - Classic/Hummingbird and third-party payment/carrier compatibility required
@@ -21,17 +21,27 @@ The module detects and isolates the checkout integration path without blindly lo
 - safe unsupported fallback when the expected capability is missing;
 - fail-closed activation policy while the version-specific checkout process is incomplete.
 
-The module installs only the checkout hook needed by the current PrestaShop family. The checkout-flow flag is disabled by default and is forced off on module disable. At this stage both hook entry points preserve native checkout rather than exposing a partial custom flow.
+The module installs only the checkout hook needed by the current PrestaShop family. The checkout-flow flag is disabled by default and forced off when the module is disabled. Both hook entry points currently preserve native checkout rather than exposing a partial custom flow.
 
-The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals; browser monetary values are not part of this state path. Generic mutation safety covers CSRF, cross-cart/customer binding, per-cart serialization and stale-state ordering. The JSON transport layer provides stable status/error mapping. Address selection has strict request parsing and Core-backed ownership checks.
+The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals. Generic mutation safety covers CSRF, cross-cart/customer binding, per-cart serialization and stale-state ordering. The JSON transport layer provides stable status/error mapping.
 
-A fail-closed checkout section renderer registry is in place. The order summary uses PrestaShop Core `CartPresenter`, preserving `actionPresentCart`. The address renderer builds its address book only from the cart-bound customer, rechecks Core address ownership, uses Core `AddressFormat::generateAddress()` for country-aware formatting, and renders module-owned escaped delivery/invoice choices. The delivery renderer reuses a shared checkout-session provider instead of rediscovering carriers itself, runs the native `actionCarrierProcess` lifecycle before reading options, preserves Core-generated `displayCarrierExtraContent`, and preserves `displayBeforeCarrier` / `displayAfterCarrier` hook output. Virtual carts emit no shipping section.
+A fail-closed checkout section renderer registry is in place:
 
-The payment renderer uses Core `PaymentOptionsFinder::present()` so the standard payment-option discovery and `actionPresentPaymentOptions` lifecycle remain authoritative. It preserves payment option IDs, module names, binary markers, actions, hidden inputs, additional-information HTML and module-provided forms. `displayPaymentTop`, `additionalInformation` and payment forms remain explicit trusted payment-module HTML boundaries; ordinary module-owned values are escaped. The markup also keeps the Core-compatible payment option/form classes needed by the future JavaScript reinitialization layer. Payment selection and final submission are not exposed yet, so this rendering foundation does not bypass PrestaShop payment validation or order creation.
+- summary uses Core `CartPresenter`, preserving `actionPresentCart`;
+- addresses are restricted to the cart-bound customer, rechecked with `Customer::customerHasAddress()`, and formatted with Core `AddressFormat::generateAddress()`;
+- delivery uses the active Core checkout session, preserves `actionCarrierProcess`, `displayCarrierExtraContent`, `displayBeforeCarrier` and `displayAfterCarrier`, and skips shipping for virtual carts;
+- payment uses Core `PaymentOptionsFinder::present()`, preserving payment-option discovery and `actionPresentPaymentOptions`, including actions, forms, inputs, additional information and binary markers;
+- agreements use Core `ConditionsToApproveFinder::getConditionsToApproveForTemplate()`, preserving configured shop terms plus `termsAndConditions` hook contributions.
 
-Remaining checkout sections are intentionally not exposed as fake placeholders; a mutation that requires an unimplemented section renderer fails instead of returning an incomplete UI.
+Module-owned markup escapes ordinary values. Carrier/payment hook HTML and Core-formatted legal-condition HTML are explicit trusted Core/module HTML boundaries; browser data is never allowed to populate those raw HTML paths.
 
-See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ADR-0001-checkout-integration-strategy.md`, `docs/ADR-0002-server-authoritative-checkout-state.md` and `docs/ADR-0003-prestashop-checkout-state-adapter.md`.
+`views/js/payment-controller.js` is re-entrant after payment-section replacement, removes old handlers, synchronizes payment forms/additional information and publishes payment lifecycle events. It deliberately does not submit payment forms itself.
+
+Payment selection is parsed strictly and accepted only when module + option ID match a fresh Core-backed payment-option presentation. Agreement selection is accepted only when its key set exactly matches every freshly discovered required Core/module condition. These validated selections can enter `CheckoutServerSelections`; browser request values cannot populate that state directly.
+
+Remaining checkout sections are not exposed as fake placeholders. A mutation requiring an unimplemented renderer fails instead of returning an incomplete successful state.
+
+See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and ADRs under `docs/`.
 
 ## Development setup
 
@@ -39,29 +49,31 @@ See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ADR-0
 composer install
 ```
 
-The raw source checkout expects the Composer autoloader. A release package will be required to include the production dependencies/autoload artifacts needed by an installed PrestaShop module.
+The raw source checkout expects the Composer autoloader. A release package will need the production dependencies/autoload artifacts required by an installed PrestaShop module.
 
 ## Local checks
 
 ```bash
 composer validate --strict --no-check-publish
 find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+node --check views/js/payment-controller.js
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
-CI executes the same baseline on PHP 8.4.
+CI executes the baseline on PHP 8.4 and Node.js 22.
 
 ## Known limitations
 
 - no custom checkout process is returned yet on PrestaShop 9.2+;
 - the 9.0/9.1 render hook does not mutate the native checkout process yet;
-- address, delivery, payment and summary checkout sections have concrete renderers; identity/agreement renderers are not implemented yet;
-- the shared checkout-session provider currently delegates to an active controller that exposes Core `getCheckoutSession()`; a module-owned AJAX checkout controller still needs a source-backed Core session construction path before carrier/address mutation endpoints can be exposed;
-- payment rendering exists, but payment selection state, secure payment mutation validation, JavaScript option/form reinitialization after AJAX replacement and final-submit handoff are not implemented yet;
-- address add/edit forms are not rendered yet; the current address section covers secure selection of existing saved addresses;
-- no public address/customer/carrier/payment mutation endpoint exists yet;
+- address, delivery, payment, agreements and summary have concrete renderers; identity is not implemented yet;
+- the shared checkout-session provider currently delegates to an active controller exposing Core `getCheckoutSession()`; a module-owned AJAX controller still needs a source-backed Core session construction path before carrier/address mutation endpoints can be exposed;
+- address add/edit forms are not rendered yet; the address section currently covers secure selection of saved addresses;
+- payment JS and server payment-selection validation exist, but no public payment-selection mutation endpoint or final-submit handoff exists yet;
+- agreement rendering and exact-set server validation exist, but no public agreement mutation/final-submit endpoint exists yet;
+- no public address/customer/carrier/payment/agreement mutation endpoint exists yet;
 - no full PrestaShop runtime/Smarty integration test is wired into CI yet;
-- no final-submit flow exists yet;
+- no final-submit/idempotency flow exists yet;
 - Back Office flow activation UI is not implemented yet.
 
 These limitations are intentional safety gates, not production-ready claims.
