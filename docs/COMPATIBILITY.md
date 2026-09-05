@@ -53,6 +53,8 @@ Implemented architecture:
 - discovery through Core `PaymentOptionsFinder::present()` and `actionPresentPaymentOptions`;
 - exact fresh payment-option/module validation before persisting selection authority;
 - ordinary payment form handoff using observable submit lifecycle;
+- ordinary Core-presented form fields/markup remain untouched, while capture-phase direct-submit guarding prevents normal user submission before finalization reservation;
+- ordinary handoff authorization is exact option/form scoped, one-shot, and revoked after the current synchronous handoff stack or on payment/section change;
 - binary/self-submitting handoff through Core's `data-module-name` / `.js-payment-{module}` convention;
 - zero-total orders delegated to Core `free_order` / `OrderConfirmationController`;
 - final preflight and DB-backed duplicate-handoff reservation before native payment control resumes;
@@ -62,12 +64,15 @@ Implemented architecture:
 Still requiring real browser verification:
 
 - representative redirect payment module;
-- representative embedded/form payment module;
+- representative embedded/form payment module, including visible submit and Enter-key attempts before reservation;
 - module with additional information and JavaScript reinitialization;
+- jQuery/native ordinary submit handlers and embedded/tokenization form fields through the one-shot authorization boundary;
 - binary click and binary form-submit paths;
 - thrown/partial third-party native handlers, including proof that automatic release cannot reopen a handoff already in progress;
 - payment failure/retry and abandoned-reservation recovery, including retry after TTL expiry;
 - zero-total free order and duplicate refresh behavior.
+
+The ordinary browser guard applies to observable native submit events. It does not claim to make hostile or third-party low-level JavaScript submission authoritative; representative payment-module browser testing remains mandatory.
 
 ## Carriers
 
@@ -95,4 +100,4 @@ Still requiring real browser verification:
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contract, ordinary-payment-submit guard contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
