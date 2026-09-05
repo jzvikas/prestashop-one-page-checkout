@@ -24,11 +24,11 @@ assertFinalizationReservationRecoveryContract(
     'duplicate-handoff reservation must remain active for a payment-safe default window'
 );
 assertFinalizationReservationRecoveryContract(
-    str_contains($services, '$ttlSeconds: 900'),
+    preg_match('/^\s+\$ttlSeconds:\s*900\s*$/m', $services) === 1,
     'installed service wiring must not override the payment-safe 900-second reservation window'
 );
 assertFinalizationReservationRecoveryContract(
-    !str_contains($services, '$ttlSeconds: 90'),
+    preg_match('/^\s+\$ttlSeconds:\s*90\s*$/m', $services) !== 1,
     'stale 90-second service-container override must not reopen duplicate handoff too early'
 );
 assertFinalizationReservationRecoveryContract(
