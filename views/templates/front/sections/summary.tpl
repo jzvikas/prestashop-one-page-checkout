@@ -1,4 +1,4 @@
-<section class="jzopc-summary" data-checkout-section="summary" aria-live="polite" aria-atomic="true">
+<section class="jzopc-summary" data-jzopc-section="summary" aria-live="polite" aria-atomic="true">
   <h2 class="jzopc-summary__title">{l s='Order summary' d='Modules.Jzonepagecheckout.Shop'}</h2>
 
   {if isset($cart.products_count)}
