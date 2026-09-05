@@ -1,0 +1,115 @@
+name: PrestaShop Runtime
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: PrestaShop ${{ matrix.ps_ref }} runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ps_ref: '9.1.5'
+            family: '9.1'
+            native_opc: '0'
+          - ps_ref: '9.2.0-beta.1'
+            family: '9.2'
+            native_opc: '1'
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: prestashop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout module
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, dom, fileinfo, gd, intl, mbstring, mysqli, pdo_mysql, simplexml, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Install module dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Checkout PrestaShop ${{ matrix.ps_ref }}
+        run: |
+          git clone --depth 1 --branch "${{ matrix.ps_ref }}" https://github.com/PrestaShop/PrestaShop.git /tmp/prestashop
+
+      - name: Install PrestaShop dependencies
+        working-directory: /tmp/prestashop
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Install PrestaShop
+        working-directory: /tmp/prestashop
+        run: |
+          php install-dev/index_cli.php -- \
+            --domain=localhost \
+            --base_uri=/ \
+            --db_server=127.0.0.1:3306 \
+            --db_name=prestashop \
+            --db_user=root \
+            --db_password=root \
+            --prefix=ps_ \
+            --firstname=Runtime \
+            --lastname=Tester \
+            --password='Runtime123!' \
+            --email=runtime@example.com \
+            --language=en \
+            --country=us \
+            --all_languages=0 \
+            --newsletter=0 \
+            --send_email=0 \
+            --ssl=0 \
+            --fixtures=0
+
+      - name: Mount and install jzonepagecheckout
+        run: |
+          rm -rf /tmp/prestashop/modules/jzonepagecheckout
+          ln -s "$GITHUB_WORKSPACE" /tmp/prestashop/modules/jzonepagecheckout
+          cd /tmp/prestashop
+          php bin/console prestashop:module install jzonepagecheckout --no-interaction
+          php bin/console cache:clear --no-warmup
+
+      - name: Install native OPC conflict fixture
+        if: matrix.native_opc == '1'
+        working-directory: /tmp/prestashop
+        run: |
+          rm -rf modules/ps_onepagecheckout
+          git clone https://github.com/PrestaShop/ps_onepagecheckout.git modules/ps_onepagecheckout
+          cd modules/ps_onepagecheckout
+          git checkout 431975196676bc8b4f2d1803625073e30075bb41
+          composer install --no-interaction --no-progress --prefer-dist
+          cd ../..
+          php bin/console prestashop:module install ps_onepagecheckout --no-interaction || \
+            php bin/console prestashop:module enable ps_onepagecheckout --no-interaction
+          php bin/console cache:clear --no-warmup
+
+      - name: Execute installed runtime contract
+        run: |
+          php tests/Runtime/InstalledModuleContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}" \
+            "${{ matrix.native_opc }}"
