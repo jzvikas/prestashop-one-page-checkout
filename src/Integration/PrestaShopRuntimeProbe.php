@@ -18,7 +18,10 @@ final class PrestaShopRuntimeProbe implements RuntimeProbeInterface
 
     public function hookExists(string $hookName): bool
     {
-        if (!class_exists('Hook', false)) {
+        // Capability detection may run before the legacy Hook class has been touched in
+        // the current request/CLI process. Let PrestaShop's autoloader resolve it instead
+        // of treating "not loaded yet" as "not supported".
+        if (!class_exists('Hook')) {
             return false;
         }
 
@@ -27,7 +30,7 @@ final class PrestaShopRuntimeProbe implements RuntimeProbeInterface
 
     public function moduleIsInstalled(string $moduleName): bool
     {
-        if (!class_exists('Module', false)) {
+        if (!class_exists('Module')) {
             return false;
         }
 
@@ -36,7 +39,7 @@ final class PrestaShopRuntimeProbe implements RuntimeProbeInterface
 
     public function moduleIsEnabled(string $moduleName): bool
     {
-        if (!class_exists('Module', false)) {
+        if (!class_exists('Module')) {
             return false;
         }
 
