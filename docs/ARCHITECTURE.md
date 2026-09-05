@@ -30,6 +30,20 @@ Fallback logging contains only an internal stage, exception class and numeric sh
 
 See ADR-0027.
 
+### Controlled pre-readiness active HTTP fixture
+
+Request-path fallback cannot be proven while the production readiness gate is closed, but opening that gate in production source would invalidate the safety boundary. ADR-0029 therefore adds a separate test architecture:
+
+1. the normal source-mounted module first executes the closed-readiness Front Office HTTP contract;
+2. only afterwards the workflow copies the module to `/tmp/jzopc-active-fixture*`;
+3. the readiness constant is changed only inside that disposable copy and the source tree is rechecked as still closed;
+4. `InstrumentActiveCheckoutFailureFixture.php` injects marker checks only into that copy, refusing non-`/tmp` targets, symlinks and ambiguous source anchors;
+5. production `CheckoutShellRenderer`, `PrestaShopCheckoutTemplateRenderer` and `CheckoutFrontendAssetRegistrar` are required to remain free of runtime failure markers;
+6. a Core-created product and the real Core CartController establish one browser cart/cookie session;
+7. that same session must prove healthy OPC, Core-native fallback and healthy recovery for persistence, shell-service, real Smarty missing-template and asset-registration failures.
+
+The active fixture has no payment-finalization action and creates no order. It is pre-readiness verification infrastructure, not an alternate activation mechanism. Its evidence remains provisional until the configured 9.0/9.1/9.2 runtime jobs actually execute.
+
 ## 2. Checkout process and trusted shell
 
 `CheckoutProcessBuilder::prepareShell()` composes the complete OPC shell before a custom Core process is exposed. Empty shell output is rejected. `CheckoutProcessBuilder::buildPrepared()` then creates a real Core `CheckoutProcess` around the exact active Core `CheckoutSession` and a single module `CheckoutShellStep`.
@@ -260,15 +274,16 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab/locked-activation/integration-fallback deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab/locked-activation/integration-fallback deltas have not been executed through the full workflow because GitHub Actions quota/check availability is exhausted. The configured PrestaShop 9.0.3 job, installed failure isolation and controlled four-mode active HTTP fallback matrix remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
-3. execute a controlled browser matrix for native fallback/takeover, including injected shell DB/template/service failures and asset-registration failures, plus guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, locked link/form activation suppression, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
-5. complete responsive/accessibility/performance polish and release packaging;
-6. only then reconsider `INTEGRATION_SHELL_READY`.
+3. execute the controlled active HTTP persistence/service/template/assets fallback matrix on every runtime family and fix all failures;
+4. execute a real browser matrix for guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior, carrier/no-carrier states and active checkout takeover;
+5. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, locked link/form activation suppression, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
+6. complete responsive/accessibility/performance polish and release packaging;
+7. only then reconsider `INTEGRATION_SHELL_READY`.
 
 The module must not be described as production-ready while those gates remain open.
