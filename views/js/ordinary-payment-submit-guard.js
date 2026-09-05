@@ -51,6 +51,9 @@
       }
 
       if (this.isAuthorized(form, selected.id)) {
+        // Authorization is deliberately one observable submit only. A payment handler that keeps
+        // the page alive cannot turn the same reservation into an unlimited direct-submit window.
+        this.clearAuthorization();
         return;
       }
 
@@ -93,6 +96,15 @@
       // succeeds and immediately before it invokes the module-owned submit lifecycle.
       this.authorizedForm = form;
       this.authorizedPaymentOptionId = paymentOptionId;
+
+      // jQuery may complete its synthetic submit path without producing a native submit event that
+      // reaches this capture listener. Revoke the authorization after the current synchronous handoff
+      // stack either way; requestSubmit/native submit events run before this microtask.
+      Promise.resolve().then(() => {
+        if (this.authorizedForm === form && this.authorizedPaymentOptionId === paymentOptionId) {
+          this.clearAuthorization();
+        }
+      });
     }
 
     onCheckoutStateChanged(event) {
