@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup and shop-scoped Back Office activation controls exist in source. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the deferred installed-runtime/browser matrix is executed successfully.
+> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup, native-checkout integration failure containment and shop-scoped Back Office activation controls exist in source. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the deferred installed-runtime/browser matrix is executed successfully.
 
 ## Runtime targets
 
@@ -17,13 +17,16 @@ See `docs/COMPATIBILITY.md` for the exact verified/pending matrix.
 
 The module does not hard-load one checkout API on every PrestaShop 9 release.
 
-- PrestaShop 9.0/9.1: `actionCheckoutRender` replaces only the Core checkout process and reuses the exact active `CheckoutSession`.
-- PrestaShop 9.2+: `actionCheckoutBuildProcess` returns the isolated Core `CheckoutProcessProviderInterface` implementation only when that capability exists.
+- PrestaShop 9.0/9.1: `actionCheckoutRender` receives Core's already-built process. The module reuses its exact `CheckoutSession`, fully prepares the OPC replacement first and assigns the reference only after preparation succeeds.
+- PrestaShop 9.2+: `actionCheckoutBuildProcess` returns the isolated Core `CheckoutProcessProviderInterface` implementation only when the capability exists and the OPC shell has already been prepared successfully. Preparation failure returns no provider so Core can build native checkout.
 - Native `ps_onepagecheckout` conflict detection is part of the shared activation policy.
 - Unsupported or ambiguous runtime capability fails closed to native checkout.
+- Required asset/process preparation failure trips a request-local circuit breaker so later hooks in the same request cannot partially take over checkout.
 - `INTEGRATION_SHELL_READY=false` currently prevents all production takeover.
 
-`CheckoutProcessBuilder` builds a real Core `CheckoutProcess` around one module `CheckoutShellStep`. The step renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+`CheckoutProcessBuilder::prepareShell()` completes the risky DB/template/presenter/third-party shell composition before process takeover. `CheckoutProcessBuilder::buildPrepared()` then builds a real Core `CheckoutProcess` around the exact Core session supplied by the active version path. `CheckoutShellStep` stores the prepared shell but still renders through Core `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+
+Fallback logging contains only an internal stage, exception class and numeric shop/cart identifiers; exception messages and request/payment payloads are deliberately excluded. See ADR-0027.
 
 ## Server-authoritative state and mutation safety
 
@@ -143,7 +146,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 
 - `INTEGRATION_SHELL_READY` remains `false`;
 - execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs, after Actions quota resets and fix every failure;
-- execute controlled HTTP/browser takeover and native-fallback tests;
+- execute controlled HTTP/browser takeover and native-fallback tests, including injected DB/persistence, template/renderer/service and asset-registration failures on the 9.0/9.1 and 9.2 integration families;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
 - verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
