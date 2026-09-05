@@ -221,8 +221,8 @@ $result = $orchestrator->execute(
         assertOrchestrator($currentSelections->selectedPaymentOption === null, 'handler must receive server-loaded selections');
         assertOrchestrator(
             array_map(static fn (CheckoutSection $section): string => $section->value, $requiredSections)
-                === ['delivery', 'payment', 'summary'],
-            'handler must receive dependency-resolved sections'
+                === ['delivery', 'payment', 'agreements', 'summary'],
+            'handler must receive dependency-resolved carrier/payment/legal/totals sections'
         );
         $handlerRan = true;
 
