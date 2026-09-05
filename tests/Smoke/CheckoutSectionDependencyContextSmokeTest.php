@@ -40,12 +40,31 @@ $resolver = new CheckoutSectionDependencyResolver();
 
 assertSectionDependency(
     $values($resolver->affectedBy(
+        CheckoutMutation::IdentityUpdated,
+        new Context(new Cart(false)),
+    )) === ['identity', 'addresses', 'delivery', 'payment', 'agreements', 'summary'],
+    'physical identity mutation must refresh every checkout section',
+);
+assertSectionDependency(
+    $values($resolver->affectedBy(
+        CheckoutMutation::IdentityUpdated,
+        new Context(new Cart(true)),
+    )) === ['identity', 'addresses', 'payment', 'agreements', 'summary'],
+    'virtual identity mutation must refresh all existing sections without fabricating delivery DOM',
+);
+assertSectionDependency(
+    $values($resolver->affectedBy(CheckoutMutation::IdentityUpdated))
+        === ['identity', 'addresses', 'delivery', 'payment', 'agreements', 'summary'],
+    'context-free identity dependency inspection must stay conservative',
+);
+
+assertSectionDependency(
+    $values($resolver->affectedBy(
         CheckoutMutation::AddressSelectionUpdated,
         new Context(new Cart(false)),
     )) === ['addresses', 'delivery', 'payment', 'agreements', 'summary'],
     'physical address mutation must refresh delivery and every downstream section',
 );
-
 assertSectionDependency(
     $values($resolver->affectedBy(
         CheckoutMutation::AddressSelectionUpdated,
@@ -53,7 +72,6 @@ assertSectionDependency(
     )) === ['addresses', 'payment', 'agreements', 'summary'],
     'virtual address mutation must omit the intentionally absent delivery DOM section',
 );
-
 assertSectionDependency(
     $values($resolver->affectedBy(CheckoutMutation::AddressSelectionUpdated))
         === ['addresses', 'delivery', 'payment', 'agreements', 'summary'],
@@ -67,7 +85,6 @@ assertSectionDependency(
     )) === ['delivery', 'payment', 'agreements', 'summary'],
     'physical carrier mutation must refresh carrier UI, payment, legal conditions and totals',
 );
-
 assertSectionDependency(
     $values($resolver->affectedBy(
         CheckoutMutation::CarrierSelected,
@@ -75,7 +92,6 @@ assertSectionDependency(
     )) === ['payment', 'agreements', 'summary'],
     'virtual dependency filtering must not require a nonexistent delivery DOM section',
 );
-
 assertSectionDependency(
     $values($resolver->affectedBy(CheckoutMutation::CarrierSelected))
         === ['delivery', 'payment', 'agreements', 'summary'],

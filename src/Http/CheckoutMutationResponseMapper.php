@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jzvikas\OnePageCheckout\Http;
 
 use Closure;
+use InvalidArgumentException;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationExecutionResult;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationExecutionStatus;
 use Jzvikas\OnePageCheckout\Checkout\CheckoutStateVersioner;
@@ -18,10 +19,17 @@ final readonly class CheckoutMutationResponseMapper
     }
 
     /** @param Closure(string):string $translate */
-    public function map(CheckoutMutationExecutionResult $result, Closure $translate): CheckoutJsonResponse
-    {
+    public function map(
+        CheckoutMutationExecutionResult $result,
+        Closure $translate,
+        ?string $freshCsrfToken = null,
+    ): CheckoutJsonResponse {
+        if ($freshCsrfToken === '') {
+            throw new InvalidArgumentException('A supplied checkout CSRF token must not be empty.');
+        }
+
         return match ($result->status) {
-            CheckoutMutationExecutionStatus::Completed => $this->completed($result),
+            CheckoutMutationExecutionStatus::Completed => $this->completed($result, $freshCsrfToken),
             CheckoutMutationExecutionStatus::Rejected => $this->rejected($result, $translate),
             CheckoutMutationExecutionStatus::Busy => CheckoutJsonResponse::error(
                 409,
@@ -32,12 +40,17 @@ final readonly class CheckoutMutationResponseMapper
         };
     }
 
-    private function completed(CheckoutMutationExecutionResult $result): CheckoutJsonResponse
-    {
+    private function completed(
+        CheckoutMutationExecutionResult $result,
+        ?string $freshCsrfToken,
+    ): CheckoutJsonResponse {
         $refreshResult = $result->refreshResult
             ?? throw new LogicException('Completed mutation execution has no refresh result.');
         $body = $refreshResult->toArray();
         $body['retryable'] = false;
+        if ($freshCsrfToken !== null) {
+            $body['csrfToken'] = $freshCsrfToken;
+        }
 
         return new CheckoutJsonResponse($refreshResult->success ? 200 : 422, $body);
     }

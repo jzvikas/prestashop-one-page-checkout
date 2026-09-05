@@ -50,6 +50,7 @@ final readonly class CheckoutBrowserBootstrapFactory
             cartId: $state->cartId,
             csrfToken: $csrfToken,
             stateVersion: $this->stateVersioner->version($state),
+            identityUrl: $this->moduleLink($link, 'identity'),
             addressUrl: $this->moduleLink($link, 'addressselection'),
             addressSaveUrl: $this->moduleLink($link, 'addresssave'),
             carrierUrl: $this->moduleLink($link, 'carrierselection'),

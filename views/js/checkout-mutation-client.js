@@ -3,6 +3,7 @@
 
   const ROOT_SELECTOR = '[data-jzopc-checkout]';
   const SECTION_SELECTOR = '[data-jzopc-section]';
+  const IDENTITY_FORM_SELECTOR = '[data-jzopc-section="identity"] [data-jzopc-identity-form]';
   const ADDRESS_SECTION_SELECTOR = '[data-jzopc-section="addresses"]';
   const ADDRESS_EDITOR_SELECTOR = '[data-jzopc-address-editor]';
   const ADDRESS_EDITOR_OPEN_SELECTOR = '[data-jzopc-address-editor-open]';
@@ -70,6 +71,7 @@
       const cartId = this.root.dataset.jzopcCartId || '';
       const stateVersion = this.root.dataset.jzopcStateVersion || '';
       const csrfToken = this.root.dataset.jzopcCsrfToken || '';
+      const identityUrl = this.root.dataset.jzopcIdentityUrl || '';
       const addressUrl = this.root.dataset.jzopcAddressUrl || '';
       const addressSaveUrl = this.root.dataset.jzopcAddressSaveUrl || '';
       const carrierUrl = this.root.dataset.jzopcCarrierUrl || '';
@@ -81,6 +83,7 @@
         || Number(cartId) <= 0
         || !stateVersion
         || !csrfToken
+        || !identityUrl
         || !addressUrl
         || !addressSaveUrl
         || !carrierUrl
@@ -93,6 +96,7 @@
       this.cartId = cartId;
       this.stateVersion = stateVersion;
       this.csrfToken = csrfToken;
+      this.identityUrl = identityUrl;
       this.addressUrl = addressUrl;
       this.addressSaveUrl = addressSaveUrl;
       this.carrierUrl = carrierUrl;
@@ -158,6 +162,21 @@
         return;
       }
 
+      const identityContainer = form.closest(IDENTITY_FORM_SELECTOR);
+      if (identityContainer && this.root.contains(identityContainer)) {
+        event.preventDefault();
+        const action = identityContainer.getAttribute('data-jzopc-identity-form') || '';
+        if (action !== 'create' && action !== 'login') {
+          return;
+        }
+
+        const payload = this.serializeForm(form);
+        payload.identityAction = action;
+        this.dispatch('jzopc:identity:submitting', { action });
+        this.mutate(this.identityUrl, payload);
+        return;
+      }
+
       const editor = form.closest(ADDRESS_EDITOR_SELECTOR);
       if (!editor || !this.root.contains(editor)) {
         return;
@@ -169,7 +188,7 @@
         return;
       }
 
-      const payload = this.serializeAddressForm(form);
+      const payload = this.serializeForm(form);
       payload.addressAction = 'save';
       payload.addressRole = role;
       payload.useSameAddress = editor.getAttribute('data-jzopc-use-same-address') === '1' ? '1' : '0';
@@ -218,14 +237,14 @@
         return;
       }
 
-      const payload = this.serializeAddressForm(form);
+      const payload = this.serializeForm(form);
       payload.addressAction = 'present';
       payload.addressRole = role;
       payload.useSameAddress = editor.getAttribute('data-jzopc-use-same-address') === '1' ? '1' : '0';
       this.mutate(this.addressSaveUrl, payload);
     }
 
-    serializeAddressForm(form) {
+    serializeForm(form) {
       const payload = {};
       for (const [rawName, value] of new FormData(form).entries()) {
         const name = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
@@ -392,6 +411,12 @@
       if (payload.redirect !== null && typeof payload.redirect !== 'string') {
         return false;
       }
+      if (
+        Object.prototype.hasOwnProperty.call(payload, 'csrfToken')
+        && (typeof payload.csrfToken !== 'string' || !payload.csrfToken)
+      ) {
+        return false;
+      }
 
       return Object.values(payload.sections).every((html) => typeof html === 'string');
     }
@@ -411,6 +436,9 @@
       }
 
       this.setStateVersion(payload.stateVersion);
+      if (payload.csrfToken) {
+        this.setCsrfToken(payload.csrfToken);
+      }
 
       for (const replacement of replacements) {
         replacement.current.replaceWith(replacement.next);
@@ -477,6 +505,11 @@
     setStateVersion(stateVersion) {
       this.stateVersion = stateVersion;
       this.root.dataset.jzopcStateVersion = stateVersion;
+    }
+
+    setCsrfToken(csrfToken) {
+      this.csrfToken = csrfToken;
+      this.root.dataset.jzopcCsrfToken = csrfToken;
     }
 
     dispatch(name, detail) {

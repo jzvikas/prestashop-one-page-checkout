@@ -16,6 +16,7 @@ function assertMutationJavascript(bool $condition, string $message): void
 assertMutationJavascript(is_string($source) && $source !== '', 'mutation client source must be readable');
 assertMutationJavascript(str_contains($source, 'class JzOpcMutationClient'), 'mutation client class is required');
 assertMutationJavascript(str_contains($source, "'[data-jzopc-checkout]'"), 'client must mount only inside module checkout root');
+assertMutationJavascript(str_contains($source, 'jzopcIdentityUrl'), 'trusted bootstrap must require identity endpoint');
 assertMutationJavascript(str_contains($source, 'jzopcAddressUrl'), 'trusted bootstrap must require saved-address selection endpoint');
 assertMutationJavascript(str_contains($source, 'jzopcAddressSaveUrl'), 'trusted bootstrap must require address form endpoint');
 assertMutationJavascript(str_contains($source, 'jzopcCarrierUrl'), 'trusted bootstrap must require carrier endpoint');
@@ -24,9 +25,17 @@ assertMutationJavascript(str_contains($source, "body.set('cartId', this.cartId)"
 assertMutationJavascript(str_contains($source, "body.set('stateVersion', this.stateVersion)"), 'every mutation must send prior state version');
 assertMutationJavascript(str_contains($source, "new Set(['token', 'cartId', 'stateVersion'])"), 'operation payload must reserve trusted checkout binding names');
 assertMutationJavascript(str_contains($source, 'if (TRUSTED_BINDING_NAMES.has(name))'), 'serialized Core form fields must not overwrite trusted checkout bindings');
+assertMutationJavascript(str_contains($source, 'IDENTITY_FORM_SELECTOR'), 'identity forms must be delegated from the replaceable identity section');
+assertMutationJavascript(str_contains($source, "action !== 'create' && action !== 'login'"), 'identity action must be constrained to create/login');
+assertMutationJavascript(str_contains($source, 'payload.identityAction = action'), 'identity intent must include the server action discriminator');
+assertMutationJavascript(str_contains($source, 'this.mutate(this.identityUrl, payload)'), 'identity form must use the guarded identity endpoint');
+assertMutationJavascript(str_contains($source, "'jzopc:identity:submitting'"), 'identity lifecycle event must be published without form values');
+assertMutationJavascript(str_contains($source, 'new FormData(form).entries()'), 'Core forms must be serialized instead of reimplemented in JavaScript');
+assertMutationJavascript(str_contains($source, "Object.prototype.hasOwnProperty.call(payload, 'csrfToken')"), 'rotated CSRF token must be validated before use');
+assertMutationJavascript(str_contains($source, 'this.setCsrfToken(payload.csrfToken)'), 'completed identity response must be able to rotate browser CSRF authority');
+assertMutationJavascript(str_contains($source, 'this.root.dataset.jzopcCsrfToken = csrfToken'), 'rotated CSRF token must replace the trusted root binding');
 assertMutationJavascript(str_contains($source, "addressAction: 'present'"), 'address editor must be server-rendered on demand');
 assertMutationJavascript(str_contains($source, "payload.addressAction = 'save'"), 'native address form submissions must use the guarded save action');
-assertMutationJavascript(str_contains($source, 'new FormData(form).entries()'), 'native Core address fields must be serialized instead of reimplemented in JavaScript');
 assertMutationJavascript(str_contains($source, 'ADDRESS_EDITOR_COUNTRY_SELECTOR'), 'country changes must request a fresh Core country/state form');
 assertMutationJavascript(str_contains($source, 'this.mutate(this.addressSaveUrl, payload)'), 'address editor requests must use the guarded form endpoint');
 assertMutationJavascript(str_contains($source, "useSameAddress: sameAddressInput.checked ? '1' : '0'"), 'address selection request must send explicit invoice mode');
@@ -47,6 +56,7 @@ assertMutationJavascript(str_contains($source, 'prepareSectionReplacements(paylo
 assertMutationJavascript(str_contains($source, "'jzopc:section:updated'"), 'section reinitialization lifecycle is required');
 assertMutationJavascript(str_contains($source, "'jzopc:checkout:validation-failed'"), 'server validation lifecycle is required');
 assertMutationJavascript(str_contains($source, "'jzopc:checkout:error'"), 'transport error lifecycle is required');
+assertMutationJavascript(!str_contains($source, 'console.log'), 'identity/password payloads must never be logged by the checkout client');
 assertMutationJavascript(!str_contains($source, 'innerHTML = payload'), 'unverified response payload must never be written directly to DOM');
 
 echo "CheckoutMutationJavascriptContractSmokeTest OK\n";

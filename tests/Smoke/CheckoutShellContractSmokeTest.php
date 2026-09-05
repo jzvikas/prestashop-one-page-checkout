@@ -7,6 +7,7 @@ $shell = file_get_contents($root . '/views/templates/front/checkout-shell.tpl');
 $renderer = file_get_contents($root . '/src/Integration/CheckoutShellRenderer.php');
 $factory = file_get_contents($root . '/src/Integration/CheckoutBrowserBootstrapFactory.php');
 $assets = file_get_contents($root . '/src/Integration/CheckoutFrontendAssetRegistrar.php');
+$config = file_get_contents($root . '/config/common/services.yml');
 $module = file_get_contents($root . '/jzonepagecheckout.php');
 
 function assertShellContract(bool $condition, string $message): void
@@ -21,6 +22,7 @@ assertShellContract(is_string($shell) && str_contains($shell, 'data-jzopc-checko
 assertShellContract(str_contains($shell, 'data-jzopc-cart-id'), 'cart bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-state-version'), 'state version bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-csrf-token'), 'CSRF bootstrap is required');
+assertShellContract(str_contains($shell, 'data-jzopc-identity-url'), 'identity endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-address-url'), 'address endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-address-save-url'), 'address-save endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-carrier-url'), 'carrier endpoint bootstrap is required');
@@ -30,14 +32,16 @@ assertShellContract(str_contains($shell, "|escape:'htmlall':'UTF-8'"), 'bootstra
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
 
 assertShellContract(is_string($renderer) && str_contains($renderer, 'CheckoutServerSelectionsStoreInterface'), 'renderer must load canonical server selections');
+assertShellContract(str_contains($renderer, 'CheckoutSection::Identity'), 'identity renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Addresses'), 'addresses renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Delivery'), 'delivery renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Payment'), 'payment renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Agreements'), 'agreements renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Summary'), 'summary renderer is required');
-assertShellContract(!str_contains($renderer, 'CheckoutSection::Identity'), 'unfinished identity renderer must not be fabricated');
+assertShellContract(is_string($config) && str_contains($config, 'IdentitySectionRenderer'), 'identity renderer must be registered in the shared front service graph');
 
 assertShellContract(is_string($factory) && str_contains($factory, '\\Tools::getToken(false)'), 'bootstrap factory must use Core front CSRF token');
+assertShellContract(str_contains($factory, "'identity'"), 'identity URL must be generated server-side');
 assertShellContract(str_contains($factory, "'addressselection'"), 'address URL must be generated server-side');
 assertShellContract(str_contains($factory, "'addresssave'"), 'address-save URL must be generated server-side');
 assertShellContract(str_contains($factory, "'carrierselection'"), 'carrier URL must be generated server-side');

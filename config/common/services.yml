@@ -25,6 +25,10 @@ services:
   Jzvikas\OnePageCheckout\Checkout\CheckoutSectionDependencyResolver: ~
   Jzvikas\OnePageCheckout\Checkout\PrestaShopCheckoutStateFactory: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Identity\CheckoutIdentityService:
+    arguments:
+      $hashing: '@hashing'
+
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService: ~
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressFormService: ~
@@ -59,6 +63,7 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer
+  Jzvikas\OnePageCheckout\Checkout\Rendering\IdentitySectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\PaymentSectionRenderer: ~
@@ -67,6 +72,7 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry:
     arguments:
       $renderers:
+        - '@Jzvikas\OnePageCheckout\Checkout\Rendering\IdentitySectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\PaymentSectionRenderer'
@@ -92,6 +98,9 @@ services:
     alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore
 
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutIdentityMutation:
+    public: true
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAddressSelectionMutation:
     public: true
