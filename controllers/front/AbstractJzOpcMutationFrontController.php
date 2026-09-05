@@ -10,6 +10,14 @@ abstract class JzOnePageCheckoutAbstractMutationModuleFrontController extends Jz
 {
     final protected function handleCheckoutJsonRequest(): CheckoutJsonResponse
     {
+        if (!method_exists($this->module, 'isCustomCheckoutActive') || !$this->module->isCustomCheckoutActive()) {
+            return CheckoutJsonResponse::error(
+                404,
+                'checkout_unavailable',
+                $this->checkoutTranslate('This checkout action is not available.'),
+            );
+        }
+
         if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
             return CheckoutJsonResponse::error(
                 405,

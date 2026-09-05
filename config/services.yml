@@ -80,4 +80,12 @@ services:
     alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore
 
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
-  Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper: ~
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutPaymentSelectionMutation:
+    public: true
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAgreementSelectionMutation:
+    public: true
+
+  Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper:
+    public: true

@@ -125,7 +125,7 @@ final class JzOnePageCheckout extends Module
 
     public function hookActionCheckoutBuildProcess(array $params = []): mixed
     {
-        if (!$this->canActivateCustomCheckout()) {
+        if (!$this->isCustomCheckoutActive()) {
             return null;
         }
 
@@ -134,12 +134,12 @@ final class JzOnePageCheckout extends Module
 
     public function hookActionCheckoutRender(array $params = []): void
     {
-        if (!$this->canActivateCustomCheckout()) {
+        if (!$this->isCustomCheckoutActive()) {
             return;
         }
     }
 
-    private function canActivateCustomCheckout(): bool
+    public function isCustomCheckoutActive(): bool
     {
         if (!$this->integrationClassesAvailable()) {
             return false;
