@@ -28,6 +28,10 @@ assertShellContract(str_contains($shell, 'data-jzopc-address-save-url'), 'addres
 assertShellContract(str_contains($shell, 'data-jzopc-carrier-url'), 'carrier endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-payment-url'), 'payment endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-agreements-url'), 'agreements endpoint bootstrap is required');
+assertShellContract(str_contains($shell, 'data-jzopc-finalization-url'), 'finalization endpoint bootstrap is required');
+assertShellContract(str_contains($shell, 'data-jzopc-final-submit'), 'one clear module-owned final order action is required');
+assertShellContract(str_contains($shell, 'data-jzopc-final-status'), 'final order action needs an accessible live status region');
+assertShellContract(str_contains($shell, "data-jzopc-final-message=\"payment-required\""), 'final submit client messages must come from translated Smarty markup');
 assertShellContract(str_contains($shell, "|escape:'htmlall':'UTF-8'"), 'bootstrap attributes must remain escaped');
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
 
@@ -47,11 +51,13 @@ assertShellContract(str_contains($factory, "'addresssave'"), 'address-save URL m
 assertShellContract(str_contains($factory, "'carrierselection'"), 'carrier URL must be generated server-side');
 assertShellContract(str_contains($factory, "'paymentselection'"), 'payment URL must be generated server-side');
 assertShellContract(str_contains($factory, "'agreements'"), 'agreements URL must be generated server-side');
+assertShellContract(str_contains($factory, "'finalize'"), 'finalization URL must be generated server-side');
 assertShellContract(str_contains($factory, 'stateVersioner->version'), 'bootstrap must derive authoritative state version');
 assertShellContract(str_contains($factory, 'stateFactory->create'), 'bootstrap must derive state from Core context');
 
 assertShellContract(is_string($assets) && str_contains($assets, 'payment-controller.js'), 'payment controller asset must remain registered');
 assertShellContract(str_contains($assets, 'checkout-mutation-client.js'), 'mutation transport asset must remain registered');
+assertShellContract(str_contains($assets, 'final-submit-controller.js'), 'final-submit controller asset must be registered after mutation transport');
 assertShellContract(str_contains($assets, 'registerJavascript'), 'assets must use front controller registration API');
 assertShellContract(is_string($module) && str_contains($module, 'private const INTEGRATION_SHELL_READY = false;'), 'production readiness gate must remain closed');
 

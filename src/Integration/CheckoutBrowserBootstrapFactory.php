@@ -56,6 +56,7 @@ final readonly class CheckoutBrowserBootstrapFactory
             carrierUrl: $this->moduleLink($link, 'carrierselection'),
             paymentUrl: $this->moduleLink($link, 'paymentselection'),
             agreementsUrl: $this->moduleLink($link, 'agreements'),
+            finalizationUrl: $this->moduleLink($link, 'finalize'),
         );
     }
 

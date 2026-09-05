@@ -33,5 +33,13 @@ final readonly class CheckoutFrontendAssetRegistrar
                 'priority' => 151,
             ],
         );
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-final-submit',
+            self::MODULE_PATH . 'views/js/final-submit-controller.js',
+            [
+                'position' => 'bottom',
+                'priority' => 152,
+            ],
+        );
     }
 }
