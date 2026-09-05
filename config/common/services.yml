@@ -106,7 +106,7 @@ services:
   Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore:
     arguments:
       $connection: '@doctrine.dbal.default_connection'
-      $ttlSeconds: 90
+      $ttlSeconds: 900
 
   Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface:
     alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore

@@ -38,8 +38,15 @@ assertFinalizationReservationContract(
     str_contains($services, 'CheckoutFinalizationReservationStoreInterface:'),
     'reservation store interface must be wired in the front container',
 );
-assertFinalizationReservationContract(str_contains($services, '$ttlSeconds: 90'), 'reservation TTL must be explicit in DI');
-assertFinalizationReservationContract(str_contains($module, "$" . "this->version = '0.4.0';"), 'schema change must bump module version');
+assertFinalizationReservationContract(
+    preg_match('/(?m)^\s+\$ttlSeconds:\s+900\s*$/', $services) === 1,
+    'reservation TTL must be explicitly wired to the 15-minute safety window',
+);
+assertFinalizationReservationContract(
+    preg_match('/(?m)^\s+\$ttlSeconds:\s+90\s*$/', $services) !== 1,
+    'reservation TTL must not regress to the obsolete 90-second override',
+);
+assertFinalizationReservationContract(str_contains($module, "$" . "this->version = '0.4.0';"), 'schema change must retain the 0.4.0 schema baseline');
 assertFinalizationReservationContract(str_contains($module, 'CheckoutFinalizationReservationSchema'), 'fresh install/uninstall must manage reservation schema');
 
 echo "CheckoutFinalizationReservationSchemaSmokeTest OK\n";

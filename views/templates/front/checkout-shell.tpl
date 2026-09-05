@@ -11,6 +11,7 @@
   data-jzopc-payment-url="{$jzopc_bootstrap.paymentUrl|escape:'htmlall':'UTF-8'}"
   data-jzopc-agreements-url="{$jzopc_bootstrap.agreementsUrl|escape:'htmlall':'UTF-8'}"
   data-jzopc-finalization-url="{$jzopc_bootstrap.finalizationUrl|escape:'htmlall':'UTF-8'}"
+  data-jzopc-finalization-reserved="{if $jzopc_finalization_reserved}1{else}0{/if}"
 >
   {foreach $jzopc_sections as $jzopc_section_html}
     {$jzopc_section_html nofilter}

@@ -29,6 +29,10 @@ assertShellContract(str_contains($shell, 'data-jzopc-carrier-url'), 'carrier end
 assertShellContract(str_contains($shell, 'data-jzopc-payment-url'), 'payment endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-agreements-url'), 'agreements endpoint bootstrap is required');
 assertShellContract(str_contains($shell, 'data-jzopc-finalization-url'), 'finalization endpoint bootstrap is required');
+assertShellContract(
+    str_contains($shell, 'data-jzopc-finalization-reserved="{if $jzopc_finalization_reserved}1{else}0{/if}"'),
+    'trusted checkout root must expose only the server-derived finalization reservation state',
+);
 assertShellContract(str_contains($shell, 'data-jzopc-final-submit'), 'one clear module-owned final order action is required');
 assertShellContract(str_contains($shell, 'data-jzopc-final-status'), 'final order action needs an accessible live status region');
 assertShellContract(str_contains($shell, "data-jzopc-final-message=\"payment-required\""), 'final submit client messages must come from translated Smarty markup');
@@ -36,6 +40,14 @@ assertShellContract(str_contains($shell, "|escape:'htmlall':'UTF-8'"), 'bootstra
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
 
 assertShellContract(is_string($renderer) && str_contains($renderer, 'CheckoutServerSelectionsStoreInterface'), 'renderer must load canonical server selections');
+assertShellContract(
+    str_contains($renderer, 'CheckoutFinalizationReservationStoreInterface $finalizationReservationStore'),
+    'renderer must load finalization reservation state from server persistence',
+);
+assertShellContract(
+    str_contains($renderer, "'jzopc_finalization_reserved' => $" . "this->finalizationReservationStore->isActive($" . "context)"),
+    'renderer must derive the finalization reservation marker at render time',
+);
 assertShellContract(str_contains($renderer, 'CheckoutSection::Identity'), 'identity renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Addresses'), 'addresses renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Delivery'), 'delivery renderer is required');
