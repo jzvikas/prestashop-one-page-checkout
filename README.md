@@ -82,11 +82,13 @@ Immediately before handoff, preflight revalidates:
 
 A successful begin acquires a DB-backed reservation scoped to shop/cart/state/payment plus a cryptographically random browser attempt ID. This is the cross-tab/process duplicate-handoff barrier. The default reservation window is 15 minutes, with code-level overrides bounded to 60..3600 seconds and expiry based on database time.
 
-An explicit release can clear only its own customer/attempt reservation and now refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
+An explicit release can clear only its own customer/attempt reservation and refuses to remove the barrier after Core reports an order for the cart. If Core order state cannot be determined safely, release fails closed and the bounded TTL remains the recovery path.
 
 Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
 
 Binary/self-submitting options follow Core's `data-module-name` → `.js-payment-{module}` convention. Activation is capture-intercepted, preflighted, then the original module-owned control/form is replayed without synthesizing payment credentials or calling `validateOrder()` from the OPC module.
+
+For both ordinary and binary paths, automatic reservation release is limited to failures that are known to occur before native module-owned activation starts. Once the selected module's `submit`/`click` path has been invoked, a synchronous third-party handler error is treated as an ambiguous partial handoff: the reservation stays active and checkout controls remain frozen until successful Core cleanup or bounded TTL recovery. This avoids reopening a second payment attempt when the first handler may already have performed side effects.
 
 Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationController::checkFreeOrder()`.
 
@@ -141,7 +143,7 @@ GitHub Actions execution is currently deferred because the repository's free Act
 - execute controlled HTTP/browser takeover and native-fallback tests;
 - verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
 - verify representative redirect, embedded and binary payment modules plus failure/retry paths;
-- verify thrown/partial third-party payment handlers cannot reopen an already-started handoff through automatic release;
+- prove in a controlled browser that thrown/partial third-party handlers remain blocked behind the preserved reservation after native activation starts, and recover only through successful Core cleanup or TTL;
 - verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
 - verify representative carrier modules and no-carrier transitions;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
