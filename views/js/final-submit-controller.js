@@ -20,6 +20,7 @@
       this.lockedControls = [];
       this.paymentOptionId = null;
       this.paymentForm = null;
+      this.activeAttemptId = null;
       this.messages = new Map();
       this.onClick = this.onClick.bind(this);
     }
@@ -94,11 +95,9 @@
       }
 
       event.preventDefault();
-      if (this.busy) {
-        return;
+      if (!this.busy) {
+        this.beginFinalization();
       }
-
-      this.beginFinalization();
     }
 
     async beginFinalization() {
@@ -120,14 +119,11 @@
         return;
       }
 
-      // Binary/self-submitting payment modules need a dedicated interception contract so their
-      // own confirmation control cannot bypass server preflight. Until that contract exists,
-      // fail closed rather than pretending the generic native-form handoff is compatible.
+      // Binary/self-submitting options need a dedicated interception/replay contract. Do not expose
+      // a bypass around the server preflight while that compatibility path remains unproven.
       if (selected.classList.contains('binary')) {
         this.showStatus(this.message('binary-required'));
-        this.dispatch('jzopc:checkout:binary-payment-required', {
-          paymentOptionId: selected.id,
-        });
+        this.dispatch('jzopc:checkout:binary-payment-required', { paymentOptionId: selected.id });
         return;
       }
 
@@ -144,6 +140,7 @@
       }
 
       this.busy = true;
+      this.activeAttemptId = attemptId;
       this.paymentOptionId = selected.id;
       this.paymentForm = paymentForm;
       this.setBusyState(true, paymentForm);
@@ -152,13 +149,116 @@
         stateVersion: this.root.dataset.jzopcStateVersion || '',
       });
 
-      await this.send(attemptId, false);
+      let response;
+      try {
+        response = await this.request('begin', attemptId, false);
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          return;
+        }
+
+        await this.bestEffortRelease(attemptId);
+        this.dispatch('jzopc:checkout:error', { message: this.message('submission-failed') });
+        this.fail(this.message('submission-failed'));
+        return;
+      }
+
+      if (!response) {
+        await this.bestEffortRelease(attemptId);
+        this.fail(this.message('submission-failed'));
+        return;
+      }
+
+      const { payload } = response;
+      if (!this.applySections(payload.sections)) {
+        await this.bestEffortRelease(attemptId);
+        this.fail(this.message('review-checkout'));
+        return;
+      }
+
+      if (typeof payload.stateVersion === 'string' && payload.stateVersion) {
+        this.setStateVersion(payload.stateVersion);
+      }
+      if (typeof payload.csrfToken === 'string' && payload.csrfToken) {
+        this.root.dataset.jzopcCsrfToken = payload.csrfToken;
+      }
+
+      if (!payload.success) {
+        const message = this.firstErrorMessage(payload.errors) || this.message('review-checkout');
+        this.dispatch('jzopc:checkout:validation-failed', {
+          errors: payload.errors,
+          stateVersion: this.root.dataset.jzopcStateVersion || '',
+        });
+        this.fail(message);
+        return;
+      }
+
+      if (payload.redirect) {
+        window.location.assign(payload.redirect);
+        return;
+      }
+
+      this.dispatch('jzopc:checkout:final-preflight-completed', {
+        stateVersion: this.root.dataset.jzopcStateVersion || '',
+        paymentOptionId: this.paymentOptionId,
+      });
+      await this.handoffToNativePayment(attemptId);
     }
 
-    async send(attemptId, staleRetried) {
+    async request(action, attemptId, staleRetried) {
       const binding = this.currentBinding();
       if (!binding) {
-        this.fail(this.message('session-changed'));
+        throw new Error('Checkout binding is unavailable.');
+      }
+
+      const body = new URLSearchParams();
+      body.set('token', binding.csrfToken);
+      body.set('cartId', binding.cartId);
+      body.set('stateVersion', binding.stateVersion);
+      body.set('submissionAttempt', attemptId);
+      body.set('finalizationAction', action);
+
+      this.abortController = typeof AbortController === 'function' ? new AbortController() : null;
+      const response = await fetch(this.finalizationUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: body.toString(),
+        signal: this.abortController ? this.abortController.signal : undefined,
+      });
+      const payload = await response.json();
+
+      if (!this.isValidResponse(payload)) {
+        throw new Error('Invalid checkout finalization response.');
+      }
+
+      const stale = action === 'begin'
+        && !payload.success
+        && response.status === 409
+        && payload.retryable === true
+        && payload.errors.some((error) => error && error.code === 'stale_state')
+        && typeof payload.stateVersion === 'string'
+        && payload.stateVersion;
+
+      if (stale && !staleRetried) {
+        this.setStateVersion(payload.stateVersion);
+        return this.request(action, attemptId, true);
+      }
+
+      return { response, payload };
+    }
+
+    async bestEffortRelease(attemptId) {
+      if (!attemptId) {
+        return;
+      }
+
+      const binding = this.currentBinding();
+      if (!binding) {
         return;
       }
 
@@ -167,8 +267,7 @@
       body.set('cartId', binding.cartId);
       body.set('stateVersion', binding.stateVersion);
       body.set('submissionAttempt', attemptId);
-
-      this.abortController = typeof AbortController === 'function' ? new AbortController() : null;
+      body.set('finalizationAction', 'release');
 
       try {
         const response = await fetch(this.finalizationUrl, {
@@ -180,67 +279,13 @@
             'X-Requested-With': 'XMLHttpRequest',
           },
           body: body.toString(),
-          signal: this.abortController ? this.abortController.signal : undefined,
         });
         const payload = await response.json();
-
-        if (!this.isValidResponse(payload)) {
-          throw new Error('Invalid checkout finalization response.');
-        }
-
-        const stale = !payload.success
-          && response.status === 409
-          && payload.retryable === true
-          && payload.errors.some((error) => error && error.code === 'stale_state')
-          && typeof payload.stateVersion === 'string'
-          && payload.stateVersion;
-
-        if (stale && !staleRetried) {
-          this.setStateVersion(payload.stateVersion);
-          await this.send(attemptId, true);
-          return;
-        }
-
-        if (!this.applySections(payload.sections)) {
-          throw new Error('Checkout finalization sections could not be applied safely.');
-        }
-
-        if (typeof payload.stateVersion === 'string' && payload.stateVersion) {
+        if (this.isValidResponse(payload) && typeof payload.stateVersion === 'string' && payload.stateVersion) {
           this.setStateVersion(payload.stateVersion);
         }
-        if (typeof payload.csrfToken === 'string' && payload.csrfToken) {
-          this.root.dataset.jzopcCsrfToken = payload.csrfToken;
-        }
-
-        if (!payload.success) {
-          const message = this.firstErrorMessage(payload.errors) || this.message('review-checkout');
-          this.dispatch('jzopc:checkout:validation-failed', {
-            errors: payload.errors,
-            stateVersion: this.root.dataset.jzopcStateVersion || '',
-          });
-          this.fail(message);
-          return;
-        }
-
-        if (payload.redirect) {
-          window.location.assign(payload.redirect);
-          return;
-        }
-
-        this.dispatch('jzopc:checkout:final-preflight-completed', {
-          stateVersion: this.root.dataset.jzopcStateVersion || '',
-          paymentOptionId: this.paymentOptionId,
-        });
-        this.handoffToNativePayment();
       } catch (error) {
-        if (error && error.name === 'AbortError') {
-          return;
-        }
-
-        this.dispatch('jzopc:checkout:error', {
-          message: this.message('submission-failed'),
-        });
-        this.fail(this.message('submission-failed'));
+        // The database TTL remains the last-resort release path when the browser is offline.
       }
     }
 
@@ -255,29 +300,36 @@
       return { cartId, stateVersion, csrfToken };
     }
 
-    handoffToNativePayment() {
+    async handoffToNativePayment(attemptId) {
       let form = this.paymentForm;
       if (!(form instanceof HTMLFormElement) || !form.isConnected) {
         form = this.findPaymentForm(this.paymentOptionId || '');
       }
 
       if (!(form instanceof HTMLFormElement)) {
+        await this.bestEffortRelease(attemptId);
         this.fail(this.message('payment-changed'));
         return;
       }
 
-      this.dispatch('jzopc:checkout:payment-handoff', {
-        paymentOptionId: this.paymentOptionId,
-      });
+      this.dispatch('jzopc:checkout:payment-handoff', { paymentOptionId: this.paymentOptionId });
 
       try {
-        // Match PrestaShop Core's checkout handoff: submit the payment module's own form/action.
-        // Do not requestSubmit(), synthesize payment inputs or call PaymentModule::validateOrder().
+        // Match PrestaShop's observable submit lifecycle where possible so payment modules that
+        // attach submit handlers still participate. Raw form.submit() is only a last-resort fallback.
+        if (typeof window.jQuery === 'function') {
+          window.jQuery(form).trigger('submit');
+          return;
+        }
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+          return;
+        }
+
         HTMLFormElement.prototype.submit.call(form);
       } catch (error) {
-        this.dispatch('jzopc:checkout:error', {
-          message: this.message('handoff-failed'),
-        });
+        await this.bestEffortRelease(attemptId);
+        this.dispatch('jzopc:checkout:error', { message: this.message('handoff-failed') });
         this.fail(this.message('handoff-failed'));
       }
     }
@@ -361,6 +413,7 @@
 
     fail(message) {
       this.busy = false;
+      this.activeAttemptId = null;
       this.setBusyState(false, null);
       this.paymentOptionId = null;
       this.paymentForm = null;
