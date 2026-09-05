@@ -37,6 +37,11 @@ assert($rendered === ['summary' => '<summary>ok</summary>']);
 assert($template->template === 'sections/summary.tpl');
 assert($template->variables['cart']['totals']['total']['value'] === '€12.00');
 
+$summaryTemplate = file_get_contents(dirname(__DIR__, 2) . '/views/templates/front/sections/summary.tpl');
+assert(is_string($summaryTemplate) && $summaryTemplate !== '');
+assert(str_contains($summaryTemplate, 'data-jzopc-section="summary"'));
+assert(!str_contains($summaryTemplate, 'data-checkout-section="summary"'));
+
 try {
     $registry->render($context, [CheckoutSection::Payment]);
     assert(false, 'Missing renderer must fail closed.');
