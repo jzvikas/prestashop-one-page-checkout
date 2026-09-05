@@ -21,18 +21,18 @@ final readonly class CheckoutMutationOrchestrator
         private CheckoutSectionDependencyResolver $dependencyResolver,
         private PrestaShopCheckoutStateFactory $stateFactory,
         private CheckoutStateVersioner $stateVersioner,
+        private CheckoutServerSelectionsStoreInterface $serverSelectionsStore,
     ) {
     }
 
     /**
      * @param array<string,mixed> $request
-     * @param Closure(CheckoutState,list<CheckoutSection>):CheckoutMutationOutcome $mutationHandler
+     * @param Closure(CheckoutState,list<CheckoutSection>,CheckoutServerSelections):CheckoutMutationOutcome $mutationHandler
      */
     public function execute(
         \Context $context,
         array $request,
         CheckoutMutation $mutation,
-        CheckoutServerSelections $currentSelections,
         Closure $mutationHandler,
     ): CheckoutMutationExecutionResult {
         // Cheap preflight rejection prevents invalid-token traffic from consuming per-cart locks.
@@ -51,7 +51,10 @@ final readonly class CheckoutMutationOrchestrator
         try {
             return $this->cartMutex->synchronized(
                 $cartId,
-                function () use ($context, $request, $mutation, $currentSelections, $mutationHandler): CheckoutMutationExecutionResult {
+                function () use ($context, $request, $mutation, $mutationHandler): CheckoutMutationExecutionResult {
+                    // Server selections are loaded only after the cart lock is held. This makes
+                    // stale-state validation, mutation and persistence one serialized cart operation.
+                    $currentSelections = $this->serverSelectionsStore->load($context);
                     $guardResult = $this->mutationGuard->evaluate($context, $request, $currentSelections);
                     if (!$guardResult->allowed) {
                         return CheckoutMutationExecutionResult::rejected(
@@ -63,7 +66,7 @@ final readonly class CheckoutMutationOrchestrator
                     $currentState = $guardResult->currentState
                         ?? throw new LogicException('Allowed mutation guard result has no current state.');
                     $requiredSections = $this->dependencyResolver->affectedBy($mutation);
-                    $outcome = $mutationHandler($currentState, $requiredSections);
+                    $outcome = $mutationHandler($currentState, $requiredSections, $currentSelections);
 
                     if (!$outcome instanceof CheckoutMutationOutcome) {
                         throw new LogicException('Checkout mutation handler must return CheckoutMutationOutcome.');
@@ -71,11 +74,15 @@ final readonly class CheckoutMutationOrchestrator
 
                     if ($outcome->succeeded()) {
                         $this->assertRequiredSectionsPresent($requiredSections, $outcome->sections);
+                        $this->serverSelectionsStore->save($context, $outcome->serverSelections);
                     }
 
                     // Rebuild from PrestaShop after the handler so Core-calculated totals/eligibility
-                    // are represented in the state token returned to the browser.
-                    $freshState = $this->stateFactory->create($context, $outcome->serverSelections);
+                    // and newly persisted server selections are represented in the returned state token.
+                    $freshSelections = $outcome->succeeded()
+                        ? $outcome->serverSelections
+                        : $currentSelections;
+                    $freshState = $this->stateFactory->create($context, $freshSelections);
                     $freshVersion = $this->stateVersioner->version($freshState);
 
                     $refreshResult = $outcome->succeeded()
