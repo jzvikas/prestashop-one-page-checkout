@@ -25,7 +25,7 @@ final class JzOnePageCheckout extends Module
     {
         $this->name = 'jzonepagecheckout';
         $this->tab = 'checkout';
-        $this->version = '0.1.0';
+        $this->version = '0.2.0';
         $this->author = 'Justinas Zvikas';
         $this->need_instance = 0;
         $this->bootstrap = true;
