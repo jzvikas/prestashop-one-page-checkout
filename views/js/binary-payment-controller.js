@@ -215,6 +215,7 @@
       this.setBusyState(true, binaryContainer);
       this.showStatus('');
       this.dispatch('jzopc:checkout:binary-preflight-started', { paymentOptionId: selected.id });
+      let handoffStarted = false;
 
       try {
         const result = await this.request(attemptId, false);
@@ -265,8 +266,10 @@
         this.replaying = true;
         try {
           if (activation.type === 'click' && activation.target instanceof HTMLElement) {
+            handoffStarted = true;
             activation.target.click();
           } else if (activation.type === 'submit' && activation.target instanceof HTMLFormElement) {
+            handoffStarted = true;
             this.submitForm(activation.target);
           } else {
             throw new Error('Binary payment activation is unavailable.');
@@ -276,6 +279,14 @@
         }
       } catch (error) {
         if (error && error.name === 'AbortError') {
+          return;
+        }
+
+        if (handoffStarted) {
+          // Once the payment module's own click/submit path has started, a synchronous throw is
+          // ambiguous: the handler may already have initiated remote/payment work. Preserve the
+          // reservation and freeze checkout until Core cleanup or the bounded TTL recovery path.
+          this.failClosedHandoff(this.message('handoff-failed'));
           return;
         }
 
@@ -472,6 +483,17 @@
       }
     }
 
+    freezeAllControls() {
+      for (const control of this.root.querySelectorAll('button, input, select, textarea')) {
+        if (control instanceof HTMLButtonElement
+          || control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement) {
+          control.disabled = true;
+        }
+      }
+    }
+
     restoreControls() {
       for (const entry of this.lockedControls) {
         if (entry.control && entry.control.isConnected) {
@@ -479,6 +501,14 @@
         }
       }
       this.lockedControls = [];
+    }
+
+    failClosedHandoff(message) {
+      this.busy = true;
+      this.root.setAttribute('data-jzopc-handoff-uncertain', 'true');
+      this.root.setAttribute('aria-busy', 'true');
+      this.freezeAllControls();
+      this.showStatus(message);
     }
 
     fail(message) {
