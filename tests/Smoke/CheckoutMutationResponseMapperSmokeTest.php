@@ -29,10 +29,12 @@ $completed = $mapper->map(
         CheckoutRefreshResult::success('v1:ok', ['summary' => '<div>ok</div>'])
     ),
     $translate,
+    'rotated-token',
 );
 assertResponseMapper($completed->statusCode === 200, 'successful refresh must map to HTTP 200');
 assertResponseMapper($completed->body['success'] === true, 'successful response body must remain successful');
 assertResponseMapper($completed->body['retryable'] === false, 'completed response must not be marked retryable');
+assertResponseMapper($completed->body['csrfToken'] === 'rotated-token', 'completed guarded response may carry a fresh Core CSRF token');
 
 $validation = $mapper->map(
     CheckoutMutationExecutionResult::completed(
@@ -45,6 +47,7 @@ $validation = $mapper->map(
 );
 assertResponseMapper($validation->statusCode === 422, 'business validation failure must map to HTTP 422');
 assertResponseMapper($validation->body['errors'][0]['code'] === 'invalid_address', 'handler error code must be preserved');
+assertResponseMapper(!array_key_exists('csrfToken', $validation->body), 'ordinary completed responses must not invent token rotation');
 
 $currentState = new CheckoutState(
     shopId: 2,
@@ -63,24 +66,39 @@ $currentState = new CheckoutState(
 $stale = $mapper->map(
     CheckoutMutationExecutionResult::rejected(CheckoutMutationBlockReason::StaleState, $currentState),
     $translate,
+    'must-not-leak',
 );
 assertResponseMapper($stale->statusCode === 409, 'stale state must map to HTTP 409');
 assertResponseMapper($stale->body['retryable'] === true, 'stale state must be retryable after refresh/review');
 assertResponseMapper($stale->body['stateVersion'] === $versioner->version($currentState), 'stale response must expose fresh opaque state version');
 assertResponseMapper(str_starts_with($stale->body['errors'][0]['message'], 'T:'), 'generic guard message must pass through translator callback');
+assertResponseMapper(!array_key_exists('csrfToken', $stale->body), 'rejected requests must never receive replacement CSRF material');
 
 $csrf = $mapper->map(
     CheckoutMutationExecutionResult::rejected(CheckoutMutationBlockReason::InvalidCsrf),
     $translate,
+    'must-not-leak',
 );
 assertResponseMapper($csrf->statusCode === 403, 'invalid CSRF must map to HTTP 403');
 assertResponseMapper($csrf->body['stateVersion'] === null, 'invalid CSRF response must not invent a state version');
 assertResponseMapper($csrf->body['retryable'] === false, 'invalid CSRF must require page/session recovery rather than blind retry');
+assertResponseMapper(!array_key_exists('csrfToken', $csrf->body), 'invalid CSRF rejection must never disclose a replacement token');
 
-$busy = $mapper->map(CheckoutMutationExecutionResult::busy(), $translate);
+$busy = $mapper->map(CheckoutMutationExecutionResult::busy(), $translate, 'must-not-leak');
 assertResponseMapper($busy->statusCode === 409, 'cart lock contention must map to HTTP 409');
 assertResponseMapper($busy->body['errors'][0]['code'] === 'checkout_busy', 'busy response must have stable machine code');
 assertResponseMapper($busy->body['retryable'] === true, 'busy checkout is retryable');
+assertResponseMapper(!array_key_exists('csrfToken', $busy->body), 'busy requests must never receive replacement CSRF material');
+
+try {
+    $mapper->map(
+        CheckoutMutationExecutionResult::completed(CheckoutRefreshResult::success('v1:bad', [])),
+        $translate,
+        '',
+    );
+    assertResponseMapper(false, 'empty replacement CSRF token must fail closed');
+} catch (\InvalidArgumentException) {
+}
 
 $json = $busy->toJson();
 assertResponseMapper(str_contains($json, 'checkout_busy'), 'JSON response must encode stable error code');
