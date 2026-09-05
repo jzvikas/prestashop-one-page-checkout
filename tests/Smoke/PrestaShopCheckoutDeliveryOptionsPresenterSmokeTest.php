@@ -75,9 +75,16 @@ class Context
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 
+use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutDeliveryOptionsPresenter;
 
-$presenter = new PrestaShopCheckoutDeliveryOptionsPresenter();
+$sessionProvider = new class implements CheckoutSessionProviderInterface {
+    public function get(Context $context): object
+    {
+        return $context->controller->getCheckoutSession();
+    }
+};
+$presenter = new PrestaShopCheckoutDeliveryOptionsPresenter($sessionProvider);
 $presented = $presenter->present(new Context());
 
 assert($presented['isVirtual'] === false);

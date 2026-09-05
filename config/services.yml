@@ -20,6 +20,9 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider: ~
+  Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface:
+    alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutCartPresenter: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutCartPresenterInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutCartPresenter
@@ -29,17 +32,22 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutDeliveryOptionsPresenter: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutDeliveryOptionsPresenterInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutDeliveryOptionsPresenter
+  Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutPaymentOptionsPresenter: ~
+  Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutPaymentOptionsPresenterInterface:
+    alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutPaymentOptionsPresenter
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutTemplateRenderer
   Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer: ~
+  Jzvikas\OnePageCheckout\Checkout\Rendering\PaymentSectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\SummarySectionRenderer: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry:
     arguments:
       $renderers:
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\AddressesSectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\DeliverySectionRenderer'
+        - '@Jzvikas\OnePageCheckout\Checkout\Rendering\PaymentSectionRenderer'
         - '@Jzvikas\OnePageCheckout\Checkout\Rendering\SummarySectionRenderer'
 
   Jzvikas\OnePageCheckout\Security\CheckoutCsrfTokenValidator: ~

@@ -6,6 +6,11 @@ namespace Jzvikas\OnePageCheckout\Checkout\Rendering;
 
 final class PrestaShopCheckoutDeliveryOptionsPresenter implements CheckoutDeliveryOptionsPresenterInterface
 {
+    public function __construct(
+        private CheckoutSessionProviderInterface $checkoutSessionProvider,
+    ) {
+    }
+
     public function present(\Context $context): array
     {
         $cart = $context->cart ?? null;
@@ -23,17 +28,11 @@ final class PrestaShopCheckoutDeliveryOptionsPresenter implements CheckoutDelive
             ];
         }
 
-        $controller = $context->controller ?? null;
-        if (!is_object($controller) || !method_exists($controller, 'getCheckoutSession')) {
-            throw new \RuntimeException('The active checkout controller does not expose a Core CheckoutSession.');
-        }
-
         // Native CheckoutDeliveryStep executes this lifecycle hook before rendering carriers.
         \Hook::exec('actionCarrierProcess', ['cart' => $cart]);
 
-        $checkoutSession = $controller->getCheckoutSession();
-        if (!is_object($checkoutSession)
-            || !method_exists($checkoutSession, 'getDeliveryOptions')
+        $checkoutSession = $this->checkoutSessionProvider->get($context);
+        if (!method_exists($checkoutSession, 'getDeliveryOptions')
             || !method_exists($checkoutSession, 'getSelectedDeliveryOption')) {
             throw new \RuntimeException('The Core checkout session does not expose delivery options.');
         }
