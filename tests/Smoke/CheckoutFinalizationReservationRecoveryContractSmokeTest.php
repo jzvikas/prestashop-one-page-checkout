@@ -56,6 +56,15 @@ assertFinalizationReservationRecoveryContract(
     'active reservation lookup must not clear the barrier merely because current cart customer identity differs'
 );
 assertFinalizationReservationRecoveryContract(
+    str_contains($store, 'WHERE id_shop = ? AND id_cart = ? AND expires_at <= UNIX_TIMESTAMP()'),
+    'expired-row cleanup must re-check expiry in the DELETE predicate so it cannot erase a concurrently refreshed reservation'
+);
+assertFinalizationReservationRecoveryContract(
+    str_contains($store, 'if ($deleted === 0)')
+        && str_contains($store, 'return $this->activeReservation($shopId, $cartId);'),
+    'a lost expired-row cleanup race must re-read the cart barrier instead of assuming no active reservation exists'
+);
+assertFinalizationReservationRecoveryContract(
     str_contains($store, 'reservation.id_customer = ? AND reservation.attempt_id = ?'),
     'browser recovery release must remain customer and attempt scoped'
 );
