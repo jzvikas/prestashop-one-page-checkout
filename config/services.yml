@@ -20,6 +20,9 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Payment\CheckoutPaymentSelectionParser: ~
+  Jzvikas\OnePageCheckout\Checkout\Payment\CheckoutPaymentSelectionService: ~
+
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider
