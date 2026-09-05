@@ -16,10 +16,10 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
 
     public function __construct(
         private Connection $connection,
-        private int $ttlSeconds = 90,
+        private int $ttlSeconds = 900,
     ) {
-        if ($this->ttlSeconds < 10 || $this->ttlSeconds > 600) {
-            throw new RuntimeException('Checkout finalization reservation TTL must be between 10 and 600 seconds.');
+        if ($this->ttlSeconds < 60 || $this->ttlSeconds > 3600) {
+            throw new RuntimeException('Checkout finalization reservation TTL must be between 60 and 3600 seconds.');
         }
     }
 
@@ -99,7 +99,7 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
     {
         $attemptId = $this->normalizeAttemptId($attemptId);
         [$shopId, $cartId, $customerId] = $this->identity($context);
-        if ($customerId <= 0) {
+        if ($customerId <= 0 || $this->orderExistsForCart($cartId)) {
             return;
         }
 
@@ -200,6 +200,17 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         }
 
         return [$shopId, $cartId, $customerId];
+    }
+
+    private function orderExistsForCart(int $cartId): bool
+    {
+        try {
+            return (int) \Order::getIdByCartId($cartId) > 0;
+        } catch (Throwable) {
+            // Releasing a duplicate-handoff barrier is not safe when Core order state cannot be
+            // determined. The reservation will still expire through its bounded TTL.
+            return true;
+        }
     }
 
     private function deleteByIdentity(int $shopId, int $cartId): void

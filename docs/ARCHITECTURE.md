@@ -166,7 +166,19 @@ A slower superseded response cannot overwrite newer checkout state.
 - fresh payment-option eligibility;
 - exact fresh mandatory agreements.
 
-A successful begin reserves the handoff in module DB state using shop/cart/state/payment plus a cryptographically random browser attempt ID. The same attempt is idempotent; a competing active attempt fails closed. Release is attempt-scoped and cannot clear another attempt. Expired reservations use a bounded short-TTL cleanup path.
+A successful begin reserves the handoff in module DB state using shop/cart/state/payment plus a cryptographically random browser attempt ID. The same attempt is idempotent; a competing active attempt fails closed.
+
+Reservation recovery is deliberately payment-safe rather than aggressively short:
+
+- default TTL is 900 seconds (15 minutes);
+- code-level overrides are bounded to 60..3600 seconds;
+- expiry is based on database/server time;
+- release is exact shop/cart/customer/attempt scoped;
+- release asks Core whether the cart already has an order and refuses to delete the barrier when it does;
+- failure to determine Core order state also fails closed, leaving bounded TTL expiry as recovery;
+- expired-row purging remains bounded to 100 rows per purge.
+
+This reduces the chance that a slow redirect/payment initialization reopens a second native handoff while the first may still be progressing.
 
 ### Ordinary payment forms
 
@@ -181,6 +193,8 @@ The OPC module does not call `PaymentModule::validateOrder()` as a shortcut.
 ### Binary/self-submitting options
 
 `binary-payment-controller.js` follows Core's `data-module-name` → `.js-payment-{module}` surface identity. It intercepts click/form-submit activation during capture, obtains finalization reservation, then replays the exact original module-owned control/form. Unexpected section replacement immediately before replay fails closed to avoid destroying third-party runtime state.
+
+A remaining browser-hardening boundary is partial native activation: a third-party handler can theoretically start network/payment work and then throw. The browser matrix must prove that recovery never assumes release is safe after module-owned activation has begun; successful Core cleanup or bounded TTL recovery is the conservative fallback when progress is ambiguous.
 
 ### Free orders
 
@@ -217,16 +231,16 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 ## 15. Verification state and next priorities
 
-The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow for PrestaShop 9.1.5 and 9.2.x-era capability/process/Smarty checks. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
+The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. PrestaShop 9.0 installed-runtime coverage and controlled live HTTP/browser coverage are still missing.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
-2. add/execute PrestaShop 9.0 installed-runtime coverage;
+2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation and failed/abandoned payment recovery;
+4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
 
