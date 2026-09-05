@@ -31,6 +31,7 @@ foreach ([
 $contracts = [
     'InstalledModuleContract.php',
     'CoreProcessAdapterContract.php',
+    'IntegrationFailureIsolationContract.php',
     'InstalledSmartyShellContract.php',
     'ModuleFrontCheckoutSessionContract.php',
 ];
@@ -44,6 +45,11 @@ foreach ($contracts as $contract) {
     if (!str_contains($source, "['9.0', '9.1', '9.2']")) {
         $fail(sprintf('%s does not explicitly accept the supported 9.0/9.1/9.2 runtime families.', $contract));
     }
+}
+
+if (!str_contains($workflow, 'Execute integration failure isolation contract')
+    || !str_contains($workflow, 'php tests/Runtime/IntegrationFailureIsolationContract.php')) {
+    $fail('PrestaShop runtime workflow must execute the integration failure isolation contract.');
 }
 
 $installedContract = file_get_contents($root . '/tests/Runtime/InstalledModuleContract.php');
