@@ -16,7 +16,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - Strict server-side activation validation against runtime capabilities, native `ps_onepagecheckout` conflict and the internal readiness gate.
 - Bounded opportunistic garbage collection for abandoned transient checkout-selection rows.
 - `docs/COMPATIBILITY.md` and ADR-0019 documenting rollout and multistore activation rules.
-- `CheckoutFinalizationReservationRecoveryContractSmokeTest.php` and ADR-0022 documenting the hardened duplicate-handoff recovery window and order-aware release rule.
+- `CheckoutFinalizationReservationRecoveryContractSmokeTest.php` and ADR-0022 documenting the hardened duplicate-handoff recovery window, cart-level ownership barrier and order-aware release rule.
 - Final-submit browser contract coverage for the post-activation fail-closed boundary on ordinary and binary payment handoffs.
 - `ordinary-payment-submit-guard.js` to block observable direct submission of selected ordinary Core-presented payment forms before OPC finalization preflight/reservation.
 - `CheckoutOrdinaryPaymentSubmitGuardContractSmokeTest.php` and ADR-0023 documenting the exact-form, one-shot ordinary payment handoff authorization boundary.
@@ -33,6 +33,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 ### Changed
 
 - Finalization reservation default TTL increased from 90 seconds to 900 seconds, with constructor overrides bounded to 60..3600 seconds, so slow redirect/payment initialization cannot reopen the handoff barrier prematurely.
+- An unexpired finalization reservation is now treated as a shop/cart-level payment-handoff barrier before customer comparison. A stale tab or customer-binding transition can no longer delete the active row merely because its current customer ID differs; only the same customer/state/payment/attempt is idempotent, while competing identity/attempt traffic fails closed until exact release, Core order cleanup or TTL expiry.
 - Attempt-scoped reservation release now combines exact shop/cart/customer/attempt matching and Core-order absence in one SQL `DELETE ... NOT EXISTS` statement, removing the previous order-check/delete TOCTOU window while remaining fail-closed on database failure.
 - Ordinary and binary payment adapters no longer automatically release a reservation after module-owned native activation has begun. If a third-party handler throws after submit/click invocation starts, checkout remains frozen behind the reservation until Core successful-order cleanup or bounded TTL recovery.
 - Binary payment preflight publishes `jzopc:checkout:validation-failed`, and `AbortError` is considered a harmless abort only before native click/form activation starts; the same error name after activation is treated as ambiguous and preserves the reservation.
@@ -49,8 +50,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - CI #113 on `239f2ad61a802d351ca92e8106bad4c7a1c5d0bb` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
 - PrestaShop Runtime #63 on the same commit completed successfully for 9.0.3, 9.1.5 and 9.2.0-beta.1. Every family passed module installation, Core process adapter, the new integration-failure-isolation contract, installed Smarty shell, module-front CheckoutSession and fail-closed Front Office HTTP checks.
 - CI #112 previously verified the reservation-browser hardening source/smoke layer on `852181de9687726521f95de479f3f2f58986ce8b`.
-- The atomic reservation-release source/smoke delta, active HTTP/Chromium gates and finalization-preflight Chromium gate have not executed in this delta and must not be counted as passing while GitHub Actions quota remains exhausted.
-- Representative real payment completion, carrier diversity, concurrent-tab finalization, zero-total order completion and full account/address browser flows remain release blockers.
+- The atomic reservation-release, cross-customer cart-level reservation, active HTTP/Chromium and finalization-preflight Chromium deltas have not executed in this delta and must not be counted as passing while GitHub Actions quota remains exhausted.
+- Representative real payment completion, carrier diversity, concurrent-tab/customer-binding finalization, zero-total order completion and full account/address browser flows remain release blockers.
 
 ### Safety
 
@@ -58,8 +59,8 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The active runtime builder refuses to run without an explicit env guard and refuses targets outside `/tmp/jzopc-active-fixture*`; it rechecks the source readiness constant before and after patching the disposable copy.
 - Runtime failure instrumentation exists only in the temporary copied module and production service/template/asset sources are required to stay marker-free.
 - The new finalization-preflight browser contract calls only the real guarded `begin` endpoint while checkout identity is intentionally incomplete; it requires rejection before reservation acquisition and never crosses payment handoff or creates an order.
-- Reservation release remains exact customer/attempt scoped; Core-order absence is now part of the same database statement that removes the barrier, and ambiguous post-activation payment-handler failure still preserves the reservation.
-- No module version bump: reservation release hardening, browser policy, fallback containment and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
+- Active reservation ownership is fail-closed at shop/cart level: a mismatched customer cannot clear an unexpired handoff barrier, while explicit release remains exact customer/attempt scoped; Core-order absence is part of the same database statement that removes the barrier, and ambiguous post-activation payment-handler failure still preserves the reservation.
+- No module version bump: reservation ownership/release hardening, browser policy, fallback containment and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
