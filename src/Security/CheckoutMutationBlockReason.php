@@ -12,4 +12,5 @@ enum CheckoutMutationBlockReason: string
     case CrossCart = 'cross_cart';
     case CustomerMismatch = 'customer_mismatch';
     case StaleState = 'stale_state';
+    case FinalizationInProgress = 'finalization_in_progress';
 }

@@ -25,7 +25,7 @@ final class JzOnePageCheckout extends Module
     {
         $this->name = 'jzonepagecheckout';
         $this->tab = 'checkout';
-        $this->version = '0.3.0';
+        $this->version = '0.4.0';
         $this->author = 'Justinas Zvikas';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -68,28 +68,37 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
-        $schema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema();
-        if (!$schema->install()) {
+        $selectionSchema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema();
+        $finalizationSchema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema();
+        if (!$selectionSchema->install() || !$finalizationSchema->install()) {
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
         }
 
         if (!Configuration::updateValue(self::CONFIG_CHECKOUT_ENABLED, false)) {
-            $schema->uninstall();
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
         }
 
-        $hooks = array_values(array_unique([...$hookPlan->hooks, 'actionFrontControllerSetMedia']));
+        $hooks = array_values(array_unique([
+            ...$hookPlan->hooks,
+            'actionFrontControllerSetMedia',
+            'actionValidateOrderAfter',
+        ]));
         foreach ($hooks as $hookName) {
             if ($this->registerHook($hookName)) {
                 continue;
             }
 
             Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
-            $schema->uninstall();
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
@@ -114,14 +123,16 @@ final class JzOnePageCheckout extends Module
 
     public function uninstall()
     {
-        if (!class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)) {
+        if (!class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)
+            || !class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema::class)) {
             return false;
         }
 
-        $schemaDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema())->uninstall();
+        $finalizationDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema())->uninstall();
+        $selectionDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema())->uninstall();
         $configurationDeleted = Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
 
-        return $schemaDeleted && $configurationDeleted && parent::uninstall();
+        return $finalizationDeleted && $selectionDeleted && $configurationDeleted && parent::uninstall();
     }
 
     public function hookActionCheckoutBuildProcess(array $params = []): mixed
@@ -181,6 +192,29 @@ final class JzOnePageCheckout extends Module
         $registrar->register($this->context);
     }
 
+    public function hookActionValidateOrderAfter(array $params = []): void
+    {
+        $cart = $params['cart'] ?? null;
+        if (!$cart instanceof Cart || (int) ($cart->id ?? 0) <= 0) {
+            return;
+        }
+
+        if (!$this->hasCreatedOrderForCart($params, $cart)) {
+            return;
+        }
+
+        try {
+            $cleanup = $this->get(\Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup::class);
+            if (!$cleanup instanceof \Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup) {
+                return;
+            }
+
+            $cleanup->cleanupForCart($cart);
+        } catch (Throwable $exception) {
+            $this->logOrderCleanupFailure($exception, $cart);
+        }
+    }
+
     public function isCustomCheckoutActive(): bool
     {
         if (!$this->integrationClassesAvailable()) {
@@ -199,6 +233,57 @@ final class JzOnePageCheckout extends Module
         )->allowed;
     }
 
+    /** @param array<string,mixed> $params */
+    private function hasCreatedOrderForCart(array $params, Cart $cart): bool
+    {
+        $cartId = (int) $cart->id;
+        $candidates = [];
+        if (($params['order'] ?? null) instanceof Order) {
+            $candidates[] = $params['order'];
+        }
+        if (is_array($params['orders'] ?? null)) {
+            foreach ($params['orders'] as $order) {
+                if ($order instanceof Order) {
+                    $candidates[] = $order;
+                }
+            }
+        }
+
+        foreach ($candidates as $order) {
+            if ((int) ($order->id ?? 0) > 0 && (int) ($order->id_cart ?? 0) === $cartId) {
+                return true;
+            }
+        }
+
+        try {
+            return (int) Order::getIdByCartId($cartId) > 0;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function logOrderCleanupFailure(Throwable $exception, Cart $cart): void
+    {
+        try {
+            PrestaShopLogger::addLog(
+                sprintf(
+                    'jzonepagecheckout: post-order checkout-state cleanup failed [%s] [shop=%d] [cart=%d]',
+                    $exception::class,
+                    (int) ($cart->id_shop ?? 0),
+                    (int) ($cart->id ?? 0),
+                ),
+                2,
+                null,
+                'Module',
+                (int) ($this->id ?? 0),
+                true,
+            );
+        } catch (Throwable) {
+            // A cleanup/logging failure must never turn an already-created Core order into a
+            // customer-visible payment failure.
+        }
+    }
+
     private function integrationClassesAvailable(): bool
     {
         return class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutHookPlan::class)
@@ -208,6 +293,7 @@ final class JzOnePageCheckout extends Module
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class)
-            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class);
+            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema::class);
     }
 }

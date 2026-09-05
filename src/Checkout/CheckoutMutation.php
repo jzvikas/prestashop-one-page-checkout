@@ -17,5 +17,6 @@ enum CheckoutMutation: string
     case CartChanged = 'cart_changed';
     case PaymentSelected = 'payment_selected';
     case AgreementsChanged = 'agreements_changed';
+    case FinalizationStarted = 'finalization_started';
     case FullRefresh = 'full_refresh';
 }

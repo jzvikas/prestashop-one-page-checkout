@@ -42,6 +42,12 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Agreements\CheckoutAgreementSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Agreements\CheckoutAgreementSelectionService: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationPreflightService: ~
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+    public: true
+
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface:
     alias: Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider
@@ -97,6 +103,14 @@ services:
   Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelectionsStoreInterface:
     alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore
 
+  Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+      $ttlSeconds: 90
+
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface:
+    alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore
+
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutIdentityMutation:
@@ -115,6 +129,9 @@ services:
     public: true
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAgreementSelectionMutation:
+    public: true
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutFinalizationMutation:
     public: true
 
   Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper:

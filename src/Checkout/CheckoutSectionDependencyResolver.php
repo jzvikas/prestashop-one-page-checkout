@@ -46,6 +46,8 @@ final readonly class CheckoutSectionDependencyResolver
             CheckoutMutation::AgreementsChanged => [
                 CheckoutSection::Agreements,
             ],
+
+            CheckoutMutation::FinalizationStarted => [],
         };
 
         $ordered = $this->inCanonicalOrder($affected);

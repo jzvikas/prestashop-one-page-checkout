@@ -18,6 +18,7 @@ final readonly class CheckoutBrowserBootstrap
         public string $carrierUrl,
         public string $paymentUrl,
         public string $agreementsUrl,
+        public string $finalizationUrl,
     ) {
         if ($this->cartId <= 0) {
             throw new InvalidArgumentException('Checkout bootstrap cart ID must be positive.');
@@ -32,6 +33,7 @@ final readonly class CheckoutBrowserBootstrap
             'carrierUrl' => $this->carrierUrl,
             'paymentUrl' => $this->paymentUrl,
             'agreementsUrl' => $this->agreementsUrl,
+            'finalizationUrl' => $this->finalizationUrl,
         ] as $name => $value) {
             if ($value === '') {
                 throw new InvalidArgumentException(sprintf('Checkout bootstrap %s must not be empty.', $name));
@@ -39,7 +41,7 @@ final readonly class CheckoutBrowserBootstrap
         }
     }
 
-    /** @return array{cartId:int,csrfToken:string,stateVersion:string,identityUrl:string,addressUrl:string,addressSaveUrl:string,carrierUrl:string,paymentUrl:string,agreementsUrl:string} */
+    /** @return array{cartId:int,csrfToken:string,stateVersion:string,identityUrl:string,addressUrl:string,addressSaveUrl:string,carrierUrl:string,paymentUrl:string,agreementsUrl:string,finalizationUrl:string} */
     public function toTemplateVariables(): array
     {
         return [
@@ -52,6 +54,7 @@ final readonly class CheckoutBrowserBootstrap
             'carrierUrl' => $this->carrierUrl,
             'paymentUrl' => $this->paymentUrl,
             'agreementsUrl' => $this->agreementsUrl,
+            'finalizationUrl' => $this->finalizationUrl,
         ];
     }
 }
