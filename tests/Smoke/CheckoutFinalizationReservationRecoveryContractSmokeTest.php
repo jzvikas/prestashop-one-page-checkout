@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 $store = file_get_contents($root . '/src/Infrastructure/Persistence/DbalCheckoutFinalizationReservationStore.php');
+$services = file_get_contents($root . '/config/common/services.yml');
 $module = file_get_contents($root . '/jzonepagecheckout.php');
 
 function assertFinalizationReservationRecoveryContract(bool $condition, string $message): void
@@ -15,11 +16,20 @@ function assertFinalizationReservationRecoveryContract(bool $condition, string $
 }
 
 assertFinalizationReservationRecoveryContract(is_string($store), 'finalization reservation store source must be readable');
+assertFinalizationReservationRecoveryContract(is_string($services), 'service container configuration must be readable');
 assertFinalizationReservationRecoveryContract(is_string($module), 'module source must be readable');
 
 assertFinalizationReservationRecoveryContract(
     str_contains($store, 'private int $ttlSeconds = 900'),
     'duplicate-handoff reservation must remain active for a payment-safe default window'
+);
+assertFinalizationReservationRecoveryContract(
+    str_contains($services, '$ttlSeconds: 900'),
+    'installed service wiring must not override the payment-safe 900-second reservation window'
+);
+assertFinalizationReservationRecoveryContract(
+    !str_contains($services, '$ttlSeconds: 90'),
+    'stale 90-second service-container override must not reopen duplicate handoff too early'
 );
 assertFinalizationReservationRecoveryContract(
     str_contains($store, '$this->ttlSeconds < 60 || $this->ttlSeconds > 3600'),
