@@ -6,5 +6,13 @@ use Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReser
 
 function upgrade_module_0_4_0(Module $module): bool
 {
-    return (new CheckoutFinalizationReservationSchema())->install();
+    if (!(new CheckoutFinalizationReservationSchema())->install()) {
+        return false;
+    }
+
+    if ($module->isRegisteredInHook('actionValidateOrderAfter')) {
+        return true;
+    }
+
+    return $module->registerHook('actionValidateOrderAfter');
 }

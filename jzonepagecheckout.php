@@ -86,7 +86,11 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
-        $hooks = array_values(array_unique([...$hookPlan->hooks, 'actionFrontControllerSetMedia']));
+        $hooks = array_values(array_unique([
+            ...$hookPlan->hooks,
+            'actionFrontControllerSetMedia',
+            'actionValidateOrderAfter',
+        ]));
         foreach ($hooks as $hookName) {
             if ($this->registerHook($hookName)) {
                 continue;
@@ -188,6 +192,29 @@ final class JzOnePageCheckout extends Module
         $registrar->register($this->context);
     }
 
+    public function hookActionValidateOrderAfter(array $params = []): void
+    {
+        $cart = $params['cart'] ?? null;
+        if (!$cart instanceof Cart || (int) ($cart->id ?? 0) <= 0) {
+            return;
+        }
+
+        if (!$this->hasCreatedOrderForCart($params, $cart)) {
+            return;
+        }
+
+        try {
+            $cleanup = $this->get(\Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup::class);
+            if (!$cleanup instanceof \Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup) {
+                return;
+            }
+
+            $cleanup->cleanupForCart($cart);
+        } catch (Throwable $exception) {
+            $this->logOrderCleanupFailure($exception, $cart);
+        }
+    }
+
     public function isCustomCheckoutActive(): bool
     {
         if (!$this->integrationClassesAvailable()) {
@@ -204,6 +231,57 @@ final class JzOnePageCheckout extends Module
             featureEnabled: (bool) Configuration::get(self::CONFIG_CHECKOUT_ENABLED),
             integrationShellReady: self::INTEGRATION_SHELL_READY,
         )->allowed;
+    }
+
+    /** @param array<string,mixed> $params */
+    private function hasCreatedOrderForCart(array $params, Cart $cart): bool
+    {
+        $cartId = (int) $cart->id;
+        $candidates = [];
+        if (($params['order'] ?? null) instanceof Order) {
+            $candidates[] = $params['order'];
+        }
+        if (is_array($params['orders'] ?? null)) {
+            foreach ($params['orders'] as $order) {
+                if ($order instanceof Order) {
+                    $candidates[] = $order;
+                }
+            }
+        }
+
+        foreach ($candidates as $order) {
+            if ((int) ($order->id ?? 0) > 0 && (int) ($order->id_cart ?? 0) === $cartId) {
+                return true;
+            }
+        }
+
+        try {
+            return (int) Order::getIdByCartId($cartId) > 0;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function logOrderCleanupFailure(Throwable $exception, Cart $cart): void
+    {
+        try {
+            PrestaShopLogger::addLog(
+                sprintf(
+                    'jzonepagecheckout: post-order checkout-state cleanup failed [%s] [shop=%d] [cart=%d]',
+                    $exception::class,
+                    (int) ($cart->id_shop ?? 0),
+                    (int) ($cart->id ?? 0),
+                ),
+                2,
+                null,
+                'Module',
+                (int) ($this->id ?? 0),
+                true,
+            );
+        } catch (Throwable) {
+            // A cleanup/logging failure must never turn an already-created Core order into a
+            // customer-visible payment failure.
+        }
     }
 
     private function integrationClassesAvailable(): bool

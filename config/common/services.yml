@@ -43,6 +43,10 @@ services:
   Jzvikas\OnePageCheckout\Checkout\Agreements\CheckoutAgreementSelectionService: ~
 
   Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationPreflightService: ~
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutOrderLifecycleCleanup:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+    public: true
 
   Jzvikas\OnePageCheckout\Checkout\Rendering\PrestaShopCheckoutSessionProvider: ~
   Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface:

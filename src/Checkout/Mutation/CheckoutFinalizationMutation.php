@@ -22,6 +22,9 @@ use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry;
 
 final readonly class CheckoutFinalizationMutation
 {
+    private const ACTION_BEGIN = 'begin';
+    private const ACTION_RELEASE = 'release';
+
     public function __construct(
         private CheckoutMutationOrchestrator $orchestrator,
         private CheckoutFinalizationPreflightService $preflightService,
@@ -43,7 +46,8 @@ final readonly class CheckoutFinalizationMutation
             CheckoutMutation::FinalizationStarted,
             function ($state, array $requiredSections, CheckoutServerSelections $currentSelections) use ($context, $request, $translate): CheckoutMutationOutcome {
                 $attemptId = $this->attemptId($request['submissionAttempt'] ?? null);
-                if ($attemptId === null) {
+                $action = $this->action($request['finalizationAction'] ?? null);
+                if ($attemptId === null || $action === null) {
                     return CheckoutMutationOutcome::failure(
                         $currentSelections,
                         [new CheckoutError(
@@ -51,6 +55,14 @@ final readonly class CheckoutFinalizationMutation
                             $translate('The order submission request is invalid. Please try again.'),
                         )],
                     );
+                }
+
+                if ($action === self::ACTION_RELEASE) {
+                    // Recovery is attempt-scoped and still runs behind the normal CSRF/cart/customer/
+                    // stale-state guard. A random/foreign attempt cannot clear another reservation.
+                    $this->reservationStore->releaseAttempt($context, $attemptId);
+
+                    return CheckoutMutationOutcome::success($currentSelections, []);
                 }
 
                 try {
@@ -109,6 +121,11 @@ final readonly class CheckoutFinalizationMutation
         $value = strtolower(trim($value));
 
         return preg_match('/\A[a-f0-9]{32}\z/D', $value) === 1 ? $value : null;
+    }
+
+    private function action(mixed $value): ?string
+    {
+        return $value === self::ACTION_BEGIN || $value === self::ACTION_RELEASE ? $value : null;
     }
 
     /** @param Closure(string):string $translate */

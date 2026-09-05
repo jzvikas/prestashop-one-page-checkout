@@ -41,15 +41,22 @@ assertFinalizationContract(str_contains($reservationSchema, '`attempt_id` CHAR(3
 assertFinalizationContract(str_contains($reservationStore, 'matchesAttempt('), 'same finalization attempt must be retryable idempotently');
 assertFinalizationContract(str_contains($reservationStore, 'hash_equals(strtolower($storedAttempt), $attemptId)'), 'reservation attempt comparison must be constant-time');
 assertFinalizationContract(str_contains($reservationStore, '(expires_at > UNIX_TIMESTAMP()) AS is_active'), 'reservation expiry checks must use the same DB clock as acquisition');
+assertFinalizationContract(str_contains($reservationStore, 'EXPIRED_PURGE_LIMIT = 100'), 'abandoned finalization cleanup must remain bounded');
+assertFinalizationContract(str_contains($reservationStore, "'DELETE FROM `%s` WHERE expires_at <= UNIX_TIMESTAMP() LIMIT %d'"), 'expired reservations must be opportunistically purged without a mandatory cron');
+assertFinalizationContract(str_contains($reservationStore, 'releaseAttempt('), 'local payment handoff recovery must support attempt-scoped release');
+assertFinalizationContract(str_contains($reservationStore, 'AND id_customer = ? AND attempt_id = ?'), 'release must never clear another customer/attempt reservation');
 assertFinalizationContract(str_contains($reservationStore, "'INSERT INTO `%s`"), 'reservation acquisition must be database-backed');
 assertFinalizationContract(str_contains($reservationStore, 'CheckoutFinalizationReservationAlreadyActive'), 'competing finalization attempts must fail closed');
 
 assertFinalizationContract(str_contains($mutation, 'CheckoutMutation::FinalizationStarted'), 'final preflight must run through the serialized checkout orchestrator');
 assertFinalizationContract(str_contains($mutation, "'submissionAttempt'"), 'finalization request must carry an idempotency attempt identifier');
+assertFinalizationContract(str_contains($mutation, "ACTION_BEGIN = 'begin'"), 'finalization begin action must be explicit');
+assertFinalizationContract(str_contains($mutation, "ACTION_RELEASE = 'release'"), 'finalization recovery action must be explicit');
+assertFinalizationContract(str_contains($mutation, '$this->reservationStore->releaseAttempt($context, $attemptId)'), 'release action must clear only the matching attempt inside the guarded critical section');
 assertFinalizationContract(str_contains($mutation, '$this->preflightService->validate($context, $currentSelections)'), 'preflight must execute inside the cart critical section');
 assertFinalizationContract(str_contains($mutation, '$this->reservationStore->acquire('), 'successful preflight must acquire finalization reservation before returning');
 assertFinalizationContract(str_contains($orchestrator, 'CheckoutMutationBlockReason::FinalizationInProgress'), 'normal OPC writes must be frozen while native payment handoff is reserved');
-assertFinalizationContract(str_contains($orchestrator, '$mutation !== CheckoutMutation::FinalizationStarted'), 'idempotent finalization retries must be exempt from the generic mutation freeze');
+assertFinalizationContract(str_contains($orchestrator, '$mutation !== CheckoutMutation::FinalizationStarted'), 'idempotent finalization begin/release requests must be exempt from the generic mutation freeze');
 assertFinalizationContract(str_contains($controller, 'extends JzOnePageCheckoutAbstractMutationModuleFrontController'), 'finalization endpoint must inherit shared POST and activation gates');
 assertFinalizationContract(str_contains($services, "Checkout\\Mutation\\CheckoutFinalizationMutation:\n    public: true"), 'finalization mutation must be an intentional front-controller entry service');
 
