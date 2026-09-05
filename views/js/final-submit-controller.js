@@ -328,9 +328,11 @@
 
         HTMLFormElement.prototype.submit.call(form);
       } catch (error) {
-        await this.bestEffortRelease(attemptId);
+        // Native module-owned activation has already started. A throwing handler may have performed
+        // network/payment side effects before throwing, so releasing here could reopen a duplicate
+        // handoff. Keep the reservation and UI frozen until Core cleanup or bounded TTL recovery.
         this.dispatch('jzopc:checkout:error', { message: this.message('handoff-failed') });
-        this.fail(this.message('handoff-failed'));
+        this.failClosedHandoff(this.message('handoff-failed'));
       }
     }
 
@@ -402,6 +404,17 @@
       }
     }
 
+    freezeAllControls() {
+      for (const control of this.root.querySelectorAll('button, input, select, textarea')) {
+        if (control instanceof HTMLButtonElement
+          || control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement) {
+          control.disabled = true;
+        }
+      }
+    }
+
     restoreControls() {
       for (const entry of this.lockedControls) {
         if (entry.control && entry.control.isConnected) {
@@ -409,6 +422,14 @@
         }
       }
       this.lockedControls = [];
+    }
+
+    failClosedHandoff(message) {
+      this.busy = true;
+      this.root.setAttribute('data-jzopc-handoff-uncertain', 'true');
+      this.root.setAttribute('aria-busy', 'true');
+      this.freezeAllControls();
+      this.showStatus(message);
     }
 
     fail(message) {
