@@ -20,12 +20,16 @@ $fail = static function (string $message): never {
 if ($shopRoot === '' || !is_file($shopRoot . '/config/config.inc.php')) {
     $fail('Installed PrestaShop root is missing or invalid.');
 }
-if (!in_array($expectedFamily, ['9.1', '9.2'], true)) {
-    $fail('Expected runtime family must be 9.1 or 9.2.');
+if (!in_array($expectedFamily, ['9.0', '9.1', '9.2'], true)) {
+    $fail('Expected runtime family must be 9.0, 9.1 or 9.2.');
 }
 
 require_once $shopRoot . '/config/config.inc.php';
 require_once $shopRoot . '/modules/jzonepagecheckout/jzonepagecheckout.php';
+
+if (!str_starts_with((string) _PS_VERSION_, $expectedFamily . '.')) {
+    $fail(sprintf('Installed PrestaShop version %s does not match expected family %s.', _PS_VERSION_, $expectedFamily));
+}
 
 $module = Module::getInstanceByName('jzonepagecheckout');
 if (!$module instanceof JzOnePageCheckout) {
@@ -100,7 +104,7 @@ if (count($steps) !== 1 || !$steps[0] instanceof CheckoutShellStep) {
     $fail('Module checkout process must contain exactly one CheckoutShellStep.');
 }
 
-if ($expectedFamily === '9.1') {
+if (in_array($expectedFamily, ['9.0', '9.1'], true)) {
     $adapter = $module->get(LegacyCheckoutRenderAdapter::class);
     if (!$adapter instanceof LegacyCheckoutRenderAdapter) {
         $fail('LegacyCheckoutRenderAdapter service is unavailable.');
@@ -109,14 +113,14 @@ if ($expectedFamily === '9.1') {
     $coreProcess = new CheckoutProcess($context, $session);
     $params = ['checkoutProcess' => $coreProcess];
     if (!$adapter->replaceProcess($params, $context, $translator)) {
-        $fail('Legacy adapter rejected a real Core CheckoutProcess payload.');
+        $fail(sprintf('PrestaShop %s legacy adapter rejected a real Core CheckoutProcess payload.', $expectedFamily));
     }
     $replacement = $params['checkoutProcess'] ?? null;
     if (!$replacement instanceof CheckoutProcess || $replacement === $coreProcess) {
-        $fail('Legacy adapter did not replace the Core process.');
+        $fail(sprintf('PrestaShop %s legacy adapter did not replace the Core process.', $expectedFamily));
     }
     if ($replacement->getCheckoutSession() !== $session) {
-        $fail('Legacy adapter did not preserve the exact Core CheckoutSession instance.');
+        $fail(sprintf('PrestaShop %s legacy adapter did not preserve the exact Core CheckoutSession instance.', $expectedFamily));
     }
 } else {
     if (!interface_exists('PrestaShop\\PrestaShop\\Adapter\\Order\\Checkout\\CheckoutProcessProviderInterface')) {

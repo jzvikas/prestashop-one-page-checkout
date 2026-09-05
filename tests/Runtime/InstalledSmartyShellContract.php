@@ -17,8 +17,8 @@ $fail = static function (string $message): never {
 if ($shopRoot === '' || !is_file($shopRoot . '/config/config.inc.php')) {
     $fail('Installed PrestaShop root is missing or invalid.');
 }
-if (!in_array($expectedFamily, ['9.1', '9.2'], true)) {
-    $fail('Expected runtime family must be 9.1 or 9.2.');
+if (!in_array($expectedFamily, ['9.0', '9.1', '9.2'], true)) {
+    $fail('Expected runtime family must be 9.0, 9.1 or 9.2.');
 }
 
 require_once $shopRoot . '/config/config.inc.php';
