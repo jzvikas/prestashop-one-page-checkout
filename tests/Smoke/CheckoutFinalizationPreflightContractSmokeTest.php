@@ -30,6 +30,7 @@ assertFinalizationContract(str_contains($preflight, 'checkAllProductsAreStillAva
 assertFinalizationContract(str_contains($preflight, 'checkAllProductsHaveMinimalQuantities()'), 'preflight must recheck minimum quantities');
 assertFinalizationContract(str_contains($preflight, 'checkCountriesAreEnabled()'), 'preflight must recheck country availability');
 assertFinalizationContract(str_contains($preflight, "'minimalPurchaseRequired'"), 'preflight must enforce Core minimum-purchase presentation');
+assertFinalizationContract(str_contains($preflight, 'Core cart presenter omitted required checkout field'), 'missing Core presenter fields must fail closed');
 assertFinalizationContract(str_contains($preflight, 'Customer::customerHasAddress'), 'preflight must reauthorize delivery and invoice addresses');
 assertFinalizationContract(str_contains($preflight, 'new \\AddressValidator()'), 'preflight must use Core address validation');
 assertFinalizationContract(str_contains($preflight, '$this->carrierSelectionService->apply($context, $selection)'), 'physical checkout must revalidate persisted carrier against fresh Core options');
@@ -38,8 +39,8 @@ assertFinalizationContract(str_contains($preflight, '$this->agreementSelectionSe
 
 assertFinalizationContract(str_contains($reservationSchema, '`attempt_id` CHAR(32) NOT NULL'), 'reservation schema must bind an idempotent browser attempt');
 assertFinalizationContract(str_contains($reservationStore, 'matchesAttempt('), 'same finalization attempt must be retryable idempotently');
-assertFinalizationContract(str_contains($reservationStore, "hash_equals(\$storedAttempt, \$attemptId)"), 'reservation attempt comparison must be constant-time');
-assertFinalizationContract(str_contains($reservationStore, 'PRIMARY KEY') === false, 'runtime reservation store must rely on schema uniqueness rather than constructing DDL');
+assertFinalizationContract(str_contains($reservationStore, 'hash_equals(strtolower($storedAttempt), $attemptId)'), 'reservation attempt comparison must be constant-time');
+assertFinalizationContract(str_contains($reservationStore, '(expires_at > UNIX_TIMESTAMP()) AS is_active'), 'reservation expiry checks must use the same DB clock as acquisition');
 assertFinalizationContract(str_contains($reservationStore, "'INSERT INTO `%s`"), 'reservation acquisition must be database-backed');
 assertFinalizationContract(str_contains($reservationStore, 'CheckoutFinalizationReservationAlreadyActive'), 'competing finalization attempts must fail closed');
 

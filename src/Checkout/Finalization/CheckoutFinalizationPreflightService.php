@@ -56,8 +56,7 @@ final readonly class CheckoutFinalizationPreflightService
         }
 
         $minimumPurchaseRequired = $this->presentedValue($presentedCart, 'minimalPurchaseRequired');
-        if ($minimumPurchaseRequired !== null
-            && $minimumPurchaseRequired !== false
+        if ($minimumPurchaseRequired !== false
             && $minimumPurchaseRequired !== ''
             && $minimumPurchaseRequired !== 0
             && $minimumPurchaseRequired !== '0') {
@@ -184,15 +183,29 @@ final readonly class CheckoutFinalizationPreflightService
     private function presentedValue(mixed $presented, string $key): mixed
     {
         if (is_array($presented)) {
-            return $presented[$key] ?? null;
+            if (!array_key_exists($key, $presented) || $presented[$key] === null) {
+                throw new RuntimeException(sprintf('Core cart presenter omitted required checkout field %s.', $key));
+            }
+
+            return $presented[$key];
         }
 
         if ($presented instanceof \ArrayAccess) {
             try {
-                return $presented->offsetGet($key);
-            } catch (Throwable) {
-                return null;
+                $value = $presented->offsetGet($key);
+            } catch (Throwable $exception) {
+                throw new RuntimeException(
+                    sprintf('Core cart presenter could not resolve required checkout field %s.', $key),
+                    0,
+                    $exception,
+                );
             }
+
+            if ($value === null) {
+                throw new RuntimeException(sprintf('Core cart presenter omitted required checkout field %s.', $key));
+            }
+
+            return $value;
         }
 
         throw new RuntimeException('Core cart presenter returned an unsupported checkout payload.');

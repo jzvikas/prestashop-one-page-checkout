@@ -107,7 +107,8 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         $row = $this->connection
             ->executeQuery(
                 sprintf(
-                    'SELECT id_customer, state_version, selected_payment_option, attempt_id, expires_at FROM `%s` '
+                    'SELECT id_customer, state_version, selected_payment_option, attempt_id, '
+                    . '(expires_at > UNIX_TIMESTAMP()) AS is_active FROM `%s` '
                     . 'WHERE id_shop = ? AND id_cart = ? LIMIT 1',
                     $this->tableName(),
                 ),
@@ -119,8 +120,7 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             return null;
         }
 
-        $expiresAt = (int) ($row['expires_at'] ?? 0);
-        if ((int) ($row['id_customer'] ?? -1) !== $customerId || $expiresAt <= time()) {
+        if ((int) ($row['id_customer'] ?? -1) !== $customerId || (int) ($row['is_active'] ?? 0) !== 1) {
             $this->deleteByIdentity($shopId, $cartId);
 
             return null;
