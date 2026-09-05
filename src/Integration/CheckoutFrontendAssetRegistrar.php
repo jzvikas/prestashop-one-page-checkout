@@ -41,5 +41,13 @@ final readonly class CheckoutFrontendAssetRegistrar
                 'priority' => 152,
             ],
         );
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-binary-payment',
+            self::MODULE_PATH . 'views/js/binary-payment-controller.js',
+            [
+                'position' => 'bottom',
+                'priority' => 153,
+            ],
+        );
     }
 }
