@@ -8,23 +8,35 @@ This document describes architecture that exists in the repository now. It delib
 
 ### PrestaShop 9.0 / 9.1
 
-`actionCheckoutRender` receives Core's active `CheckoutProcess` by reference. `LegacyCheckoutRenderAdapter` validates that process, reuses its exact `CheckoutSession`, and replaces only the process object with one built by `CheckoutProcessBuilder`.
+`actionCheckoutRender` receives Core's already-built active `CheckoutProcess` by reference. `LegacyCheckoutRenderAdapter` validates that process, reuses its exact `CheckoutSession`, fully prepares the replacement process and its OPC shell, and only then assigns the replacement to the hook reference. If shell/process preparation throws, the original Core process remains untouched and the module request fails back to native checkout.
 
 ### PrestaShop 9.2+
 
-`actionCheckoutBuildProcess` returns `Integration\Provider\CheckoutProcessProvider` only after the 9.2 provider interface is confirmed to exist. The provider class is isolated from generic code so PrestaShop 9.0/9.1 never need to resolve the 9.2-only interface.
+`actionCheckoutBuildProcess` returns `Integration\Provider\CheckoutProcessProvider` only after the 9.2 provider interface is confirmed to exist and the complete OPC shell has been prepared successfully. If preparation fails, the hook returns `null`; Core's `CheckoutProcessProviderResolver` therefore has no valid module provider and `OrderController` builds the native checkout process. The provider class is isolated from generic code so PrestaShop 9.0/9.1 never need to resolve the 9.2-only interface.
+
+The 9.2+ provider still receives the exact `CheckoutSession` and translator supplied later by Core. It combines those Core-owned objects with the already-prepared shell and does not perform risky module/template/DB shell composition after Core has selected the provider.
 
 `CheckoutActivationPolicy` blocks unsupported capability combinations, an enabled native `ps_onepagecheckout` provider, a disabled merchant feature flag, or a closed integration readiness gate.
 
 `INTEGRATION_SHELL_READY` is currently `false`. Therefore production takeover, module checkout assets and mutation endpoints remain fail-closed even though the underlying code exists.
 
+### Request-local integration failure circuit breaker
+
+The module owns a request-local `checkoutIntegrationFailed` latch. Activation-policy, required frontend-asset, provider-preparation or legacy-preparation failures mark the current request failed. Every later custom-checkout activation decision in that request returns false.
+
+This matters because Core controller execution calls `setMedia()` before `postProcess()`: an OPC asset-registration failure can therefore prevent the later order-controller checkout bootstrap from taking over. If shell preparation fails after assets were registered successfully, native Core checkout still renders; OPC JavaScript remains dormant because it requires the module-owned `[data-jzopc-checkout]` root.
+
+Fallback logging contains only an internal stage, exception class and numeric shop/cart identifiers. It deliberately excludes exception messages, request payloads, tokens and payment/customer data.
+
+See ADR-0027.
+
 ## 2. Checkout process and trusted shell
 
-`CheckoutProcessBuilder` creates a real Core `CheckoutProcess` around the active Core `CheckoutSession` and a single module `CheckoutShellStep`.
+`CheckoutProcessBuilder::prepareShell()` composes the complete OPC shell before a custom Core process is exposed. Empty shell output is rejected. `CheckoutProcessBuilder::buildPrepared()` then creates a real Core `CheckoutProcess` around the exact active Core `CheckoutSession` and a single module `CheckoutShellStep`.
 
-`CheckoutShellStep` extends Core `AbstractCheckoutStep` and renders through inherited `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
+`CheckoutShellStep` stores only the prepared HTML string. It no longer invokes `CheckoutShellRenderer` during the later Core render phase, but it still extends Core `AbstractCheckoutStep` and renders through inherited `renderTemplate()`, preserving `actionCheckoutStepRenderTemplate`.
 
-`CheckoutShellRenderer` composes module sections from the same server-owned cart/context and persisted server selections used by mutation guards. `CheckoutBrowserBootstrapFactory` exposes only trusted bootstrap values required by browser controllers:
+`CheckoutShellRenderer` composes module sections from the server-owned cart/context and persisted server selections used by mutation guards. `CheckoutBrowserBootstrapFactory` exposes only trusted bootstrap values required by browser controllers:
 
 - positive cart ID;
 - Core front CSRF token;
@@ -157,7 +169,7 @@ It provides:
 
 A slower superseded response cannot overwrite newer checkout state.
 
-Generic checkout mutations and ordinary final submit publish `jzopc:checkout:validation-failed` with the guarded server error list. Binary final submit now publishes the same lifecycle before its local failure cleanup. `payment-handoff-ambiguity-guard.js` listens for the exact `finalization_in_progress` error and schedules the fail-closed lock in a microtask so controller cleanup cannot re-enable the losing tab afterwards.
+Generic checkout mutations and ordinary final submit publish `jzopc:checkout:validation-failed` with the guarded server error list. Binary final submit publishes the same lifecycle before its local failure cleanup. `payment-handoff-ambiguity-guard.js` listens for the exact `finalization_in_progress` error and schedules the fail-closed lock in a microtask so controller cleanup cannot re-enable the losing tab afterwards.
 
 If the page was rendered after a reservation already existed, the same guard consumes the trusted boolean shell marker and locks immediately. If the reservation is acquired later by another tab, the machine error provides live convergence without polling. The browser records only a local boolean reserved fact, disables mutable controls, keeps `aria-busy=true` and announces the translated payment-progress warning. This browser state is defense in depth; it cannot release a reservation or authorize payment/order creation.
 
@@ -248,13 +260,13 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab/locked-activation deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/live-tab/locked-activation/integration-fallback deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
-3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
+3. execute a controlled browser matrix for native fallback/takeover, including injected shell DB/template/service failures and asset-registration failures, plus guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
 4. verify representative redirect/embedded/binary payment modules, zero-total free order, two-tab finalization races, reload/back reservation convergence, locked link/form activation suppression, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
