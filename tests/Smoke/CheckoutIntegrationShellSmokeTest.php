@@ -66,4 +66,13 @@ $decision = $policy->decide($capabilities(CheckoutIntegrationStrategy::CheckoutR
 $assertSame(true, $decision->allowed, 'A supported, conflict-free and ready integration must be activatable.');
 $assertSame(null, $decision->blockReason, 'Allowed activation must not carry a block reason.');
 
+$frontServicesPath = dirname(__DIR__, 2) . '/config/front/services.yml';
+$frontServices = is_file($frontServicesPath) ? file_get_contents($frontServicesPath) : false;
+$assertSame(true, is_string($frontServices), 'The PrestaShop front-office service configuration must exist.');
+$assertSame(
+    true,
+    is_string($frontServices) && str_contains($frontServices, '../services.yml'),
+    'The front-office service configuration must import the shared module service graph.'
+);
+
 echo "Checkout integration shell smoke tests passed.\n";
