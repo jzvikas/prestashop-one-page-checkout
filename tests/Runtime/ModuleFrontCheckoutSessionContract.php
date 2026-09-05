@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSessionProviderInterface;
+use Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder;
 
 $shopRoot = $argv[1] ?? '';
 $expectedFamily = $argv[2] ?? '';
@@ -51,17 +52,87 @@ if (!$cart->add()) {
 }
 
 $context->cart = $cart;
+$context->customer = new Customer();
 $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 
-// Deliberately remove the OrderController capability. Module mutation controllers do not expose
-// getCheckoutSession(), so the provider must construct the same Core session shape itself.
+// Deliberately remove the OrderController capability. Real module mutation controllers do not
+// expose getCheckoutSession(), so the private provider dependency must construct the same Core
+// session shape itself. ADR-0011 deliberately keeps such dependencies private; only the actual
+// hook/controller entry services may be fetched through Module::get().
 $context->controller = new stdClass();
 
-$provider = $module->get(CheckoutSessionProviderInterface::class);
+$builder = $module->get(CheckoutProcessBuilder::class);
+if (!$builder instanceof CheckoutProcessBuilder) {
+    $fail('CheckoutProcessBuilder public front entry service is unavailable.');
+}
+
+/**
+ * Walk only the module-owned DI object graph rooted at a public entry service. This verifies the
+ * real front container compiled the private session-provider dependency without making that
+ * dependency public merely for a test.
+ *
+ * @param array<int,true> $seen
+ * @param array<int,CheckoutSessionProviderInterface> $providers
+ */
+$collectProviders = static function (mixed $value, array &$seen, array &$providers, int $depth = 0) use (&$collectProviders): void {
+    if ($depth > 12) {
+        return;
+    }
+
+    if (is_array($value)) {
+        foreach ($value as $item) {
+            $collectProviders($item, $seen, $providers, $depth + 1);
+        }
+
+        return;
+    }
+
+    if (!is_object($value)) {
+        return;
+    }
+
+    $objectId = spl_object_id($value);
+    if (isset($seen[$objectId])) {
+        return;
+    }
+    $seen[$objectId] = true;
+
+    if ($value instanceof CheckoutSessionProviderInterface) {
+        $providers[$objectId] = $value;
+
+        return;
+    }
+
+    $className = get_class($value);
+    if (!str_starts_with($className, 'Jzvikas\\OnePageCheckout\\')) {
+        return;
+    }
+
+    $reflection = new ReflectionObject($value);
+    foreach ($reflection->getProperties() as $property) {
+        if ($property->isStatic() || !$property->isInitialized($value)) {
+            continue;
+        }
+
+        $collectProviders($property->getValue($value), $seen, $providers, $depth + 1);
+    }
+};
+
+$seen = [];
+$providers = [];
+$collectProviders($builder, $seen, $providers);
+if (count($providers) !== 1) {
+    $fail(sprintf(
+        'Public checkout entry graph must contain exactly one private CheckoutSessionProviderInterface dependency; found %d.',
+        count($providers),
+    ));
+}
+
+$provider = reset($providers);
 if (!$provider instanceof CheckoutSessionProviderInterface) {
-    $fail('CheckoutSessionProviderInterface service is unavailable in the module front container.');
+    $fail('CheckoutSessionProviderInterface dependency could not be resolved from the public entry graph.');
 }
 
 $session = $provider->get($context);
@@ -87,7 +158,8 @@ if (!$cart->delete()) {
 }
 
 fwrite(STDOUT, sprintf(
-    "Module-front CheckoutSession contract OK: PrestaShop %s, cart=%d\n",
+    "Module-front CheckoutSession contract OK: PrestaShop %s, cart=%d, provider=%s\n",
     _PS_VERSION_,
     $cartId,
+    get_class($provider),
 ));
