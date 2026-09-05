@@ -35,10 +35,13 @@ final readonly class CheckoutAddressSelectionService
         $initialInvoiceAddressId = (int) ($cart->id_address_invoice ?? 0);
         $targetDeliveryAddressId = $selection->deliveryAddressId ?? $initialDeliveryAddressId;
 
-        if ($selection->deliveryAddressId !== null) {
+        // Revalidate the effective delivery address even when this request only changes invoice
+        // state. A stale/foreign address already present on the cart must never be carried forward
+        // as implicit authority for a new checkout mutation.
+        if ($targetDeliveryAddressId > 0) {
             $this->assertOwnedAddress(
                 $customerId,
-                $selection->deliveryAddressId,
+                $targetDeliveryAddressId,
                 'delivery_address_not_owned',
                 'The selected delivery address is not available for this customer.',
                 'deliveryAddressId',
@@ -54,14 +57,6 @@ final readonly class CheckoutAddressSelectionService
                 );
             }
 
-            // Recheck ownership even when the delivery id came from the cart rather than this request.
-            $this->assertOwnedAddress(
-                $customerId,
-                $targetDeliveryAddressId,
-                'delivery_address_not_owned',
-                'The selected delivery address is not available for this customer.',
-                'deliveryAddressId',
-            );
             $targetInvoiceAddressId = $targetDeliveryAddressId;
         } else {
             $targetInvoiceAddressId = $selection->invoiceAddressId;
