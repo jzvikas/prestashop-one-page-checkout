@@ -132,6 +132,12 @@ jobs:
             /tmp/prestashop \
             "${{ matrix.family }}"
 
+      - name: Execute integration failure isolation contract
+        run: |
+          php tests/Runtime/IntegrationFailureIsolationContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}"
+
       - name: Execute installed Smarty shell contract
         run: |
           php tests/Runtime/InstalledSmartyShellContract.php \
