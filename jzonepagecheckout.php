@@ -16,8 +16,8 @@ final class JzOnePageCheckout extends Module
     public const CONFIG_CHECKOUT_ENABLED = 'JZOPC_CHECKOUT_ENABLED';
 
     /**
-     * Fail closed until a version-specific checkout process/adapter is implemented and tested.
-     * Module installation and hook registration are safe before checkout takeover is enabled.
+     * Fail closed until version-specific checkout process adapters are runtime-tested end to end.
+     * The provider/legacy adapter code exists behind this gate but cannot take over checkout yet.
      */
     private const INTEGRATION_SHELL_READY = false;
 
@@ -25,7 +25,7 @@ final class JzOnePageCheckout extends Module
     {
         $this->name = 'jzonepagecheckout';
         $this->tab = 'checkout';
-        $this->version = '0.2.0';
+        $this->version = '0.3.0';
         $this->author = 'Justinas Zvikas';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -82,7 +82,8 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
-        foreach ($hookPlan->hooks as $hookName) {
+        $hooks = array_values(array_unique([...$hookPlan->hooks, 'actionFrontControllerSetMedia']));
+        foreach ($hooks as $hookName) {
             if ($this->registerHook($hookName)) {
                 continue;
             }
@@ -129,7 +130,21 @@ final class JzOnePageCheckout extends Module
             return null;
         }
 
-        return null;
+        $providerInterface = 'PrestaShop\\PrestaShop\\Adapter\\Order\\Checkout\\CheckoutProcessProviderInterface';
+        $providerClass = \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider::class;
+        if (!interface_exists($providerInterface) || !class_exists($providerClass)) {
+            return null;
+        }
+
+        $builder = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class);
+        if (!$builder instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder) {
+            return null;
+        }
+
+        return new \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider(
+            $this->context,
+            $builder,
+        );
     }
 
     public function hookActionCheckoutRender(array $params = []): void
@@ -137,6 +152,33 @@ final class JzOnePageCheckout extends Module
         if (!$this->isCustomCheckoutActive()) {
             return;
         }
+
+        $adapter = $this->get(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class);
+        if (!$adapter instanceof \Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter) {
+            return;
+        }
+
+        $translator = $this->context->getTranslator();
+        if (!$translator instanceof \Symfony\Contracts\Translation\TranslatorInterface) {
+            return;
+        }
+
+        $adapter->replaceProcess($params, $this->context, $translator);
+    }
+
+    public function hookActionFrontControllerSetMedia(): void
+    {
+        $controller = $this->context->controller ?? null;
+        if (!$controller instanceof OrderController || !$this->isCustomCheckoutActive()) {
+            return;
+        }
+
+        $registrar = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class);
+        if (!$registrar instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar) {
+            return;
+        }
+
+        $registrar->register($this->context);
     }
 
     public function isCustomCheckoutActive(): bool
@@ -163,6 +205,9 @@ final class JzOnePageCheckout extends Module
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class)
             && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class);
     }
 }
