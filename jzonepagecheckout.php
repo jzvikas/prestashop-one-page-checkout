@@ -17,7 +17,8 @@ final class JzOnePageCheckout extends Module
 
     /**
      * Fail closed until a version-specific checkout process/adapter is implemented and tested.
-     * Module installation and hook registration are safe before checkout takeover is enabled.
+     * Module installation, hook registration, shell rendering services and assets are safe before
+     * checkout takeover is enabled because every live integration path checks this gate.
      */
     private const INTEGRATION_SHELL_READY = false;
 
@@ -25,7 +26,7 @@ final class JzOnePageCheckout extends Module
     {
         $this->name = 'jzonepagecheckout';
         $this->tab = 'checkout';
-        $this->version = '0.2.0';
+        $this->version = '0.3.0';
         $this->author = 'Justinas Zvikas';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -82,7 +83,8 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
-        foreach ($hookPlan->hooks as $hookName) {
+        $hooks = array_values(array_unique([...$hookPlan->hooks, 'actionFrontControllerSetMedia']));
+        foreach ($hooks as $hookName) {
             if ($this->registerHook($hookName)) {
                 continue;
             }
@@ -139,6 +141,39 @@ final class JzOnePageCheckout extends Module
         }
     }
 
+    public function hookActionFrontControllerSetMedia(): void
+    {
+        $controller = $this->context->controller ?? null;
+        if (!$controller instanceof OrderController || !$this->isCustomCheckoutActive()) {
+            return;
+        }
+
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-mutation-client',
+            'modules/' . $this->name . '/views/js/checkout-mutation-client.js',
+            [
+                'position' => 'bottom',
+                'priority' => 150,
+            ]
+        );
+        $controller->registerJavascript(
+            'module-jzonepagecheckout-payment-controller',
+            'modules/' . $this->name . '/views/js/payment-controller.js',
+            [
+                'position' => 'bottom',
+                'priority' => 151,
+            ]
+        );
+        $controller->registerStylesheet(
+            'module-jzonepagecheckout-checkout',
+            'modules/' . $this->name . '/views/css/checkout.css',
+            [
+                'media' => 'all',
+                'priority' => 150,
+            ]
+        );
+    }
+
     public function isCustomCheckoutActive(): bool
     {
         if (!$this->integrationClassesAvailable()) {
@@ -163,6 +198,7 @@ final class JzOnePageCheckout extends Module
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutShellRenderer::class)
             && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class);
     }
 }
