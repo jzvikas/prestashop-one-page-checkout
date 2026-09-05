@@ -40,6 +40,22 @@ assertFinalizationReservationRecoveryContract(
     'reservation expiry must remain server/database-time based'
 );
 assertFinalizationReservationRecoveryContract(
+    !str_contains($store, 'id_customer <> ?'),
+    'a stale or mismatched customer request must never delete an unexpired cart reservation'
+);
+assertFinalizationReservationRecoveryContract(
+    str_contains($store, 'private function activeReservation(int $shopId, int $cartId): ?array'),
+    'active reservation lookup must treat the shop/cart row as the cross-tab handoff barrier before customer comparison'
+);
+assertFinalizationReservationRecoveryContract(
+    substr_count($store, "(int) (\$existing['id_customer'] ?? -1) === \$customerId") >= 2,
+    'same-attempt idempotency must also require the reservation customer to match in normal and insert-race paths'
+);
+assertFinalizationReservationRecoveryContract(
+    !str_contains($store, "(int) (\$row['id_customer'] ?? -1) !== \$customerId"),
+    'active reservation lookup must not clear the barrier merely because current cart customer identity differs'
+);
+assertFinalizationReservationRecoveryContract(
     str_contains($store, 'reservation.id_customer = ? AND reservation.attempt_id = ?'),
     'browser recovery release must remain customer and attempt scoped'
 );
