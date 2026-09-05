@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Jzvikas\OnePageCheckout\Checkout\CheckoutMutationExecutionStatus;
 use Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutIdentityMutation;
 use Jzvikas\OnePageCheckout\Http\CheckoutJsonResponse;
 use Jzvikas\OnePageCheckout\Http\CheckoutMutationResponseMapper;
@@ -20,10 +21,19 @@ final class JzOnePageCheckoutIdentityModuleFrontController extends JzOnePageChec
 
         $request = Tools::getAllValues();
         $translate = fn (string $message): string => $this->checkoutTranslate($message);
+        $result = $mutation->execute($this->context, $request, $translate);
 
-        return $mapper->map(
-            $mutation->execute($this->context, $request, $translate),
-            $translate,
-        );
+        // Customer creation/login updates the Core Context/cookie and can rotate the
+        // front-office token. Only a request that already passed the mutation guard may
+        // receive a replacement token; rejected CSRF requests never get token material.
+        $freshCsrfToken = null;
+        if ($result->status === CheckoutMutationExecutionStatus::Completed) {
+            $freshCsrfToken = (string) Tools::getToken(false);
+            if ($freshCsrfToken === '') {
+                throw new RuntimeException('Checkout CSRF token is unavailable after identity mutation.');
+            }
+        }
+
+        return $mapper->map($result, $translate, $freshCsrfToken);
     }
 }
