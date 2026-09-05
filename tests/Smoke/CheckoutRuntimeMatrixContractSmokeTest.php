@@ -53,7 +53,7 @@ if (!is_string($installedContract)) {
 if (str_contains($installedContract, "!== '0.3.0'")) {
     $fail('Installed runtime contract still hard-codes the obsolete 0.3.0 module version.');
 }
-if (!str_contains($installedContract, "version_compare((string) $module->version, '0.4.0', '<')")) {
+if (!str_contains($installedContract, 'version_compare((string) $module->version, \'0.4.0\', \'<\')')) {
     $fail('Installed runtime contract must require at least the 0.4.0 finalization schema baseline.');
 }
 if (!str_contains($installedContract, "isRegisteredInHook('actionValidateOrderAfter')")) {
