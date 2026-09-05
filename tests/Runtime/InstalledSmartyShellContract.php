@@ -89,9 +89,17 @@ if (!$process instanceof CheckoutProcess || $process->getCheckoutSession() !== $
     $fail('Checkout process did not preserve the real Core CheckoutSession.');
 }
 
+// Mirror the real Core checkout lifecycle before rendering. AbstractCheckoutStep starts
+// unreachable and getTemplate() intentionally returns Core's unreachable.tpl until
+// CheckoutProcess::handleRequest() delegates to the module step.
+$process->handleRequest([]);
+
 $steps = $process->getSteps();
 if (count($steps) !== 1 || !$steps[0] instanceof CheckoutShellStep) {
     $fail('Module process did not expose exactly one CheckoutShellStep.');
+}
+if (!$steps[0]->isReachable() || !$steps[0]->isCurrent() || $steps[0]->isComplete()) {
+    $fail('CheckoutShellStep did not establish the expected reachable/current/incomplete Core lifecycle state.');
 }
 
 $html = $steps[0]->render();
@@ -117,6 +125,10 @@ $requiredFragments = [
     'data-jzopc-carrier-url="',
     'data-jzopc-payment-url="',
     'data-jzopc-agreements-url="',
+    'data-jzopc-finalization-url="',
+    'data-jzopc-finalization-reserved="0"',
+    'data-jzopc-final-submit',
+    'data-jzopc-final-status',
 ];
 foreach ($requiredFragments as $fragment) {
     if (!str_contains($html, $fragment)) {
@@ -134,6 +146,9 @@ foreach ([
     'data-jzopc-section="payment"',
     'data-jzopc-section="agreements"',
     'data-jzopc-section="summary"',
+    'data-jzopc-finalization-reserved="0"',
+    'data-jzopc-final-submit',
+    'data-jzopc-final-status',
 ] as $uniqueFragment) {
     if (substr_count($html, $uniqueFragment) !== 1) {
         $fail(sprintf('Rendered checkout shell must contain exactly one %s marker.', $uniqueFragment));
@@ -154,7 +169,7 @@ if (substr_count($html, $cartBinding) !== 1) {
     $fail('Rendered checkout bootstrap is not uniquely bound to the runtime cart.');
 }
 
-foreach (['csrf-token', 'state-version', 'identity-url', 'address-url', 'address-save-url', 'carrier-url', 'payment-url', 'agreements-url'] as $attribute) {
+foreach (['csrf-token', 'state-version', 'identity-url', 'address-url', 'address-save-url', 'carrier-url', 'payment-url', 'agreements-url', 'finalization-url'] as $attribute) {
     if (!preg_match('/data-jzopc-' . preg_quote($attribute, '/') . '="([^"]+)"/', $html, $matches)) {
         $fail(sprintf('Rendered checkout bootstrap attribute %s is unavailable.', $attribute));
     }
@@ -170,6 +185,7 @@ $controllerTargets = [
     'carrier' => 'carrierselection',
     'payment' => 'paymentselection',
     'agreements' => 'agreements',
+    'finalization' => 'finalize',
 ];
 foreach ($controllerTargets as $attribute => $controller) {
     if (!preg_match('/data-jzopc-' . preg_quote($attribute, '/') . '-url="([^"]+)"/', $html, $matches)) {
