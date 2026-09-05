@@ -24,7 +24,7 @@ The contract:
 - requires address, payment, agreement and summary section roots exactly once and requires delivery exactly once for a physical cart while forbidding it for a virtual cart;
 - requires the rendered process to preserve the exact supplied Core `CheckoutSession`;
 - requires the bootstrap cart ID to equal the persisted server cart exactly once;
-- requires non-empty CSRF token, state version and payment/agreement mutation URLs;
+- requires non-empty CSRF token, state version and address/payment/agreement mutation URLs;
 - requires those URLs to target the module's concrete mutation controllers;
 - cleans up the runtime cart after the contract.
 
