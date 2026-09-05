@@ -133,19 +133,10 @@
         payload.deliveryAddressId = deliveryInput.value;
       }
 
-      if (!sameAddressInput.checked) {
-        if (!(invoiceInput instanceof HTMLInputElement) || !invoiceInput.value) {
-          this.dispatch('jzopc:checkout:validation-failed', {
-            errors: [{
-              code: 'invoice_address_required',
-              message: 'Please select an invoice address.',
-              field: 'invoiceAddressId',
-            }],
-            stateVersion: this.stateVersion,
-            sequence: this.latestSequence,
-          });
-          return;
-        }
+      // Do not fabricate a client-side translated validation message. If separate invoice mode has
+      // no selected invoice address, omit the id and let the guarded server parser return the
+      // canonical translated invoice_address_required error and authoritative section state.
+      if (!sameAddressInput.checked && invoiceInput instanceof HTMLInputElement && invoiceInput.value) {
         payload.invoiceAddressId = invoiceInput.value;
       }
 
