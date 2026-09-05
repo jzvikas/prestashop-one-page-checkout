@@ -3,6 +3,12 @@
 
   const ROOT_SELECTOR = '[data-jzopc-checkout]';
   const SECTION_SELECTOR = '[data-jzopc-section]';
+  const ADDRESS_SECTION_SELECTOR = '[data-jzopc-section="addresses"]';
+  const ADDRESS_INPUT_SELECTOR = [
+    ADDRESS_SECTION_SELECTOR + ' input[name="id_address_delivery"]',
+    ADDRESS_SECTION_SELECTOR + ' input[name="id_address_invoice"]',
+    ADDRESS_SECTION_SELECTOR + ' input[name="use_same_address"]',
+  ].join(',');
   const AGREEMENT_SELECTOR = '[data-jzopc-section="agreements"] input[name="agreements[]"]';
   const instances = new WeakMap();
 
@@ -13,7 +19,7 @@
       this.listenerAbortController = typeof AbortController === 'function' ? new AbortController() : null;
       this.latestSequence = 0;
       this.onPaymentSelected = this.onPaymentSelected.bind(this);
-      this.onAgreementChanged = this.onAgreementChanged.bind(this);
+      this.onCheckoutInputChanged = this.onCheckoutInputChanged.bind(this);
     }
 
     start() {
@@ -26,7 +32,7 @@
         : undefined;
 
       this.root.addEventListener('jzopc:payment:selected', this.onPaymentSelected, listenerOptions);
-      this.root.addEventListener('change', this.onAgreementChanged, listenerOptions);
+      this.root.addEventListener('change', this.onCheckoutInputChanged, listenerOptions);
       this.dispatch('jzopc:checkout:initialized', { stateVersion: this.stateVersion });
 
       return true;
@@ -42,7 +48,7 @@
         this.listenerAbortController.abort();
       } else {
         this.root.removeEventListener('jzopc:payment:selected', this.onPaymentSelected);
-        this.root.removeEventListener('change', this.onAgreementChanged);
+        this.root.removeEventListener('change', this.onCheckoutInputChanged);
       }
 
       instances.delete(this.root);
@@ -52,16 +58,26 @@
       const cartId = this.root.dataset.jzopcCartId || '';
       const stateVersion = this.root.dataset.jzopcStateVersion || '';
       const csrfToken = this.root.dataset.jzopcCsrfToken || '';
+      const addressUrl = this.root.dataset.jzopcAddressUrl || '';
       const paymentUrl = this.root.dataset.jzopcPaymentUrl || '';
       const agreementsUrl = this.root.dataset.jzopcAgreementsUrl || '';
 
-      if (!/^\d+$/.test(cartId) || Number(cartId) <= 0 || !stateVersion || !csrfToken || !paymentUrl || !agreementsUrl) {
+      if (
+        !/^\d+$/.test(cartId)
+        || Number(cartId) <= 0
+        || !stateVersion
+        || !csrfToken
+        || !addressUrl
+        || !paymentUrl
+        || !agreementsUrl
+      ) {
         return false;
       }
 
       this.cartId = cartId;
       this.stateVersion = stateVersion;
       this.csrfToken = csrfToken;
+      this.addressUrl = addressUrl;
       this.paymentUrl = paymentUrl;
       this.agreementsUrl = agreementsUrl;
 
@@ -80,12 +96,68 @@
       });
     }
 
-    onAgreementChanged(event) {
+    onCheckoutInputChanged(event) {
       const target = event.target;
-      if (!(target instanceof HTMLInputElement) || !target.matches(AGREEMENT_SELECTOR)) {
+      if (!(target instanceof HTMLInputElement)) {
         return;
       }
 
+      if (target.matches(ADDRESS_INPUT_SELECTOR)) {
+        this.onAddressChanged();
+        return;
+      }
+
+      if (target.matches(AGREEMENT_SELECTOR)) {
+        this.onAgreementChanged();
+      }
+    }
+
+    onAddressChanged() {
+      const addressSection = this.root.querySelector(ADDRESS_SECTION_SELECTOR);
+      if (!addressSection) {
+        return;
+      }
+
+      const sameAddressInput = addressSection.querySelector('input[name="use_same_address"]');
+      if (!(sameAddressInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const deliveryInput = addressSection.querySelector('input[name="id_address_delivery"]:checked');
+      const invoiceInput = addressSection.querySelector('input[name="id_address_invoice"]:checked');
+      const payload = {
+        useSameAddress: sameAddressInput.checked ? '1' : '0',
+      };
+
+      if (deliveryInput instanceof HTMLInputElement && deliveryInput.value) {
+        payload.deliveryAddressId = deliveryInput.value;
+      }
+
+      if (!sameAddressInput.checked) {
+        if (!(invoiceInput instanceof HTMLInputElement) || !invoiceInput.value) {
+          this.dispatch('jzopc:checkout:validation-failed', {
+            errors: [{
+              code: 'invoice_address_required',
+              message: 'Please select an invoice address.',
+              field: 'invoiceAddressId',
+            }],
+            stateVersion: this.stateVersion,
+            sequence: this.latestSequence,
+          });
+          return;
+        }
+        payload.invoiceAddressId = invoiceInput.value;
+      }
+
+      this.dispatch('jzopc:address:selected', {
+        deliveryAddressId: payload.deliveryAddressId || null,
+        invoiceAddressId: payload.invoiceAddressId || null,
+        useSameAddress: sameAddressInput.checked,
+      });
+      this.mutate(this.addressUrl, payload);
+    }
+
+    onAgreementChanged() {
       const agreements = Array.from(this.root.querySelectorAll(AGREEMENT_SELECTOR))
         .filter((input) => input.checked)
         .map((input) => input.value);
