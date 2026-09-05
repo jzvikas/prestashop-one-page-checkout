@@ -97,6 +97,14 @@ services:
   Jzvikas\OnePageCheckout\Checkout\CheckoutServerSelectionsStoreInterface:
     alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutServerSelectionsStore
 
+  Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore:
+    arguments:
+      $connection: '@doctrine.dbal.default_connection'
+      $ttlSeconds: 90
+
+  Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface:
+    alias: Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore
+
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutIdentityMutation:

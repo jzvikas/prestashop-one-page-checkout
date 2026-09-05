@@ -25,7 +25,7 @@ final class JzOnePageCheckout extends Module
     {
         $this->name = 'jzonepagecheckout';
         $this->tab = 'checkout';
-        $this->version = '0.3.0';
+        $this->version = '0.4.0';
         $this->author = 'Justinas Zvikas';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -68,15 +68,19 @@ final class JzOnePageCheckout extends Module
             return false;
         }
 
-        $schema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema();
-        if (!$schema->install()) {
+        $selectionSchema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema();
+        $finalizationSchema = new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema();
+        if (!$selectionSchema->install() || !$finalizationSchema->install()) {
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
         }
 
         if (!Configuration::updateValue(self::CONFIG_CHECKOUT_ENABLED, false)) {
-            $schema->uninstall();
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
@@ -89,7 +93,8 @@ final class JzOnePageCheckout extends Module
             }
 
             Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
-            $schema->uninstall();
+            $finalizationSchema->uninstall();
+            $selectionSchema->uninstall();
             parent::uninstall();
 
             return false;
@@ -114,14 +119,16 @@ final class JzOnePageCheckout extends Module
 
     public function uninstall()
     {
-        if (!class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)) {
+        if (!class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)
+            || !class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema::class)) {
             return false;
         }
 
-        $schemaDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema())->uninstall();
+        $finalizationDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema())->uninstall();
+        $selectionDeleted = (new \Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema())->uninstall();
         $configurationDeleted = Configuration::deleteByName(self::CONFIG_CHECKOUT_ENABLED);
 
-        return $schemaDeleted && $configurationDeleted && parent::uninstall();
+        return $finalizationDeleted && $selectionDeleted && $configurationDeleted && parent::uninstall();
     }
 
     public function hookActionCheckoutBuildProcess(array $params = []): mixed
@@ -208,6 +215,7 @@ final class JzOnePageCheckout extends Module
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class)
             && class_exists(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class)
-            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class);
+            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutServerSelectionsSchema::class)
+            && class_exists(\Jzvikas\OnePageCheckout\Infrastructure\Persistence\CheckoutFinalizationReservationSchema::class);
     }
 }
