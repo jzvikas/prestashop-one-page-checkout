@@ -176,9 +176,10 @@ Reservation recovery is deliberately payment-safe rather than aggressively short
 - release is exact shop/cart/customer/attempt scoped;
 - release asks Core whether the cart already has an order and refuses to delete the barrier when it does;
 - failure to determine Core order state also fails closed, leaving bounded TTL expiry as recovery;
+- browser automatic release is permitted only while native module-owned activation is known not to have started;
 - expired-row purging remains bounded to 100 rows per purge.
 
-This reduces the chance that a slow redirect/payment initialization reopens a second native handoff while the first may still be progressing.
+This reduces the chance that a slow redirect/payment initialization or ambiguous third-party handler failure reopens a second native handoff while the first may still be progressing.
 
 ### Ordinary payment forms
 
@@ -188,13 +189,17 @@ This reduces the chance that a slow redirect/payment initialization reopens a se
 2. `requestSubmit()`;
 3. raw `HTMLFormElement.prototype.submit.call()` only as a final compatibility fallback.
 
+Failures before form invocation can release their exact reservation attempt. Once one of those native submit paths is invoked, a synchronous handler throw is treated as an uncertain started handoff. The controller preserves the reservation, marks `data-jzopc-handoff-uncertain`, freezes all checkout controls and waits for Core successful-order cleanup or bounded TTL recovery rather than assuming the handler had no side effects.
+
 The OPC module does not call `PaymentModule::validateOrder()` as a shortcut.
 
 ### Binary/self-submitting options
 
 `binary-payment-controller.js` follows Core's `data-module-name` → `.js-payment-{module}` surface identity. It intercepts click/form-submit activation during capture, obtains finalization reservation, then replays the exact original module-owned control/form. Unexpected section replacement immediately before replay fails closed to avoid destroying third-party runtime state.
 
-A remaining browser-hardening boundary is partial native activation: a third-party handler can theoretically start network/payment work and then throw. The browser matrix must prove that recovery never assumes release is safe after module-owned activation has begun; successful Core cleanup or bounded TTL recovery is the conservative fallback when progress is ambiguous.
+The binary controller tracks the activation boundary explicitly. It sets `handoffStarted` immediately before replaying the original click or submit. A throw after that point does not release the reservation or restore checkout controls; it enters the same uncertain-handoff state as ordinary payment. Pre-handoff failures still use exact-attempt release when safe.
+
+Controlled browser verification is still required to prove this source contract against representative redirect, embedded, popup and self-submitting third-party modules.
 
 ### Free orders
 
@@ -233,14 +238,14 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/post-activation-handoff deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and partial/thrown native-handler behavior;
+4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and preserved-reservation behavior for partial/thrown native handlers;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
 
