@@ -30,15 +30,14 @@ final readonly class IdentitySectionRenderer implements CheckoutSectionRendererI
         string $registerFormHtml,
         string $loginFormHtml,
     ): string {
-        $variables = $this->identityService->present($context);
-        if ($variables['bound']) {
-            return $this->renderVariables($context, $variables);
-        }
-
-        $variables['registerFormHtml'] = $registerFormHtml;
-        $variables['loginFormHtml'] = $loginFormHtml;
-
-        return $this->renderVariables($context, $variables);
+        return $this->renderVariables(
+            $context,
+            $this->identityService->presentWithRenderedForms(
+                $context,
+                $registerFormHtml,
+                $loginFormHtml,
+            ),
+        );
     }
 
     /** @param array<string,mixed> $variables */
