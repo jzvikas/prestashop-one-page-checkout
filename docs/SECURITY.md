@@ -106,9 +106,13 @@ The OPC module does not call `PaymentModule::validateOrder()` for normal third-p
 
 Unexpected binary preflight section replacement fails closed to avoid destroying third-party runtime handler/state before replay.
 
-The ordinary and binary browser adapters now enforce an explicit release boundary. Failures that happen before native payment activation starts may release only their exact reservation attempt. Immediately before invoking the module-owned `submit`/`click` path, the adapter marks handoff as started. If a third-party handler then throws synchronously, the adapter does not release the reservation: the handler may already have initiated remote/payment side effects. Instead the checkout is marked `data-jzopc-handoff-uncertain`, every checkout control is disabled, and recovery is left to Core successful-order cleanup or the bounded reservation TTL.
+Ordinary Core-presented payment forms have an additional browser barrier. `ordinary-payment-submit-guard.js` listens for native `submit` in capture phase and stops a selected non-binary module form unless the final-submit controller has already completed server preflight/reservation and synchronously crossed the `jzopc:checkout:payment-handoff` boundary. The authorization is tied to the exact selected payment option and exact connected form, consumed by the first observable submit and otherwise revoked in a microtask after the current handoff stack. Payment-option changes and section replacement also revoke it. The guard deliberately leaves the module form fields enabled and untouched so tokenization, embedded fields and native successful controls remain compatible.
 
-This client freeze is defense in depth only; the DB reservation remains the cross-tab/process duplicate-handoff authority.
+The ordinary and binary browser adapters enforce an explicit release boundary. Failures that happen before native payment activation starts may release only their exact reservation attempt. Immediately before invoking the module-owned `submit`/`click` path, the adapter marks handoff as started. If a third-party handler then throws synchronously, the adapter does not release the reservation: the handler may already have initiated remote/payment side effects. Instead the checkout is marked `data-jzopc-handoff-uncertain`, every checkout control is disabled, and recovery is left to Core successful-order cleanup or the bounded reservation TTL.
+
+The direct ordinary-form submit guard is defense in depth around normal browser submission, not a replacement for server authority. Client JavaScript cannot securely police hostile or module code that deliberately invokes low-level submission APIs without an observable submit event. Representative third-party embedded/form integrations therefore remain a mandatory browser verification gate.
+
+This client freeze and submit guard are defense in depth only; the DB reservation remains the cross-tab/process duplicate-handoff authority once a reservation exists.
 
 ## 9. Legal-agreement tampering
 
@@ -149,6 +153,8 @@ Security properties:
 - explicit release first asks Core whether an order already exists for the cart and preserves the reservation when it does;
 - if Core order state cannot be read reliably, release fails closed and leaves TTL recovery in control;
 - automatic browser release is allowed only before native module-owned payment activation is known to have started;
+- direct ordinary module-form submit events are stopped before payment handlers unless the reserved final-submit handoff has just authorized the exact form;
+- ordinary form authorization is one-shot and expires after the current synchronous handoff stack even when jQuery does not surface a native submit event;
 - a synchronous ordinary/binary handler throw after native activation begins preserves the reservation and freezes checkout instead of reopening submission;
 - ordinary checkout mutations are frozen while final handoff is reserved;
 - default reservation TTL is 900 seconds, with code-level overrides bounded to 60..3600 seconds and expiry based on database time;
@@ -159,7 +165,7 @@ A browser busy flag exists only for UX and is not the duplicate-order security b
 
 The longer default TTL deliberately prefers bounded temporary retry blocking over reopening a second native payment handoff while a slow redirect, payment initialization or out-of-process payment action may still be progressing.
 
-Real concurrent-tab/browser verification is still required before this control is considered production-proven. In particular, representative third-party handlers that start work and throw must be verified to remain behind the preserved reservation, with recovery occurring through successful Core cleanup or TTL rather than automatic release.
+Real concurrent-tab/browser verification is still required before this control is considered production-proven. In particular, representative third-party handlers that start work and throw must be verified to remain behind the preserved reservation, and ordinary module forms must be verified to reject direct visible/Enter-key submission before reservation while still preserving embedded/tokenization behavior during the authorized native handoff.
 
 ## 12. Successful-order and abandoned-state cleanup
 
@@ -222,11 +228,12 @@ The internal readiness constant remains private production authority; the BO pag
 | Address IDOR | Ownership checked for saved/edit targets | Execute foreign-address browser/runtime tests |
 | Forged carrier | Fresh Core option validation + Core persistence + final recheck | Representative/no-carrier browser matrix |
 | Forged payment | Fresh Core selection validation + final recheck | Representative redirect/embedded/binary modules |
+| Direct ordinary payment-form submit | Capture-phase exact-form barrier; one-shot authorization only after reserved handoff | Browser-test visible submit, Enter key, jQuery/native handlers and embedded/tokenization modules |
 | Forged/missing agreements | Exact fresh Core condition-set validation + final recheck | Real TOS/module condition browser matrix |
 | Monetary tampering | Server-only totals/orderability inputs | Live cart/promotion/tax scenarios |
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
 | Concurrent final submission | DB reservation + attempt scoping + Core-order-aware release + bounded 15-minute default TTL | Real concurrent-tab/process and slow-payment verification |
-| Payment/order handoff | Native ordinary/binary/free-order paths + post-activation fail-closed reservation preservation | Real third-party module browser verification, especially thrown/partial handlers and TTL/Core cleanup recovery |
+| Payment/order handoff | Native ordinary/binary/free-order paths + direct ordinary submit barrier + post-activation fail-closed reservation preservation | Real third-party module browser verification, especially embedded forms, thrown/partial handlers and TTL/Core cleanup recovery |
 | Persisted stale selection rows | Immediate order cleanup + bounded abandoned GC implemented | Execute lifecycle/GC/runtime verification |
 | Native OPC conflict | Shared policy blocks enabled `ps_onepagecheckout` provider | Re-run 9.2 installed/browser conflict matrix |
 | Multistore activation spillover | BO writes limited to exact shop scope | Real multistore BO verification |
@@ -247,16 +254,16 @@ Browser lifecycle events must likewise avoid tokens and form payloads.
 
 ## 18. Verification state and release blockers
 
-The source contains final validation, duplicate-handoff barrier, native payment handoff, successful-order cleanup, abandoned-state cleanup and Back Office rollout controls. Reservation recovery now uses a payment-safe default TTL, refuses explicit release after a Core order or when Core order state is unknown, and preserves the barrier after ambiguous ordinary/binary native-handler throws.
+The source contains final validation, duplicate-handoff barrier, native payment handoff, successful-order cleanup, abandoned-state cleanup, Back Office rollout controls and a capture-phase barrier against direct ordinary module-form submission before reservation. Reservation recovery uses a payment-safe default TTL, refuses explicit release after a Core order or when Core order state is unknown, and preserves the barrier after ambiguous ordinary/binary native-handler throws.
 
-They are still not production-proven. GitHub Actions quota is exhausted, so the latest PHP/Node/smoke/installed-runtime contracts, including the configured PrestaShop 9.0.3 job and updated final-submit browser source contract, have not executed.
+They are still not production-proven. GitHub Actions quota is exhausted, so the latest PHP/Node/smoke/installed-runtime contracts, including the configured PrestaShop 9.0.3 job, updated final-submit browser source contract and ordinary-payment-submit guard contract, have not executed.
 
 Before `INTEGRATION_SHELL_READY` can be reconsidered:
 
 1. execute all deferred checks and fix every failure;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. prove native fallback/takeover, identity, CSRF rotation/cart restoration and address flows in a browser;
-4. prove carrier/no-carrier and representative payment module compatibility;
+4. prove carrier/no-carrier and representative payment module compatibility, including direct ordinary-form submit blocking without breaking embedded/tokenization fields;
 5. prove zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery, thrown/partial native-handler fail-closed behavior, Core/TTL recovery and successful cleanup;
 6. complete responsive/accessibility/performance and final packaging/release review.
 
