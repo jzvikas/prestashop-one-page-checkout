@@ -7,12 +7,13 @@ namespace Jzvikas\OnePageCheckout\Checkout;
 final readonly class CheckoutSectionDependencyResolver
 {
     /** @return list<CheckoutSection> */
-    public function affectedBy(CheckoutMutation $mutation): array
+    public function affectedBy(CheckoutMutation $mutation, ?\Context $context = null): array
     {
         $affected = match ($mutation) {
             CheckoutMutation::IdentityUpdated,
             CheckoutMutation::FullRefresh => CheckoutSection::ordered(),
 
+            CheckoutMutation::AddressSelectionUpdated,
             CheckoutMutation::DeliveryAddressUpdated,
             CheckoutMutation::InvoiceAddressUpdated,
             CheckoutMutation::InvoiceModeToggled,
@@ -41,7 +42,24 @@ final readonly class CheckoutSectionDependencyResolver
             ],
         };
 
-        return $this->inCanonicalOrder($affected);
+        $ordered = $this->inCanonicalOrder($affected);
+        if ($context === null || !$this->isVirtualCart($context)) {
+            return $ordered;
+        }
+
+        // A virtual checkout intentionally has no delivery section in the DOM. Returning an empty
+        // delivery fragment would violate the browser client's atomic replacement contract.
+        return array_values(array_filter(
+            $ordered,
+            static fn (CheckoutSection $section): bool => $section !== CheckoutSection::Delivery,
+        ));
+    }
+
+    private function isVirtualCart(\Context $context): bool
+    {
+        $cart = $context->cart ?? null;
+
+        return $cart instanceof \Cart && $cart->isVirtualCart() === true;
     }
 
     /**

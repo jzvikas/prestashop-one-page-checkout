@@ -89,6 +89,9 @@ services:
 
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
 
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAddressSelectionMutation:
+    public: true
+
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutPaymentSelectionMutation:
     public: true
 

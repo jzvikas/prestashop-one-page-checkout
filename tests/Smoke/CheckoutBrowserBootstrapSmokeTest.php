@@ -6,37 +6,48 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Jzvikas\OnePageCheckout\Integration\CheckoutBrowserBootstrap;
 
+function assertBootstrapContract(bool $condition, string $message): void
+{
+    if (!$condition) {
+        fwrite(STDERR, "FAIL: {$message}\n");
+        exit(1);
+    }
+}
+
 $bootstrap = new CheckoutBrowserBootstrap(
     cartId: 42,
     csrfToken: 'csrf-token',
     stateVersion: 'v1:abc',
+    addressUrl: 'https://shop.test/module/jzonepagecheckout/addressselection',
     paymentUrl: 'https://shop.test/module/jzonepagecheckout/paymentselection',
     agreementsUrl: 'https://shop.test/module/jzonepagecheckout/agreements',
 );
 
-assert($bootstrap->toTemplateVariables() === [
+assertBootstrapContract($bootstrap->toTemplateVariables() === [
     'cartId' => 42,
     'csrfToken' => 'csrf-token',
     'stateVersion' => 'v1:abc',
+    'addressUrl' => 'https://shop.test/module/jzonepagecheckout/addressselection',
     'paymentUrl' => 'https://shop.test/module/jzonepagecheckout/paymentselection',
     'agreementsUrl' => 'https://shop.test/module/jzonepagecheckout/agreements',
-]);
+], 'trusted bootstrap must expose the exact server-generated address/payment/agreement binding');
 
 $rejected = 0;
 foreach ([
-    [0, 'token', 'version', 'payment', 'agreements'],
-    [1, '', 'version', 'payment', 'agreements'],
-    [1, 'token', '', 'payment', 'agreements'],
-    [1, 'token', 'version', '', 'agreements'],
-    [1, 'token', 'version', 'payment', ''],
-] as [$cartId, $token, $version, $paymentUrl, $agreementsUrl]) {
+    [0, 'token', 'version', 'address', 'payment', 'agreements'],
+    [1, '', 'version', 'address', 'payment', 'agreements'],
+    [1, 'token', '', 'address', 'payment', 'agreements'],
+    [1, 'token', 'version', '', 'payment', 'agreements'],
+    [1, 'token', 'version', 'address', '', 'agreements'],
+    [1, 'token', 'version', 'address', 'payment', ''],
+] as [$cartId, $token, $version, $addressUrl, $paymentUrl, $agreementsUrl]) {
     try {
-        new CheckoutBrowserBootstrap($cartId, $token, $version, $paymentUrl, $agreementsUrl);
+        new CheckoutBrowserBootstrap($cartId, $token, $version, $addressUrl, $paymentUrl, $agreementsUrl);
     } catch (\InvalidArgumentException) {
         ++$rejected;
     }
 }
 
-assert($rejected === 5);
+assertBootstrapContract($rejected === 6, 'every incomplete trusted bootstrap field must fail closed');
 
 echo "CheckoutBrowserBootstrapSmokeTest OK\n";

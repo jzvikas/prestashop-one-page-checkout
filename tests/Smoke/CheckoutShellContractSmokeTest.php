@@ -13,6 +13,7 @@ assert(is_string($shell) && str_contains($shell, 'data-jzopc-checkout'));
 assert(str_contains($shell, 'data-jzopc-cart-id'));
 assert(str_contains($shell, 'data-jzopc-state-version'));
 assert(str_contains($shell, 'data-jzopc-csrf-token'));
+assert(str_contains($shell, 'data-jzopc-address-url'));
 assert(str_contains($shell, 'data-jzopc-payment-url'));
 assert(str_contains($shell, 'data-jzopc-agreements-url'));
 assert(str_contains($shell, "|escape:'htmlall':'UTF-8'"));
@@ -27,6 +28,7 @@ assert(str_contains($renderer, 'CheckoutSection::Summary'));
 assert(!str_contains($renderer, 'CheckoutSection::Identity'));
 
 assert(is_string($factory) && str_contains($factory, '\\Tools::getToken(false)'));
+assert(str_contains($factory, "'addressselection'"));
 assert(str_contains($factory, "'paymentselection'"));
 assert(str_contains($factory, "'agreements'"));
 assert(str_contains($factory, 'stateVersioner->version'));
