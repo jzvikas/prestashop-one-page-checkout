@@ -37,6 +37,17 @@
     }));
   }
 
+  function lockServerReservedCheckout(scope) {
+    const root = scope instanceof HTMLElement && scope.matches(ROOT_SELECTOR)
+      ? scope
+      : scope.querySelector(ROOT_SELECTOR);
+    if (!(root instanceof HTMLElement) || root.dataset.jzopcFinalizationReserved !== '1') {
+      return;
+    }
+
+    lockAmbiguousCheckout(root);
+  }
+
   document.addEventListener('jzopc:checkout:payment-handoff-ambiguous', function (event) {
     const target = event.target;
     if (!(target instanceof Element)) {
@@ -55,4 +66,12 @@
       lockAmbiguousCheckout(root);
     });
   });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      lockServerReservedCheckout(document);
+    }, { once: true });
+  } else {
+    lockServerReservedCheckout(document);
+  }
 }());
