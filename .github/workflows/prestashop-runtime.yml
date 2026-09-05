@@ -2,7 +2,7 @@ name: PrestaShop Runtime
 
 on:
   push:
-    branches: ['main', 'runtime/installed-smarty-shell-render']
+    branches: ['main']
   pull_request:
 
 permissions:
