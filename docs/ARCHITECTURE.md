@@ -11,7 +11,9 @@ This document describes architecture that exists in the repository today. It is 
 - `CheckoutActivationPolicy` blocks custom takeover when the native `ps_onepagecheckout` provider is enabled.
 - unsupported capability combinations fail closed rather than referencing unavailable classes.
 
-`JZOPC_CHECKOUT_ENABLED` is separate from module enabled state, starts disabled and is forced off when the module is disabled. The internal integration-readiness gate also remains false. There are no Core overrides. The module owns one small checkout-selection table introduced in version `0.2.0`; install/upgrade/uninstall lifecycle manages that schema.
+`JZOPC_CHECKOUT_ENABLED` is separate from module enabled state, starts disabled and is forced off when the module is disabled. The internal integration-readiness gate also remains false. Public checkout mutation controllers additionally call `isCustomCheckoutActive()` and return a stable `checkout_unavailable` response while that gate is closed, so the existence of those routes cannot expose a partial custom checkout. There are no Core overrides.
+
+The module owns one small checkout-selection table introduced in version `0.2.0`; install/upgrade/uninstall lifecycle manages that schema.
 
 See `ADR-0001-checkout-integration-strategy.md` and `ADR-0006-server-side-checkout-selection-persistence.md`.
 
@@ -57,13 +59,20 @@ See `ADR-0002-server-authoritative-checkout-state.md`, `ADR-0003-prestashop-chec
 9. rebuild server-authoritative state/version from Core plus the resulting selections;
 10. release the mutex in `finally`.
 
-Stale, CSRF-rejected, failed or incomplete mutations do not overwrite persisted selections. This prevents controllers from injecting their own notion of current payment/agreement state and makes persistence part of the same serialized transaction boundary as stale-state validation.
+Stale, CSRF-rejected, failed or incomplete mutations do not overwrite persisted selections. This prevents controllers from injecting their own notion of current payment/agreement state and makes persistence part of the same serialized operation boundary as stale-state validation.
 
-`CheckoutMutationResponseMapper` maps application results to stable HTTP semantics and the abstract front controller owns no-store JSON headers plus exception containment/logging. No concrete public checkout mutation endpoint is enabled yet.
+`CheckoutMutationResponseMapper` maps application results to stable HTTP semantics. `JzOnePageCheckoutAbstractJsonModuleFrontController` owns no-store JSON headers plus exception containment/logging, while `JzOnePageCheckoutAbstractMutationModuleFrontController` owns the final POST-only transport gate and the fail-closed custom-checkout activation gate.
+
+Two concrete module front controllers now exist:
+
+- `paymentselection` delegates only to the public `CheckoutPaymentSelectionMutation` application service plus the response mapper;
+- `agreements` delegates only to the public `CheckoutAgreementSelectionMutation` application service plus the response mapper.
+
+They read request values but do not authorize carts, prices, payment modules or agreements themselves. All state-sensitive parsing/validation occurs in their application mutation closures inside `CheckoutMutationOrchestrator`, after the cart mutex and fresh-state guard. While `INTEGRATION_SHELL_READY` is false, both controllers fail closed before any mutation service executes.
 
 ## Section rendering
 
-`CheckoutSectionRendererRegistry` is fail-closed: every requested section must have exactly one renderer. Missing/duplicate renderers are programming errors, not successful partial refreshes.
+`CheckoutSectionRendererRegistry` is fail-closed: every requested section must have exactly one renderer. Missing/duplicate renderers are programming errors, not successful partial refreshes. It can additionally pass canonical `CheckoutServerSelections` to renderers implementing `CheckoutStateAwareSectionRendererInterface`; browser copies are never used to restore checked UI state.
 
 ### Summary
 
@@ -87,9 +96,13 @@ The current address renderer covers saved-address selection only. Add/edit addre
 
 The payment template preserves option IDs/module names, binary markers, actions, inputs, additional information and module forms. Ordinary values are escaped. `displayPaymentTop`, `PaymentOption::additionalInformation` and module-provided forms are explicit trusted payment-module HTML boundaries.
 
+During authoritative AJAX refreshes `PaymentSectionRenderer::renderWithSelections()` marks a radio checked only when the fresh presented module/option combination exactly matches the canonical persisted `module:option` selection. Normal rendering without server selections marks no payment option as selected.
+
 `views/js/payment-controller.js` mounts re-entrantly on initial DOM and `jzopc:section:updated`. It removes/aborts old handlers, synchronizes related additional-information/payment-form containers, exposes the selected payment form, and publishes `jzopc:payment:selected` / `jzopc:payment:initialized`. It deliberately never calls `submit()`/`requestSubmit()`, preserving a separate final payment handoff boundary.
 
-`CheckoutPaymentSelectionParser` accepts a bounded option ID + module contract. `CheckoutPaymentSelectionService` re-runs the Core-backed presenter and requires exact module-key, option-ID and presented-module agreement before producing a canonical `module:option` key. The service can merge that validated key into `CheckoutServerSelections` while preserving already validated agreements. The orchestrator can now persist that validated state safely, but a concrete public payment mutation endpoint is still intentionally absent.
+`CheckoutPaymentSelectionParser` accepts a bounded option ID + module contract. `CheckoutPaymentSelectionService` re-runs the Core-backed presenter and requires exact module-key, option-ID and presented-module agreement before producing a canonical `module:option` key.
+
+`CheckoutPaymentSelectionMutation` now runs that parser and fresh validation inside the orchestrator critical section. After a valid payment change, it also regenerates the current agreement contract and preserves previously approved agreement keys only if they still equal the complete required set; otherwise approvals are cleared. It then renders every dependency-resolved section using the resulting canonical server selections and lets the orchestrator persist them. Invalid/unavailable payment choices return a structured validation failure without overwriting persisted state.
 
 See `ADR-0004-server-validated-payment-selection.md` and `ADR-0006-server-side-checkout-selection-persistence.md`.
 
@@ -97,11 +110,13 @@ See `ADR-0004-server-validated-payment-selection.md` and `ADR-0006-server-side-c
 
 `AgreementsSectionRenderer` uses `PrestaShopCheckoutAgreementsPresenter`, which delegates discovery to Core `ConditionsToApproveFinder::getConditionsToApproveForTemplate()`. That preserves the configured shop terms and `termsAndConditions` hook output, including Core duplicate-identifier reduction/formatting semantics.
 
-The module owns accessible native checkbox markup and escapes identifiers. The condition body itself is an explicit trusted Core/module formatted-HTML boundary and is never sourced from browser data.
+The module owns accessible native checkbox markup and escapes identifiers. The condition body itself is an explicit trusted Core/module formatted-HTML boundary and is never sourced from browser data. During authoritative refresh, only keys present in canonical `CheckoutServerSelections` are rendered checked.
 
-`CheckoutAgreementSelectionParser` accepts only a bounded list of safe identifiers. `CheckoutAgreementSelectionService` regenerates the current Core condition set and accepts approval only when submitted keys exactly equal all currently required keys; omitted and forged keys both fail closed. Validated agreements can be merged into `CheckoutServerSelections` while preserving the validated payment selection and can now be persisted by the orchestrator after successful mutation handling.
+`CheckoutAgreementSelectionParser` accepts only a bounded list of safe identifiers. `CheckoutAgreementSelectionService` regenerates the current Core condition set and accepts approval only when submitted keys exactly equal all currently required keys; omitted and forged keys both fail closed.
 
-A public agreement mutation endpoint is still intentionally absent, and final submission must revalidate the fresh Core condition set immediately before payment/order handoff.
+`CheckoutAgreementSelectionMutation` executes parser + exact-set validation inside the orchestrator critical section, merges only validated keys into the canonical server selection object, renders the dependency-resolved agreement section from that resulting state and lets the orchestrator persist the successful outcome. Invalid/incomplete approvals return a structured validation failure and keep the prior persisted selection state unchanged.
+
+Final submission must still revalidate the fresh Core condition set immediately before payment/order handoff.
 
 See `ADR-0005-server-validated-checkout-agreements.md` and `ADR-0006-server-side-checkout-selection-persistence.md`.
 
@@ -125,10 +140,18 @@ The dependency resolver is conservative. For example address/cart changes refres
 
 ## Testing state
 
-The smoke suite covers capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contract, response mapping, address selection/rendering, Core-backed address/delivery/payment/agreement presenters, payment JavaScript contract, payment selection validation and agreement exact-set validation. Orchestrator coverage verifies that selection loading/saving occurs under the cart lock, stale/failed/incomplete mutations do not persist, and a successful persisted payment selection changes the authoritative state version. GitHub Actions also validates Composer metadata/autoload, PHP 8.4 syntax and JavaScript syntax.
+The smoke suite covers capability/activation logic, state/versioning, CSRF/cart binding, mutex/orchestrator behavior, selection-store/schema behavior, upgrade contract, response mapping, address selection/rendering, Core-backed address/delivery/payment/agreement presenters, payment JavaScript contract, payment selection validation and agreement exact-set validation.
 
-CI does **not** yet boot a real PrestaShop installation, run the `0.1.0 -> 0.2.0` upgrade against MySQL/MariaDB, or render Smarty in a live shop. Full Core service-container, database upgrade, theme, carrier/payment module and browser checkout integration remain required before production readiness.
+It additionally verifies that payment/agreement rendering restores only server selections, that concrete endpoint source contracts route through the guarded mutation services, and that the common mutation controller preserves POST/405 behavior while active POSTs execute exactly once and inactive checkout POSTs fail closed with `checkout_unavailable`.
+
+Orchestrator coverage verifies that selection loading/saving occurs under the cart lock, stale/failed/incomplete mutations do not persist, and a successful persisted payment selection changes the authoritative state version. GitHub Actions also validates Composer metadata/autoload, PHP 8.4 syntax and JavaScript syntax.
+
+CI does **not** yet boot a real PrestaShop installation, run the `0.1.0 -> 0.2.0` upgrade against MySQL/MariaDB, exercise module front-controller routing through a live shop, or render Smarty in a real theme. Full Core service-container, database upgrade, theme, carrier/payment module and browser checkout integration remain required before production readiness.
 
 ## Next application boundary
 
-The next highest-priority application milestone is to add concrete `PaymentSelected` and `AgreementsChanged` mutation handlers/endpoints that parse request data, execute the existing fresh Core validators inside `CheckoutMutationOrchestrator`, render the complete dependency-resolved section set and rely only on orchestrator-owned persisted selections. After that, Phase 5 must add final checkout validation, duplicate-order/idempotency protection, selection-row lifecycle cleanup and the native payment-module handoff. Carrier/address endpoints remain blocked on the module-owned Core checkout-session construction boundary described above.
+The next highest-priority milestone is the browser-side mutation transport/bootstrap that sends payment/agreement selections with CSRF + cart/state-version bindings, applies the complete returned section set atomically, advances the authoritative state version and emits the existing section-update lifecycle events without duplicate handlers or stale-response overwrites.
+
+That client must remain dormant until the version-specific checkout integration/provider/legacy adapter supplies the actual one-page checkout shell and endpoint/state bootstrap. The checkout activation gate must not be opened merely because the mutation routes now exist.
+
+After the mutation client/integration boundary, Phase 5 must add final checkout validation, duplicate-order/idempotency protection, selection-row lifecycle cleanup and the native payment-module handoff. Carrier/address endpoints remain blocked on the module-owned Core checkout-session construction boundary described above.

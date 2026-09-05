@@ -8,9 +8,17 @@ The browser is untrusted. The loaded PrestaShop `Context`/`Cart` is the checkout
 
 ## Implemented controls
 
+### Transport and activation gates
+
+Checkout mutations use a final shared module-front-controller gate. Requests must be `POST`; non-POST requests receive HTTP 405 with `Allow: POST`. Before a concrete mutation service can execute, the controller also requires `JzOnePageCheckout::isCustomCheckoutActive()` to pass the same capability/native-conflict/configuration/integration-readiness policy used by the checkout hooks. Inactive or incomplete custom checkout returns a stable `checkout_unavailable` response and performs no mutation.
+
+The concrete `paymentselection` and `agreements` controllers contain no resource authorization or checkout business rules. They only collect request values, resolve the narrowly exposed application mutation service and response mapper, and delegate to the guarded orchestrator path.
+
 ### CSRF and cross-cart/customer binding
 
 `CheckoutMutationGuard` requires the PrestaShop front-office token (`token`, with Core/theme-compatible `static_token` fallback), validates it with constant-time comparison, requires the submitted cart ID to match the already loaded cart and verifies the context customer when the cart is customer-bound.
+
+Concrete payment/agreement mutation services execute only through `CheckoutMutationOrchestrator`; future mutation endpoints must use the same boundary and may not call their selection services directly from controller code.
 
 ### Address ownership / IDOR
 
@@ -28,6 +36,10 @@ The store is scoped by the loaded cart's `(id_shop, id_cart)` and records `id_cu
 
 Only canonical payment option state, normalized agreement identifiers and an update timestamp are stored. No monetary values, payment credentials, payment form data, CSRF/session/auth tokens or customer/address PII are persisted there. Failed, stale, CSRF-rejected and incomplete mutations do not overwrite the row.
 
+### Authoritative selection rendering
+
+Payment/agreement section refreshes can receive `CheckoutServerSelections` only from the server-side mutation flow. Payment radios are marked checked only when the fresh Core-presented module/option matches the canonical persisted `module:option` key. Agreement checkboxes are marked checked only for canonical persisted agreement keys. Browser-submitted checked state is never copied directly into returned HTML.
+
 ### Monetary tampering
 
 `PrestaShopCheckoutStateFactory` has no browser monetary inputs. Cart/totals fingerprints come from Core cart/address checksums and `Cart::getOrderTotal()` calculations.
@@ -36,11 +48,15 @@ Only canonical payment option state, normalized agreement identifiers and an upd
 
 `CheckoutPaymentSelectionParser` accepts only bounded payment option/module identifiers. `CheckoutPaymentSelectionService` does not trust that pair: it regenerates the current Core-backed payment options and requires exact module key, option ID and presented module-name agreement before returning a canonical server selection.
 
+`CheckoutPaymentSelectionMutation` performs parsing and fresh Core validation inside the cart-mutex/stale-state critical section. A successful payment change also revalidates the previously approved agreement set against the current required conditions; if it is no longer an exact match, agreement approval is cleared instead of silently carrying obsolete consent forward.
+
 A validated payment selection is not final-submit authorization. Final submission must regenerate eligibility again and follow the payment module's native form/redirect/binary flow; the module must not call `PaymentModule::validateOrder()` as a shortcut around payment-module contracts.
 
 ### Legal-agreement tampering
 
 `PrestaShopCheckoutAgreementsPresenter` discovers the required legal set through Core `ConditionsToApproveFinder`, preserving shop terms and `termsAndConditions` module contributions. `CheckoutAgreementSelectionParser` accepts only bounded safe identifiers. `CheckoutAgreementSelectionService` regenerates the fresh Core set and succeeds only when the submitted set equals every currently required identifier exactly. Missing and forged keys fail closed.
+
+`CheckoutAgreementSelectionMutation` performs parser + exact-set validation inside the guarded orchestrator critical section before any new approval set can be persisted. A validation failure returns refreshed server-authoritative agreement markup without replacing the prior stored selection state.
 
 Agreement validation must run again during final submission immediately before payment/order handoff because required conditions may change after an earlier browser selection.
 
@@ -68,19 +84,20 @@ Future direct SQL must remain parameterized where values are involved and justif
 
 | Threat | Current status | Release requirement |
 | --- | --- | --- |
-| CSRF | Shared guard implemented | Every mutation endpoint must use the guarded orchestrator path |
-| Cross-cart/cart takeover | Cart binding implemented | Never load submitted cart IDs in handlers |
-| Customer mismatch | Generic guard + selection-store binding implemented | Add resource ownership checks per mutable resource |
+| CSRF | Shared guard implemented; payment/agreement endpoints use it | Every future mutation/final endpoint must use an equivalent guarded boundary |
+| Cross-cart/cart takeover | Cart binding implemented and used by payment/agreement mutations | Never load submitted cart IDs in handlers |
+| Customer mismatch | Generic guard + selection-store binding implemented | Add resource ownership checks per future mutable resource |
 | Address IDOR | Parser/ownership service implemented | Concrete address endpoint must use orchestrator + service |
 | Forged carrier | Core rendering only; mutation authorization not implemented | Validate selected delivery-option key against fresh server delivery options |
-| Forged payment option | Fresh Core-backed selection validator + server persistence implemented | Public mutation and final submit must invoke fresh validation inside orchestrator/final critical sections |
-| Forged/missing agreement | Fresh exact-set validator + server persistence implemented | Public mutation/final submit must invoke fresh validation inside orchestrator/final critical sections |
-| Stale browser state | State-version guard and persisted selection participation implemented | Controllers must return conflict/recovery and prevent stale writes |
-| Concurrent same-state writes | Per-cart mutex covers selection load/guard/write | All state-changing handlers must run inside the mutex |
+| Forged payment option | Fresh Core-backed validator, guarded mutation endpoint and server persistence implemented | Final submit must revalidate fresh eligibility immediately before handoff |
+| Forged/missing agreement | Fresh exact-set validator, guarded mutation endpoint and persistence implemented | Final submit must revalidate fresh agreement set immediately before handoff |
+| Stale browser state | State-version guard and persisted selection participation implemented | Browser mutation client must discard/recover from stale responses and never overwrite newer state |
+| Concurrent same-state writes | Per-cart mutex covers selection load/guard/write | All future state-changing/final handlers must run inside the mutex or stronger final-order boundary |
 | XSS | Normal values escaped; raw Core/module HTML isolated | Do not widen trusted HTML boundaries to browser/customer input |
 | SQL/injection | Runtime DML parameterized; DDL identifiers validated | Parameterize and justify any future direct SQL |
+| Endpoint exposure before checkout takeover | POST + activation gate implemented | Keep integration-readiness closed until version-specific checkout shell/client is tested |
 | Duplicate order submission | **Not implemented** | Final-submit idempotency/order guard is a release blocker |
-| Payment/order tampering | Selection validation/persistence implemented; final handoff absent | Revalidate complete fresh checkout state and preserve native payment-module order flow |
+| Payment/order tampering | Selection mutation/persistence implemented; final handoff absent | Revalidate complete fresh checkout state and preserve native payment-module order flow |
 | Persisted stale selection rows | Customer mismatch invalidation implemented | Successful-order deletion and bounded abandoned-cart cleanup required before release |
 
 ## Logging rules
@@ -89,4 +106,6 @@ Server logs may include operation name, shop ID, cart ID and non-sensitive error
 
 ## Release-blocking security work
 
-The module is intentionally not production-ready until concrete mutation endpoints cannot bypass the guard/orchestrator, carrier selection receives fresh Core authorization, final checkout validation rechecks addresses/carrier/payment/agreements/totals, duplicate/replayed final submission cannot create two orders, and persisted selection rows are cleaned up as part of checkout/order lifecycle. Full runtime tests with representative payment/carrier modules and real database install/upgrade paths are also required.
+The module is intentionally not production-ready until the browser mutation client cannot apply stale responses, version-specific checkout integration is proven without bypassing the activation gate, carrier/address mutations use fresh Core authorization, final checkout validation rechecks addresses/carrier/payment/agreements/totals, duplicate/replayed final submission cannot create two orders, and persisted selection rows are cleaned up as part of checkout/order lifecycle.
+
+Full runtime tests with representative payment/carrier modules, real front-controller routing and real database install/upgrade paths are also required.
