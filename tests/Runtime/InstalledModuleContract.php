@@ -19,8 +19,8 @@ if ($shopRoot === '' || !is_file($shopRoot . '/config/config.inc.php')) {
     $fail('Installed PrestaShop root is missing or invalid.');
 }
 
-if (!in_array($expectedFamily, ['9.1', '9.2'], true)) {
-    $fail('Expected runtime family must be 9.1 or 9.2.');
+if (!in_array($expectedFamily, ['9.0', '9.1', '9.2'], true)) {
+    $fail('Expected runtime family must be 9.0, 9.1 or 9.2.');
 }
 
 require_once $shopRoot . '/config/config.inc.php';
@@ -42,8 +42,8 @@ $module = Module::getInstanceByName('jzonepagecheckout');
 if (!$module instanceof JzOnePageCheckout) {
     $fail('Unable to load the installed JzOnePageCheckout module instance.');
 }
-if ((string) $module->version !== '0.3.0') {
-    $fail(sprintf('Unexpected installed module version: %s', (string) $module->version));
+if (version_compare((string) $module->version, '0.4.0', '<')) {
+    $fail(sprintf('Installed module version %s predates the finalization schema baseline 0.4.0.', (string) $module->version));
 }
 
 $detector = new CheckoutCapabilityDetector(new PrestaShopRuntimeProbe());
@@ -57,18 +57,18 @@ if (!str_starts_with($capabilities->prestashopVersion, $expectedFamily . '.')) {
     ));
 }
 
-if ($expectedFamily === '9.1') {
+if (in_array($expectedFamily, ['9.0', '9.1'], true)) {
     if ($capabilities->strategy !== CheckoutIntegrationStrategy::CheckoutRenderHook) {
-        $fail('PrestaShop 9.1 must resolve the checkout-render integration strategy.');
+        $fail(sprintf('PrestaShop %s must resolve the checkout-render integration strategy.', $expectedFamily));
     }
     if (!$module->isRegisteredInHook('actionCheckoutRender')) {
-        $fail('PrestaShop 9.1 installation did not register actionCheckoutRender.');
+        $fail(sprintf('PrestaShop %s installation did not register actionCheckoutRender.', $expectedFamily));
     }
     if ($module->isRegisteredInHook('actionCheckoutBuildProcess')) {
-        $fail('PrestaShop 9.1 installation must not register actionCheckoutBuildProcess.');
+        $fail(sprintf('PrestaShop %s installation must not register actionCheckoutBuildProcess.', $expectedFamily));
     }
     if (interface_exists('PrestaShop\\PrestaShop\\Adapter\\Order\\Checkout\\CheckoutProcessProviderInterface')) {
-        $fail('PrestaShop 9.1 unexpectedly exposes the 9.2 checkout provider interface.');
+        $fail(sprintf('PrestaShop %s unexpectedly exposes the 9.2 checkout provider interface.', $expectedFamily));
     }
 } else {
     if ($capabilities->strategy !== CheckoutIntegrationStrategy::ProviderHook) {
@@ -86,7 +86,10 @@ if ($expectedFamily === '9.1') {
 }
 
 if (!$module->isRegisteredInHook('actionFrontControllerSetMedia')) {
-    $fail('The frontend media hook required by module version 0.3.0 is not registered.');
+    $fail('The frontend media hook required by the current checkout shell is not registered.');
+}
+if (!$module->isRegisteredInHook('actionValidateOrderAfter')) {
+    $fail('The successful-order cleanup hook required by finalization lifecycle is not registered.');
 }
 
 if ($capabilities->nativeOnePageCheckoutInstalled !== $expectNativeOpc) {
@@ -107,8 +110,9 @@ if ($module->isCustomCheckoutActive()) {
 Configuration::updateValue(JzOnePageCheckout::CONFIG_CHECKOUT_ENABLED, false);
 
 fwrite(STDOUT, sprintf(
-    "Runtime contract OK: PrestaShop %s, strategy=%s, nativeOpcInstalled=%s, nativeOpcEnabled=%s\n",
+    "Runtime contract OK: PrestaShop %s, module=%s, strategy=%s, nativeOpcInstalled=%s, nativeOpcEnabled=%s\n",
     $capabilities->prestashopVersion,
+    (string) $module->version,
     $capabilities->strategy->value,
     $capabilities->nativeOnePageCheckoutInstalled ? 'yes' : 'no',
     $capabilities->nativeOnePageCheckoutEnabled ? 'yes' : 'no',
