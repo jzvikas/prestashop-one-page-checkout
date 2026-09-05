@@ -189,7 +189,13 @@ This reduces the chance that a slow redirect/payment initialization or ambiguous
 2. `requestSubmit()`;
 3. raw `HTMLFormElement.prototype.submit.call()` only as a final compatibility fallback.
 
-Failures before form invocation can release their exact reservation attempt. Once one of those native submit paths is invoked, a synchronous handler throw is treated as an uncertain started handoff. The controller preserves the reservation, marks `data-jzopc-handoff-uncertain`, freezes all checkout controls and waits for Core successful-order cleanup or bounded TTL recovery rather than assuming the handler had no side effects.
+Core-presented third-party form markup and form controls remain untouched so hidden successful controls, embedded fields and tokenization integrations are preserved.
+
+`ordinary-payment-submit-guard.js` closes the direct-user-submit gap created by preserving those native forms. It observes ordinary selected payment forms in capture phase and blocks their observable native `submit` lifecycle until the final-submit controller has completed server preflight/reservation and synchronously emitted `jzopc:checkout:payment-handoff`. Authorization is exact option/form scoped, consumed by the first observable submit and also revoked in a microtask after the current synchronous handoff stack. Payment option changes and section replacement revoke it. Binary options are excluded and remain owned by the dedicated binary controller.
+
+This guard is a browser compatibility/safety barrier, not server authority: low-level script-driven submission that deliberately bypasses observable submit events cannot be made trustworthy by client JavaScript and remains part of the representative third-party browser matrix.
+
+Failures before form invocation can release their exact reservation attempt. Once one of the native submit paths is invoked, a synchronous handler throw is treated as an uncertain started handoff. The controller preserves the reservation, marks `data-jzopc-handoff-uncertain`, freezes all checkout controls and waits for Core successful-order cleanup or bounded TTL recovery rather than assuming the handler had no side effects.
 
 The OPC module does not call `PaymentModule::validateOrder()` as a shortcut.
 
@@ -238,14 +244,14 @@ Browser strings are never concatenated directly into those raw boundaries.
 
 The repository contains source/smoke contracts and a MariaDB-backed installed-runtime workflow with configured PrestaShop 9.0.3, 9.1.5 and 9.2 runtime families. Earlier runtime runs caught real integration issues, including legacy class autoload and front service-container visibility.
 
-The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/post-activation-handoff deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
+The latest identity/address/carrier/finalization/GC/Back Office/reservation-recovery/post-activation-handoff/ordinary-form-submit-guard deltas have not been executed through the full workflow because GitHub Actions quota is exhausted. The configured PrestaShop 9.0.3 job and controlled live HTTP/browser coverage remain unexecuted.
 
 Highest priorities before activation:
 
 1. run every deferred PHP/Node/smoke/installed-runtime check and fix all failures;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. execute a controlled browser matrix for native fallback/takeover, guest/account/login, CSRF rotation/cart restoration, native address interaction, stale/race behavior and no-carrier states;
-4. verify representative redirect/embedded/binary payment modules, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and preserved-reservation behavior for partial/thrown native handlers;
+4. verify representative redirect/embedded/binary payment modules, including direct ordinary-form submit blocking, zero-total free order, concurrent-tab reservation, slow/failed/abandoned payment recovery and preserved-reservation behavior for partial/thrown native handlers;
 5. complete responsive/accessibility/performance polish and release packaging;
 6. only then reconsider `INTEGRATION_SHELL_READY`.
 
