@@ -28,12 +28,12 @@ assertIntegrationFailureContainment(
 );
 assertIntegrationFailureContainment(
     str_contains($module, '$preparedShellHtml = $builder->prepareShell($this->context);')
-        && str_contains($module, "failCheckoutIntegration('provider_prepare', $exception)")
+        && str_contains($module, "failCheckoutIntegration('provider_prepare', $" . "exception)")
         && str_contains($module, 'return null;'),
     '9.2+ provider hook must prepare risky shell dependencies before exposing a provider and fall back with null on failure'
 );
 assertIntegrationFailureContainment(
-    str_contains($module, "failCheckoutIntegration('legacy_prepare', $exception)")
+    str_contains($module, "failCheckoutIntegration('legacy_prepare', $" . "exception)")
         && str_contains($legacy, '$replacementProcess = $this->processBuilder->build')
         && str_contains($legacy, "$" . "params['checkoutProcess'] = $" . "replacementProcess"),
     'legacy hook must keep Core process replacement after successful eager preparation only'
@@ -44,7 +44,7 @@ assertIntegrationFailureContainment(
     'legacy adapter must never mutate the Core process reference before replacement construction succeeds'
 );
 assertIntegrationFailureContainment(
-    str_contains($module, "failCheckoutIntegration('assets_register', $exception)")
+    str_contains($module, "failCheckoutIntegration('assets_register', $" . "exception)")
         && str_contains($module, 'Core calls setMedia before OrderController::postProcess/bootstrap'),
     'asset registration failure must trip the request circuit breaker before checkout bootstrap'
 );
@@ -62,7 +62,7 @@ assertIntegrationFailureContainment(
 );
 assertIntegrationFailureContainment(
     str_contains($step, 'private readonly string $shellHtml')
-        && str_contains($step, "['jzopc_shell_html' => $this->shellHtml]")
+        && str_contains($step, "['jzopc_shell_html' => $" . "this->shellHtml]")
         && !str_contains($step, 'CheckoutShellRenderer'),
     'Core step rendering must consume already-prepared HTML rather than invoking risky shell dependencies after takeover'
 );
