@@ -70,6 +70,11 @@ jobs:
         working-directory: /tmp/prestashop
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      - name: Build Classic theme assets for PrestaShop 9.0
+        if: matrix.family == '9.0'
+        working-directory: /tmp/prestashop
+        run: bash tools/assets/build.sh front-classic
+
       - name: Build Hummingbird theme assets
         working-directory: /tmp/prestashop
         run: bash tools/assets/build.sh front-hummingbird
