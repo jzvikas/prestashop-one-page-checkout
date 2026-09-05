@@ -150,7 +150,7 @@ jobs:
             >/tmp/jzopc-prestashop-http.log 2>&1 &
           echo $! >/tmp/jzopc-prestashop-http.pid
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null; then
+            if curl --fail --silent --show-error http://localhost:8080/ >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -159,7 +159,7 @@ jobs:
           exit 1
 
       - name: Execute fail-closed Front Office HTTP contract
-        run: php tests/Runtime/FailClosedHttpContract.php http://127.0.0.1:8080
+        run: php tests/Runtime/FailClosedHttpContract.php http://localhost:8080
 
       - name: Show Front Office server log on failure
         if: failure()
