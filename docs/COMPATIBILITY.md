@@ -18,7 +18,7 @@ This matrix records what the repository currently implements and what has actual
 
 The module uses `actionCheckoutRender`. `LegacyCheckoutRenderAdapter` receives the Core process by reference, reuses the exact active `CheckoutSession`, and replaces only the checkout process with the module-built process.
 
-The installed-runtime workflow now contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All four installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
+The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All four installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
 
 PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run.
 
@@ -55,7 +55,9 @@ Implemented architecture:
 - ordinary payment form handoff using observable submit lifecycle;
 - binary/self-submitting handoff through Core's `data-module-name` / `.js-payment-{module}` convention;
 - zero-total orders delegated to Core `free_order` / `OrderConfirmationController`;
-- final preflight and DB-backed duplicate-handoff reservation before native payment control resumes.
+- final preflight and DB-backed duplicate-handoff reservation before native payment control resumes;
+- finalization reservation defaults to a 15-minute database-time recovery window, with code-level overrides bounded to 60..3600 seconds;
+- explicit attempt release remains customer/attempt scoped and refuses to clear the barrier if Core already has an order for the cart or Core order state cannot be determined safely.
 
 Still requiring real browser verification:
 
@@ -63,7 +65,8 @@ Still requiring real browser verification:
 - representative embedded/form payment module;
 - module with additional information and JavaScript reinitialization;
 - binary click and binary form-submit paths;
-- payment failure/retry and abandoned-reservation recovery;
+- thrown/partial third-party native handlers, including proof that automatic release cannot reopen a handoff already in progress;
+- payment failure/retry and abandoned-reservation recovery, including retry after TTL expiry;
 - zero-total free order and duplicate refresh behavior.
 
 ## Carriers
@@ -92,4 +95,4 @@ Still requiring real browser verification:
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The new PrestaShop 9.0.3 matrix job and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
