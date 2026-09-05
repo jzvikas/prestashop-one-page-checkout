@@ -82,9 +82,11 @@ final readonly class CheckoutAddressFormMutation
                     );
                 }
 
+                $nextSelections = new CheckoutServerSelections();
+
                 return CheckoutMutationOutcome::success(
-                    new CheckoutServerSelections(),
-                    $this->rendererRegistry->render($context, $requiredSections, new CheckoutServerSelections()),
+                    $nextSelections,
+                    $this->rendererRegistry->render($context, $requiredSections, $nextSelections),
                 );
             },
         );
