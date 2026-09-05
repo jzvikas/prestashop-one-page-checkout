@@ -42,6 +42,10 @@ assertIdentityContract(!str_contains($service, '->passwd ='), 'module must not w
 assertIdentityContract(str_contains($mutation, 'CheckoutMutation::IdentityUpdated'), 'identity changes must use the full downstream dependency graph');
 assertIdentityContract(str_contains($mutation, '$this->identityService->submit($context, $request)'), 'identity Core submission must execute inside the guarded orchestrator');
 assertIdentityContract(str_contains($mutation, 'new CheckoutServerSelections()'), 'successful identity transition must invalidate prior payment/agreement authority');
+assertIdentityContract(str_contains($mutation, "(int) (\$context->cart->id ?? 0) !== \$state->cartId"), 'Core cart restoration must be detected against the cart locked at request start');
+assertIdentityContract(str_contains($mutation, "'identity_cart_reloaded'"), 'cart restoration must use a stable internal safety code');
+assertIdentityContract(str_contains($mutation, 'CheckoutMutationOutcome::failure('), 'replacement-cart state must not be persisted as a successful old-cart mutation');
+
 assertIdentityContract(str_contains($renderer, 'CheckoutSection::Identity'), 'identity renderer must own only the identity section');
 assertIdentityContract(str_contains($template, 'data-jzopc-section="identity"'), 'identity template must expose a stable section root');
 assertIdentityContract(str_contains($template, 'data-jzopc-identity-form="create"'), 'anonymous identity must expose the Core create/guest form wrapper');
@@ -53,6 +57,9 @@ assertIdentityContract(str_contains($template, "|escape:'html':'UTF-8'"), 'bound
 assertIdentityContract(str_contains($controller, 'extends JzOnePageCheckoutAbstractMutationModuleFrontController'), 'identity endpoint must inherit shared POST/activation guard');
 assertIdentityContract(str_contains($controller, 'CheckoutMutationExecutionStatus::Completed'), 'replacement CSRF token must only be generated after guarded completion');
 assertIdentityContract(str_contains($controller, 'Tools::getToken(false)'), 'identity endpoint must regenerate Core front CSRF after auth transition');
+assertIdentityContract(str_contains($controller, "getPageLink('order', true)"), 'Core-restored cart must force a fresh authoritative order-page bootstrap');
+assertIdentityContract(str_contains($controller, "'sections' => []"), 'replacement-cart response must not apply old-cart section HTML');
+assertIdentityContract(str_contains($controller, "'redirect' => \$redirect"), 'replacement-cart response must redirect instead of continuing AJAX on the old binding');
 assertIdentityContract(str_contains($mapper, "\$body['csrfToken'] = \$freshCsrfToken"), 'completed response mapper must support explicit token rotation');
 assertIdentityContract(str_contains($config, "Checkout\\Identity\\CheckoutIdentityService:"), 'identity service must be present in the shared service graph');
 assertIdentityContract(str_contains($config, "Checkout\\Mutation\\CheckoutIdentityMutation:\n    public: true"), 'identity mutation must be an intentional module-front entry service');
