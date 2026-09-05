@@ -13,6 +13,10 @@ final readonly class CheckoutSectionDependencyResolver
             CheckoutMutation::IdentityUpdated,
             CheckoutMutation::FullRefresh => CheckoutSection::ordered(),
 
+            CheckoutMutation::AddressEditorChanged => [
+                CheckoutSection::Addresses,
+            ],
+
             CheckoutMutation::AddressSelectionUpdated,
             CheckoutMutation::AddressBookUpdated,
             CheckoutMutation::DeliveryAddressUpdated,

@@ -4,6 +4,10 @@
   const ROOT_SELECTOR = '[data-jzopc-checkout]';
   const SECTION_SELECTOR = '[data-jzopc-section]';
   const ADDRESS_SECTION_SELECTOR = '[data-jzopc-section="addresses"]';
+  const ADDRESS_EDITOR_SELECTOR = '[data-jzopc-address-editor]';
+  const ADDRESS_EDITOR_OPEN_SELECTOR = '[data-jzopc-address-editor-open]';
+  const ADDRESS_EDITOR_CANCEL_SELECTOR = '[data-jzopc-address-editor-cancel]';
+  const ADDRESS_EDITOR_COUNTRY_SELECTOR = ADDRESS_EDITOR_SELECTOR + ' select[name="id_country"]';
   const DELIVERY_OPTION_SELECTOR = '[data-jzopc-section="delivery"] input[name="delivery_option"]';
   const ADDRESS_INPUT_SELECTOR = [
     ADDRESS_SECTION_SELECTOR + ' input[name="id_address_delivery"]',
@@ -21,6 +25,8 @@
       this.latestSequence = 0;
       this.onPaymentSelected = this.onPaymentSelected.bind(this);
       this.onCheckoutInputChanged = this.onCheckoutInputChanged.bind(this);
+      this.onCheckoutClick = this.onCheckoutClick.bind(this);
+      this.onCheckoutSubmit = this.onCheckoutSubmit.bind(this);
     }
 
     start() {
@@ -34,6 +40,8 @@
 
       this.root.addEventListener('jzopc:payment:selected', this.onPaymentSelected, listenerOptions);
       this.root.addEventListener('change', this.onCheckoutInputChanged, listenerOptions);
+      this.root.addEventListener('click', this.onCheckoutClick, listenerOptions);
+      this.root.addEventListener('submit', this.onCheckoutSubmit, listenerOptions);
       this.dispatch('jzopc:checkout:initialized', { stateVersion: this.stateVersion });
 
       return true;
@@ -50,6 +58,8 @@
       } else {
         this.root.removeEventListener('jzopc:payment:selected', this.onPaymentSelected);
         this.root.removeEventListener('change', this.onCheckoutInputChanged);
+        this.root.removeEventListener('click', this.onCheckoutClick);
+        this.root.removeEventListener('submit', this.onCheckoutSubmit);
       }
 
       instances.delete(this.root);
@@ -60,6 +70,7 @@
       const stateVersion = this.root.dataset.jzopcStateVersion || '';
       const csrfToken = this.root.dataset.jzopcCsrfToken || '';
       const addressUrl = this.root.dataset.jzopcAddressUrl || '';
+      const addressSaveUrl = this.root.dataset.jzopcAddressSaveUrl || '';
       const carrierUrl = this.root.dataset.jzopcCarrierUrl || '';
       const paymentUrl = this.root.dataset.jzopcPaymentUrl || '';
       const agreementsUrl = this.root.dataset.jzopcAgreementsUrl || '';
@@ -70,6 +81,7 @@
         || !stateVersion
         || !csrfToken
         || !addressUrl
+        || !addressSaveUrl
         || !carrierUrl
         || !paymentUrl
         || !agreementsUrl
@@ -81,6 +93,7 @@
       this.stateVersion = stateVersion;
       this.csrfToken = csrfToken;
       this.addressUrl = addressUrl;
+      this.addressSaveUrl = addressSaveUrl;
       this.carrierUrl = carrierUrl;
       this.paymentUrl = paymentUrl;
       this.agreementsUrl = agreementsUrl;
@@ -100,8 +113,79 @@
       });
     }
 
+    onCheckoutClick(event) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const cancel = target.closest(ADDRESS_EDITOR_CANCEL_SELECTOR);
+      if (cancel && this.root.contains(cancel)) {
+        const editor = cancel.closest(ADDRESS_EDITOR_SELECTOR);
+        if (editor) {
+          editor.remove();
+        }
+        return;
+      }
+
+      const opener = target.closest(ADDRESS_EDITOR_OPEN_SELECTOR);
+      if (!opener || !this.root.contains(opener)) {
+        return;
+      }
+
+      const role = opener.getAttribute('data-jzopc-address-role') || '';
+      if (role !== 'delivery' && role !== 'invoice') {
+        return;
+      }
+
+      const payload = {
+        addressAction: 'present',
+        addressRole: role,
+        useSameAddress: role === 'delivery' && this.currentUseSameAddress() ? '1' : '0',
+      };
+      const addressId = opener.getAttribute('data-jzopc-address-id') || '';
+      if (/^[1-9]\d*$/.test(addressId)) {
+        payload.id_address = addressId;
+      }
+
+      this.mutate(this.addressSaveUrl, payload);
+    }
+
+    onCheckoutSubmit(event) {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) {
+        return;
+      }
+
+      const editor = form.closest(ADDRESS_EDITOR_SELECTOR);
+      if (!editor || !this.root.contains(editor)) {
+        return;
+      }
+
+      event.preventDefault();
+      const role = editor.getAttribute('data-jzopc-address-role') || '';
+      if (role !== 'delivery' && role !== 'invoice') {
+        return;
+      }
+
+      const payload = this.serializeAddressForm(form);
+      payload.addressAction = 'save';
+      payload.addressRole = role;
+      payload.useSameAddress = editor.getAttribute('data-jzopc-use-same-address') === '1' ? '1' : '0';
+      this.mutate(this.addressSaveUrl, payload);
+    }
+
     onCheckoutInputChanged(event) {
       const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (target.matches(ADDRESS_EDITOR_COUNTRY_SELECTOR) && target instanceof HTMLSelectElement) {
+        this.onAddressEditorCountryChanged(target);
+        return;
+      }
+
       if (!(target instanceof HTMLInputElement)) {
         return;
       }
@@ -119,6 +203,45 @@
       if (target.matches(AGREEMENT_SELECTOR)) {
         this.onAgreementChanged();
       }
+    }
+
+    onAddressEditorCountryChanged(target) {
+      const editor = target.closest(ADDRESS_EDITOR_SELECTOR);
+      const form = target.closest('form');
+      if (!editor || !(form instanceof HTMLFormElement)) {
+        return;
+      }
+
+      const role = editor.getAttribute('data-jzopc-address-role') || '';
+      if (role !== 'delivery' && role !== 'invoice') {
+        return;
+      }
+
+      const payload = this.serializeAddressForm(form);
+      payload.addressAction = 'present';
+      payload.addressRole = role;
+      payload.useSameAddress = editor.getAttribute('data-jzopc-use-same-address') === '1' ? '1' : '0';
+      this.mutate(this.addressSaveUrl, payload);
+    }
+
+    serializeAddressForm(form) {
+      const payload = {};
+      for (const [rawName, value] of new FormData(form).entries()) {
+        const name = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+        if (Object.prototype.hasOwnProperty.call(payload, name)) {
+          payload[name] = Array.isArray(payload[name]) ? payload[name] : [payload[name]];
+          payload[name].push(String(value));
+        } else {
+          payload[name] = String(value);
+        }
+      }
+
+      return payload;
+    }
+
+    currentUseSameAddress() {
+      const input = this.root.querySelector(ADDRESS_SECTION_SELECTOR + ' input[name="use_same_address"]');
+      return input instanceof HTMLInputElement && input.checked;
     }
 
     onAddressChanged() {
@@ -142,9 +265,6 @@
         payload.deliveryAddressId = deliveryInput.value;
       }
 
-      // Do not fabricate a client-side translated validation message. If separate invoice mode has
-      // no selected invoice address, omit the id and let the guarded server parser return the
-      // canonical translated invoice_address_required error and authoritative section state.
       if (!sameAddressInput.checked && invoiceInput instanceof HTMLInputElement && invoiceInput.value) {
         payload.invoiceAddressId = invoiceInput.value;
       }

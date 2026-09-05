@@ -6,25 +6,20 @@ namespace Jzvikas\OnePageCheckout\Checkout\Address;
 
 final readonly class CheckoutAddressFormSubmission
 {
-    /**
-     * @param array<string,mixed> $form
-     */
     private function __construct(
         public bool $saved,
         public ?int $addressId,
-        public array $form,
+        public string $formHtml,
     ) {
     }
 
-    /** @param array<string,mixed> $form */
-    public static function saved(int $addressId, array $form): self
+    public static function saved(int $addressId, string $formHtml): self
     {
-        return new self(true, $addressId, $form);
+        return new self(true, $addressId, $formHtml);
     }
 
-    /** @param array<string,mixed> $form */
-    public static function invalid(array $form): self
+    public static function invalid(string $formHtml): self
     {
-        return new self(false, null, $form);
+        return new self(false, null, $formHtml);
     }
 }

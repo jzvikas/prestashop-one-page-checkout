@@ -21,10 +21,33 @@ final readonly class AddressesSectionRenderer implements CheckoutSectionRenderer
 
     public function render(\Context $context): string
     {
+        return $this->renderVariables($context, [
+            'addressEditorHtml' => null,
+            'addressEditorRole' => null,
+            'addressEditorUseSameAddress' => false,
+        ]);
+    }
+
+    public function renderWithAddressEditor(
+        \Context $context,
+        string $formHtml,
+        string $role,
+        bool $useSameAddress,
+    ): string {
+        return $this->renderVariables($context, [
+            'addressEditorHtml' => $formHtml,
+            'addressEditorRole' => $role,
+            'addressEditorUseSameAddress' => $useSameAddress,
+        ]);
+    }
+
+    /** @param array<string,mixed> $extra */
+    private function renderVariables(\Context $context, array $extra): string
+    {
         return $this->templateRenderer->render(
             $context,
             'sections/addresses.tpl',
-            $this->addressBookPresenter->present($context),
+            array_replace($this->addressBookPresenter->present($context), $extra),
         );
     }
 }

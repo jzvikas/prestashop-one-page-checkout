@@ -46,5 +46,11 @@ assert($renderer->render($context) === '<addresses>ok</addresses>');
 assert($template->template === 'sections/addresses.tpl');
 assert($template->variables['addresses'][0]['id'] === 12);
 assert($template->variables['useSameAddress'] === true);
+assert($template->variables['addressEditorHtml'] === null);
+
+$renderer->renderWithAddressEditor($context, '<form>core-address</form>', 'delivery', true);
+assert($template->variables['addressEditorHtml'] === '<form>core-address</form>');
+assert($template->variables['addressEditorRole'] === 'delivery');
+assert($template->variables['addressEditorUseSameAddress'] === true);
 
 echo "CheckoutAddressSectionRenderingSmokeTest OK\n";

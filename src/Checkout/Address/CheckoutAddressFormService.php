@@ -13,10 +13,17 @@ final readonly class CheckoutAddressFormService
     ) {
     }
 
-    /** @return array<string,mixed> */
-    public function present(\Context $context, ?int $addressId = null): array
+    /**
+     * Build a native Core address form for a new/edit intent without persisting anything.
+     * Submitted values are fed back through CustomerAddressForm::fillWith(), so country changes
+     * regenerate country/state-dependent Core fields before the editor is rendered again.
+     *
+     * @param array<string,mixed> $request
+     */
+    public function present(\Context $context, array $request = []): string
     {
         $this->assertCustomerContext($context);
+        $addressId = $this->parseOptionalAddressId($request['id_address'] ?? null);
         $form = $this->createForm($context);
 
         if ($addressId !== null) {
@@ -26,12 +33,17 @@ final readonly class CheckoutAddressFormService
             $form->fillWith([]);
         }
 
-        return $form->getTemplateVariables();
+        if ($request !== []) {
+            $payload = $request;
+            $payload['id_address'] = $addressId ?? 0;
+            $payload['token'] = \Tools::getToken(true, $context);
+            $form->fillWith($payload);
+        }
+
+        return $form->render();
     }
 
-    /**
-     * @param array<string,mixed> $request
-     */
+    /** @param array<string,mixed> $request */
     public function submit(\Context $context, array $request): CheckoutAddressFormSubmission
     {
         $this->assertCustomerContext($context);
@@ -41,11 +53,7 @@ final readonly class CheckoutAddressFormService
             $this->assertOwnedAddress($context, $addressId);
         }
 
-        $role = $request['addressRole'] ?? null;
-        if (!is_string($role) || !in_array($role, ['delivery', 'invoice'], true)) {
-            throw new CheckoutAddressFormException('address_role_invalid', 'Choose whether this is a delivery or invoice address.', 'addressRole');
-        }
-
+        $role = $this->parseRole($request['addressRole'] ?? null);
         $useSameAddress = $this->parseBoolean($request['useSameAddress'] ?? '0');
         if ($role === 'invoice' && $useSameAddress) {
             throw new CheckoutAddressFormException('address_role_invalid', 'A separate invoice address cannot also be marked as the delivery address.', 'addressRole');
@@ -65,7 +73,7 @@ final readonly class CheckoutAddressFormService
         $form->fillWith($payload);
 
         if (!$form->submit()) {
-            return CheckoutAddressFormSubmission::invalid($form->getTemplateVariables());
+            return CheckoutAddressFormSubmission::invalid($form->render());
         }
 
         $address = $form->getAddress();
@@ -88,7 +96,12 @@ final readonly class CheckoutAddressFormService
             $session->setIdAddressInvoice($savedAddressId);
         }
 
-        return CheckoutAddressFormSubmission::saved($savedAddressId, $form->getTemplateVariables());
+        return CheckoutAddressFormSubmission::saved($savedAddressId, $form->render());
+    }
+
+    public function role(mixed $value): string
+    {
+        return $this->parseRole($value);
     }
 
     private function createForm(\Context $context): \CustomerAddressForm
@@ -149,6 +162,15 @@ final readonly class CheckoutAddressFormService
         }
 
         return (int) $value;
+    }
+
+    private function parseRole(mixed $value): string
+    {
+        if (!is_string($value) || !in_array($value, ['delivery', 'invoice'], true)) {
+            throw new CheckoutAddressFormException('address_role_invalid', 'Choose whether this is a delivery or invoice address.', 'addressRole');
+        }
+
+        return $value;
     }
 
     private function parseBoolean(mixed $value): bool
