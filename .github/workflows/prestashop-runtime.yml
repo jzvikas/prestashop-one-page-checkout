@@ -134,3 +134,9 @@ jobs:
           php tests/Runtime/InstalledSmartyShellContract.php \
             /tmp/prestashop \
             "${{ matrix.family }}"
+
+      - name: Execute module-front checkout session contract
+        run: |
+          php tests/Runtime/ModuleFrontCheckoutSessionContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}"
