@@ -142,7 +142,17 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         }
 
         if ((int) ($row['is_active'] ?? 0) !== 1) {
-            $this->deleteByIdentity($shopId, $cartId);
+            $deleted = $this->connection->executeStatement(
+                sprintf(
+                    'DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ? AND expires_at <= UNIX_TIMESTAMP()',
+                    $this->tableName(),
+                ),
+                [$shopId, $cartId],
+            );
+
+            if ($deleted === 0) {
+                return $this->activeReservation($shopId, $cartId);
+            }
 
             return null;
         }
