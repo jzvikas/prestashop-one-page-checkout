@@ -91,6 +91,32 @@ assertActiveHttpFallbackRuntime(
         && !str_contains($http, 'finalizationAction'),
     'active fallback harness must not create orders, write cart/order SQL directly or exercise payment finalization',
 );
+
+$closedHttpPosition = strpos($workflow, 'Execute fail-closed Front Office HTTP contract');
+$activeBuildPosition = strpos($workflow, 'Build temporary active checkout fixture');
+$activeHttpPosition = strpos($workflow, 'Execute active checkout persistence fallback HTTP contract');
+assertActiveHttpFallbackRuntime(
+    $closedHttpPosition !== false
+        && $activeBuildPosition !== false
+        && $activeHttpPosition !== false
+        && $closedHttpPosition < $activeBuildPosition
+        && $activeBuildPosition < $activeHttpPosition,
+    'runtime workflow must prove closed production behavior before constructing/running the temporary active fixture',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($workflow, "JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'")
+        && str_contains($workflow, 'bash tests/Runtime/build-active-checkout-fixture.sh')
+        && str_contains($workflow, '/tmp/jzopc-active-fixture')
+        && str_contains($workflow, 'PrepareActiveCheckoutHttpFixture.php')
+        && str_contains($workflow, 'ActiveCheckoutFallbackHttpContract.php'),
+    'runtime matrix must create and execute only the explicit temporary active checkout harness',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($workflow, 'rm -rf /tmp/prestashop/modules/jzonepagecheckout')
+        && str_contains($workflow, 'ln -s /tmp/jzopc-active-fixture /tmp/prestashop/modules/jzonepagecheckout')
+        && str_contains($workflow, 'php bin/console cache:clear --no-warmup'),
+    'active HTTP phase must remount the installed module to the temporary copy and rebuild runtime cache',
+);
 assertActiveHttpFallbackRuntime(
     str_contains($module, 'private const INTEGRATION_SHELL_READY = false;')
         && !str_contains($module, 'private const INTEGRATION_SHELL_READY = true;'),
