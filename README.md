@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: the module now has a trusted server-generated checkout shell/bootstrap plus guarded version-specific checkout process adapters for both PrestaShop 9.0/9.1 and 9.2+. The activation gate intentionally remains closed until real PrestaShop runtime/browser tests prove both paths, native fallback and checkout correctness. While that gate is closed, the module cannot take over checkout and mutation endpoints return `checkout_unavailable`.
+> Current status: the module now has a trusted server-generated checkout shell/bootstrap plus guarded version-specific checkout process adapters for both PrestaShop 9.0/9.1 and 9.2+. CI installs the module into real PrestaShop 9.1.5 and 9.2.0-beta.1 shops backed by MariaDB and verifies the version-specific capability/hook boundary, including native `ps_onepagecheckout` conflict detection on 9.2. The activation gate intentionally remains closed until real shell rendering/browser tests prove checkout correctness. While that gate is closed, the module cannot take over checkout and mutation endpoints return `checkout_unavailable`.
 
 ## Runtime targets
 
@@ -47,6 +47,8 @@ Payment selection is parsed strictly and accepted only when module + option ID m
 
 Remaining checkout sections are not exposed as fake placeholders. A mutation requiring an unimplemented renderer fails instead of returning an incomplete successful state.
 
+`PrestaShopRuntimeProbe` deliberately allows PrestaShop to autoload legacy Core classes during capability checks. A real-install CI regression test caught the prior false-negative behavior caused by checking only already-loaded classes; the probe now distinguishes “autoloadable Core capability” from “class already touched in this process.”
+
 See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and ADRs under `docs/`, especially ADR-0008 and ADR-0009 for the shell/bootstrap and version-specific process decisions.
 
 ## Development setup
@@ -66,12 +68,12 @@ find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
-CI executes the baseline on PHP 8.4 and Node.js 22.
+Baseline CI executes the source checks on PHP 8.4 and Node.js 22. The separate `PrestaShop Runtime` workflow provisions MariaDB 11.4, installs real PrestaShop 9.1.5 and 9.2.0-beta.1, installs this module through the PrestaShop CLI, and executes the installed-runtime contract. The 9.2 job also installs a pinned native `ps_onepagecheckout` revision to prove conflict detection.
 
 ## Known limitations
 
 - the 9.0/9.1 adapter and 9.2+ provider are implemented but intentionally unreachable while `INTEGRATION_SHELL_READY=false`;
-- no deterministic full PrestaShop 9.0/9.1/9.2 runtime + Smarty + browser integration harness is wired into CI yet;
+- real installed-runtime CI currently covers PrestaShop 9.1.5 and 9.2.0-beta.1 capability/hook/install behavior, but not yet 9.0, live Smarty checkout rendering, HTTP/browser navigation or provider/reference-hook takeover with the readiness gate open;
 - address, delivery, payment, agreements and summary have concrete renderers; identity/customer capture is not implemented yet;
 - address add/edit forms are not rendered yet; the address section currently covers secure selection of saved addresses;
 - no public address/customer/carrier mutation endpoint exists yet;
