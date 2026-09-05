@@ -2,10 +2,21 @@
 
 declare(strict_types=1);
 
+final class TestCheckoutModule
+{
+    public int $id = 1;
+    public bool $checkoutActive = true;
+
+    public function isCustomCheckoutActive(): bool
+    {
+        return $this->checkoutActive;
+    }
+}
+
 class ModuleFrontController
 {
     public object $context;
-    public object $module;
+    public TestCheckoutModule $module;
 
     public function __construct()
     {
@@ -13,7 +24,7 @@ class ModuleFrontController
             'cart' => (object) ['id' => 42],
             'shop' => (object) ['id' => 2],
         ];
-        $this->module = (object) ['id' => 1];
+        $this->module = new TestCheckoutModule();
     }
 
     public function initContent() {}
@@ -60,7 +71,7 @@ function assertControllerContract(bool $condition, string $message): void
 }
 
 $reflection = new ReflectionMethod(JzOnePageCheckoutAbstractMutationModuleFrontController::class, 'handleCheckoutJsonRequest');
-assertControllerContract($reflection->isFinal(), 'mutation request gate must be final so concrete controllers cannot bypass POST enforcement');
+assertControllerContract($reflection->isFinal(), 'mutation request gate must be final so concrete controllers cannot bypass transport/activation enforcement');
 
 $controller = new TestMutationController();
 $method = new ReflectionMethod(TestMutationController::class, 'handleCheckoutJsonRequest');
@@ -75,7 +86,13 @@ assertControllerContract($controller->executions === 0, 'GET must not reach muta
 
 $_SERVER['REQUEST_METHOD'] = 'POST';
 $postResponse = $method->invoke($controller);
-assertControllerContract($postResponse->statusCode === 200, 'POST must reach mutation implementation');
-assertControllerContract($controller->executions === 1, 'POST must execute mutation implementation exactly once');
+assertControllerContract($postResponse->statusCode === 200, 'active checkout POST must reach mutation implementation');
+assertControllerContract($controller->executions === 1, 'active checkout POST must execute mutation implementation exactly once');
+
+$controller->module->checkoutActive = false;
+$inactiveResponse = $method->invoke($controller);
+assertControllerContract($inactiveResponse->statusCode === 404, 'inactive checkout POST must fail closed');
+assertControllerContract(($inactiveResponse->body['errors'][0]['code'] ?? null) === 'checkout_unavailable', 'inactive checkout must expose stable unavailable error code');
+assertControllerContract($controller->executions === 1, 'inactive checkout must not execute mutation implementation');
 
 fwrite(STDOUT, "Checkout front controller contract smoke tests passed.\n");
