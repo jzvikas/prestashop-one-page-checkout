@@ -27,6 +27,7 @@ services:
 
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressSelectionService: ~
+  Jzvikas\OnePageCheckout\Checkout\Address\CheckoutAddressFormService: ~
 
   Jzvikas\OnePageCheckout\Checkout\Carrier\CheckoutCarrierSelectionParser: ~
   Jzvikas\OnePageCheckout\Checkout\Carrier\CheckoutCarrierSelectionService: ~
@@ -93,6 +94,9 @@ services:
   Jzvikas\OnePageCheckout\Checkout\CheckoutMutationOrchestrator: ~
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAddressSelectionMutation:
+    public: true
+
+  Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutAddressFormMutation:
     public: true
 
   Jzvikas\OnePageCheckout\Checkout\Mutation\CheckoutCarrierSelectionMutation:
