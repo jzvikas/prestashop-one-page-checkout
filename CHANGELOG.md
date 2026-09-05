@@ -18,20 +18,24 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - `docs/COMPATIBILITY.md` and ADR-0019 documenting rollout and multistore activation rules.
 - `CheckoutFinalizationReservationRecoveryContractSmokeTest.php` and ADR-0022 documenting the hardened duplicate-handoff recovery window and order-aware release rule.
 - Final-submit browser contract coverage for the post-activation fail-closed boundary on ordinary and binary payment handoffs.
+- `ordinary-payment-submit-guard.js` to block observable direct submission of selected ordinary Core-presented payment forms before OPC finalization preflight/reservation.
+- `CheckoutOrdinaryPaymentSubmitGuardContractSmokeTest.php` and ADR-0023 documenting the exact-form, one-shot ordinary payment handoff authorization boundary.
 
 ### Changed
 
 - Finalization reservation default TTL increased from 90 seconds to 900 seconds, with constructor overrides bounded to 60..3600 seconds, so slow redirect/payment initialization cannot reopen the handoff barrier prematurely.
 - Attempt-scoped reservation release now refuses to delete the barrier after Core reports an order for the cart; Core order-state lookup failure also fails closed and leaves bounded TTL recovery in control.
 - Ordinary and binary payment adapters no longer automatically release a reservation after module-owned native activation has begun. If a third-party handler throws after submit/click invocation starts, checkout remains frozen behind the reservation until Core successful-order cleanup or bounded TTL recovery.
+- Ordinary payment form controls remain enabled and untouched for native successful controls/embedded integrations, but a capture-phase guard now blocks normal direct submit before the reserved final-submit handoff. Authorization is exact option/form scoped, consumed by the first observable submit and revoked after the current synchronous handoff stack or payment/section change.
 - Installed runtime workflow now starts a loopback Front Office server and executes the same fail-closed HTTP boundary contract for the 9.0, 9.1 and 9.2 runtime families.
 - Installed runtime contracts now explicitly accept 9.0/9.1/9.2 families, with 9.0 and 9.1 sharing the legacy `actionCheckoutRender` path.
 - Removed stale exact `0.3.0` runtime assertion; the installed contract now requires at least the `0.4.0` finalization-schema baseline.
 - Installed runtime contract now verifies `actionValidateOrderAfter` successful-order cleanup hook registration.
-- Architecture/security documentation remains synchronized with the finalization, native payment handoff, successful-order cleanup and abandoned-selection cleanup already present in code.
+- Architecture/security/compatibility documentation remains synchronized with the finalization, native payment handoff, successful-order cleanup, abandoned-selection cleanup and ordinary payment direct-submit barrier already present in code.
 
 ### Verification
 
+- Ordinary payment direct-submit hardening and its source smoke contract were source-reviewed but not executed while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - Post-activation handoff hardening and its updated browser source contract were source-reviewed but not executed while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - Reservation recovery hardening and its smoke contract remain unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime/browser evidence.
 - The fail-closed HTTP runtime contract, its workflow execution and its new smoke contract are source-reviewed but unexecuted while GitHub Actions quota is exhausted; they are not considered passing runtime evidence.
@@ -41,8 +45,9 @@ All notable repository changes are recorded here. Runtime/browser verification s
 
 - `INTEGRATION_SHELL_READY` remains `false`; these changes do not enable production checkout takeover.
 - Reservation release remains exact customer/attempt scoped; uncertain Core order state and ambiguous post-activation payment-handler failure preserve the duplicate-handoff barrier instead of weakening it.
+- Direct ordinary module-form submit blocking changes only the observable browser submit lifecycle; it does not rewrite payment payloads, disable payment form fields, call `validateOrder()` or claim to police low-level hostile/module JavaScript submission.
 - The HTTP contract does not create carts/orders or call payment order-creation APIs; it only checks external fail-closed behavior.
-- No module version bump: browser reservation policy, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
+- No module version bump: browser reservation/submit policy, runtime-matrix/test/documentation changes introduce no new schema/config/hook migration.
 
 ## 0.4.0
 
