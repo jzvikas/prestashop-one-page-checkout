@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: safe integration shell plus server-authoritative checkout state, mutation security/concurrency/transport foundations, concrete address/delivery/payment/agreement/summary rendering, re-entrant payment interaction, fresh server validation for payment/agreement selections, cart-scoped server persistence, and concrete guarded payment/agreement mutation endpoints. Checkout takeover remains deliberately fail-closed until the real version-specific checkout provider/legacy adapter is implemented and tested; while that activation gate is closed, mutation endpoints return `checkout_unavailable` and cannot change checkout state.
+> Current status: safe integration shell plus server-authoritative checkout state, mutation security/concurrency/transport foundations, concrete address/delivery/payment/agreement/summary rendering, re-entrant payment interaction, fresh server validation for payment/agreement selections, cart-scoped server persistence, guarded payment/agreement mutation endpoints, and a stale-safe browser mutation client foundation. Checkout takeover remains deliberately fail-closed until the real version-specific checkout provider/legacy adapter supplies the one-page shell and trusted bootstrap; while that activation gate is closed, mutation endpoints return `checkout_unavailable` and cannot change checkout state.
 
 ## Runtime targets
 
@@ -39,6 +39,8 @@ Payment and agreement renderers are state-aware during AJAX refresh: only the ca
 
 `views/js/payment-controller.js` is re-entrant after payment-section replacement, removes old handlers, synchronizes payment forms/additional information and publishes payment lifecycle events. It deliberately does not submit payment forms itself.
 
+`views/js/checkout-mutation-client.js` is the dormant browser transport foundation for payment/agreement mutations. It activates only inside a module checkout root carrying a complete server-generated bootstrap (cart ID, CSRF token, state version and endpoint URLs), sends only the current server token/cart binding plus operation data, aborts superseded requests, ignores out-of-order responses, retries the latest intent at most once after a server `stale_state` response, validates the entire returned section set before changing DOM, advances the authoritative state version, and emits `jzopc:section:updated` so re-entrant section controllers can remount. Validation failures may still apply server-authoritative refreshed sections; malformed/incomplete responses fail closed.
+
 Payment selection is parsed strictly and accepted only when module + option ID match a fresh Core-backed payment-option presentation. Agreement selection is accepted only when its key set exactly matches every freshly discovered required Core/module condition. The concrete `paymentselection` and `agreements` module front controllers are POST-only, reuse the common JSON/activation gate, retrieve only the public application mutation services, and delegate all authorization/state work to `CheckoutMutationOrchestrator`. Payment changes also clear previously approved agreements if the entire fresh agreement set is no longer exactly valid.
 
 Remaining checkout sections are not exposed as fake placeholders. A mutation requiring an unimplemented renderer fails instead of returning an incomplete successful state.
@@ -58,7 +60,7 @@ The raw source checkout expects the Composer autoloader. A release package will 
 ```bash
 composer validate --strict --no-check-publish
 find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
-node --check views/js/payment-controller.js
+find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
@@ -71,7 +73,7 @@ CI executes the baseline on PHP 8.4 and Node.js 22.
 - address, delivery, payment, agreements and summary have concrete renderers; identity is not implemented yet;
 - the shared checkout-session provider currently delegates to an active controller exposing Core `getCheckoutSession()`; a module-owned AJAX controller still needs a source-backed Core session construction path before carrier/address mutation endpoints can be exposed;
 - address add/edit forms are not rendered yet; the address section currently covers secure selection of saved addresses;
-- payment/agreement mutation endpoints and server-authoritative persistence now exist, but they remain intentionally unreachable while checkout integration readiness is false and no browser mutation client is wired to them yet;
+- payment/agreement mutation endpoints and the stale-safe browser mutation client now exist, but the client deliberately remains dormant because no production checkout shell currently provides its trusted bootstrap/root or registers the assets as an active checkout flow;
 - no public address/customer/carrier mutation endpoint exists yet;
 - selection rows are removed on uninstall but successful-order/abandoned-cart lifecycle cleanup still belongs to the future final-submit lifecycle;
 - no full PrestaShop runtime/Smarty/database-upgrade integration test is wired into CI yet;
