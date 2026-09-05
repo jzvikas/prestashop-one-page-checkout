@@ -2,11 +2,11 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: the module has a trusted server-generated checkout shell/bootstrap plus guarded version-specific checkout process adapters for both PrestaShop 9.0/9.1 and 9.2+. Saved-address selection, Core-backed address add/edit, carrier, payment and agreement selection now have guarded server-authoritative mutation paths. The activation gate intentionally remains closed until the deferred installed-runtime/browser gates are executed and the remaining identity/final-submit blockers are complete. While that gate is closed, the module cannot take over checkout and mutation endpoints return `checkout_unavailable`.
+> Current status: the module has a trusted server-generated checkout shell/bootstrap plus guarded version-specific checkout process adapters for PrestaShop 9.0/9.1 and 9.2+. Core-backed guest/account identity, login, saved-address selection, address add/edit, carrier selection, payment selection and agreement selection now have server-authoritative paths. The activation gate intentionally remains closed until the deferred installed-runtime/browser gates are executed and the final-submit/idempotency blocker is complete. While that gate is closed, the module cannot take over checkout and mutation endpoints return `checkout_unavailable`.
 
 ## Runtime targets
 
-- PrestaShop 9.x (`>=9.0 <10.0` while this compatibility matrix is under active verification)
+- PrestaShop 9.x (`>=9.0 <10.0` while the compatibility matrix is under active verification)
 - PHP 8.4+
 - multistore and multilingual architecture required
 - Classic/Hummingbird and third-party payment/carrier compatibility required
@@ -19,46 +19,85 @@ The module detects and isolates the checkout integration path without blindly lo
 - PrestaShop 9.2+: `actionCheckoutBuildProcess` returns a real `CheckoutProcessProviderInterface` implementation from a 9.2-only autoload path;
 - native `ps_onepagecheckout` conflict detection remains part of the shared activation policy;
 - unsupported or ambiguous capabilities fail closed to native checkout;
-- `INTEGRATION_SHELL_READY` remains `false` until runtime integration is proven.
+- `INTEGRATION_SHELL_READY` remains `false` until runtime/browser integration and final order safety are proven.
 
 `CheckoutProcessBuilder` creates a real Core `CheckoutProcess` around one module-owned `CheckoutShellStep`. The step extends Core `AbstractCheckoutStep` and renders through `renderTemplate()`, preserving the `actionCheckoutStepRenderTemplate` lifecycle. The module-owned shell uses the same server-authoritative cart/session/selections state as AJAX mutations rather than creating a second client-side checkout model.
 
-The trusted browser bootstrap contains only current cart ID, Core front-office CSRF token, server state version and the saved-address/address-form/carrier/payment/agreement mutation endpoint URLs. `CheckoutFrontendAssetRegistrar` registers the payment and stale-safe mutation controllers only on the order controller and only after the same activation gate passes. Existing installations receive the media hook through the idempotent `0.3.0` upgrade script.
+The trusted browser bootstrap contains only the current cart ID, Core front-office CSRF token, server state version and server-generated identity/address/address-form/carrier/payment/agreement mutation endpoint URLs. `CheckoutFrontendAssetRegistrar` registers the payment and stale-safe mutation controllers only on the order controller and only after the same activation gate passes. Existing installations receive the media hook through the idempotent `0.3.0` upgrade script.
 
 The application layer has a canonical server-state version token, stale-state guard and conservative section dependency graph. `PrestaShopCheckoutStateFactory` builds state from the loaded server-side cart, Core cart/address checksums and Core-calculated totals. Generic mutation safety covers CSRF, cross-cart/customer binding, per-cart serialization and stale-state ordering. The JSON transport layer provides stable status/error mapping. Virtual carts are context-filtered from delivery refresh dependencies because the trusted shell intentionally contains no delivery DOM section for them.
 
-Validated payment/agreement selections are persisted in the small module-owned `jzopc_checkout_selection` table, scoped by shop + cart and rebound to the current cart customer. The browser never supplies authoritative `CheckoutServerSelections`. `CheckoutMutationOrchestrator` loads them only after acquiring the cart mutex and saves new selections only after a successful handler returned all required refreshed sections. A successful address persistence or carrier change clears prior payment/agreement authority because either can alter totals, carrier/payment eligibility or legal requirements.
+Validated payment/agreement selections are persisted in the small module-owned `jzopc_checkout_selection` table, scoped by shop + cart and rebound to the current cart customer. The browser never supplies authoritative `CheckoutServerSelections`. `CheckoutMutationOrchestrator` loads them only after acquiring the cart mutex and saves new selections only after a successful handler returned all required refreshed sections. Identity, address or carrier transitions that can invalidate eligibility clear prior payment/agreement authority.
 
-A fail-closed checkout section renderer registry is in place:
+## Core-backed checkout sections
 
-- summary uses Core `CartPresenter`, preserving `actionPresentCart`;
-- addresses are restricted to the cart-bound customer, rechecked with `Customer::customerHasAddress()`, and formatted with Core `AddressFormat::generateAddress()`;
-- address add/edit uses Core `CustomerAddressForm`, `CustomerAddressFormatter` and `CustomerAddressPersister`, preserving country/state validation, Core/module field validation, theme markup and used-address historization;
-- delivery uses a Core `CheckoutSession`, preserves `actionCarrierProcess`, `displayCarrierExtraContent`, `displayBeforeCarrier` and `displayAfterCarrier`, and skips shipping for virtual carts;
-- payment uses Core `PaymentOptionsFinder::present()`, preserving payment-option discovery and `actionPresentPaymentOptions`, including actions, forms, inputs, additional information and binary markers;
-- agreements use Core `ConditionsToApproveFinder::getConditionsToApproveForTemplate()`, preserving configured shop terms plus `termsAndConditions` hook contributions.
+A fail-closed checkout section renderer registry is in place. Every requested section must have one concrete renderer; a missing renderer is a programming error rather than a successful partial checkout.
 
-`PrestaShopCheckoutSessionProvider` reuses an active `OrderController` session where available. Module front controllers instead construct the Core session using the version-appropriate Core delivery provider: PrestaShop 9.0 stays on `DeliveryOptionsFinder`, while 9.1+ can select `DeliveryOptionsProvider` only when that class and the improved-shipment feature flag are both available/enabled. This keeps the 9.1+ class out of the 9.0 load path.
+### Identity
 
-Saved-address mutations are parsed and authorized server-side. Delivery and invoice changes are applied through Core `CheckoutSession::setIdAddressDelivery()` / `setIdAddressInvoice()` rather than by editing cart header IDs directly, preserving Core `Cart::updateAddressId()` side effects for per-product/customization delivery associations.
+Identity is now a concrete Core-backed section. `CheckoutIdentityService` deliberately reuses the same legacy front-office primitives used by PrestaShop checkout:
 
-Address creation/editing is also server-authoritative. The `addresssave` endpoint presents and submits the active theme's native Core address form. Existing edit targets are authorized with `Customer::customerHasAddress()` before loading. Core's address-persister token is regenerated on the server; the native form cannot replace the OPC mutation `token`, `cartId` or `stateVersion` binding. Country changes re-present the Core form so country/state fields are regenerated without persisting. Successful saves select the resulting address through `CheckoutSession` and invalidate stale payment/agreement authority.
+- `CustomerForm` + `CustomerFormatter` for guest/account data;
+- `CustomerPersister` for guest/account persistence and Core session/cart side effects;
+- `CustomerLoginForm` + `CustomerLoginFormatter` for authentication;
+- `PS_GUEST_CHECKOUT_ENABLED` for the shop's guest rule;
+- `actionSubmitAccountBefore` before create/guest submission;
+- the Core `hashing` service for the `CustomerPersister` constructor.
 
-Carrier selection is server-authoritative. `CheckoutCarrierSelectionService` requires a real cart-bound customer and verifies that the current delivery address still belongs to that customer before selecting shipping. The submitted opaque option key must exactly exist in the fresh Core `CheckoutSession::getDeliveryOptions()` set. Idempotency is based on the option actually persisted in `Cart::$delivery_option`, not on Core's auto-selected fallback. Real changes are passed to `CheckoutSession::setDeliveryOption()` using Core's native address-keyed payload (`delivery_address_id => option_key`) and the service verifies that Core retained the option afterward. Forged/stale keys, foreign delivery-address state and virtual-cart carrier mutations fail closed. A real carrier change clears persisted payment/agreement authority and refreshes delivery, payment, agreements and summary.
+The module does not implement password hashing, duplicate-account rules, password policy or authentication itself. Anonymous identity forms are the active theme's native Core customer/login forms, including module-added fields. Validation failures reuse the already-submitted Core form instances so field errors and hook-added fields are preserved without rendering a second hook/form stack.
 
-Payment and agreement renderers are state-aware during AJAX refresh: only the canonical server-persisted selection state can restore checked radios/checkboxes. Module-owned markup escapes ordinary values. Native address-form, carrier/payment hook HTML and Core-formatted legal-condition HTML are explicit trusted Core/theme/module HTML boundaries; browser data is never allowed to populate those raw HTML paths directly.
+A successful identity transition clears payment/agreement authority and refreshes identity plus every downstream section. Authentication/customer creation can rotate the front-office CSRF token, so the guarded identity response can return a fresh `Tools::getToken(false)` value; the browser replaces its in-memory/root token before the next mutation. Rejected CSRF requests never receive replacement token material.
+
+Core `Context::updateCustomer()` may restore another customer cart when `PS_CART_FOLLOWING` applies. If the current cart ID changes during identity submission, the module does not persist or render selection state as though the replacement cart were protected by the initiating cart mutex. It returns a redirect-only successful transport response and reloads the Core order page, establishing a fresh authoritative cart/token/state bootstrap.
+
+### Addresses
+
+Addresses are restricted to the cart-bound customer, rechecked with `Customer::customerHasAddress()`, and formatted with Core `AddressFormat::generateAddress()`.
+
+Saved-address changes use Core `CheckoutSession::setIdAddressDelivery()` / `setIdAddressInvoice()` rather than editing cart header IDs directly, preserving Core `Cart::updateAddressId()` side effects for per-product/customization delivery associations.
+
+Address add/edit uses Core `CustomerAddressForm`, `CustomerAddressFormatter` and `CustomerAddressPersister`, preserving country/state validation, Core/module field validation, theme markup and used-address historization. Existing edit targets are authorized before loading. The inner Core address-persister token is regenerated server-side; native form fields cannot replace the outer OPC `token`, `cartId` or `stateVersion` binding.
+
+### Delivery
+
+Delivery uses a Core `CheckoutSession`, preserves `actionCarrierProcess`, `displayCarrierExtraContent`, `displayBeforeCarrier` and `displayAfterCarrier`, and skips shipping for virtual carts.
+
+Carrier selection requires a real cart-bound customer and authorized delivery address. The submitted opaque option key must exactly exist in the fresh Core `CheckoutSession::getDeliveryOptions()` set. Real changes are applied through `CheckoutSession::setDeliveryOption()` using Core's native address-keyed payload and verified against persisted `Cart::$delivery_option`. A real carrier change clears payment/agreement authority and refreshes delivery, payment, agreements and summary.
+
+### Payment
+
+Payment uses Core `PaymentOptionsFinder::present()`, preserving payment-option discovery and `actionPresentPaymentOptions`, including actions, forms, inputs, additional information and binary markers.
 
 `views/js/payment-controller.js` is re-entrant after payment-section replacement, removes old handlers, synchronizes payment forms/additional information and publishes payment lifecycle events. It deliberately does not submit payment forms itself.
 
-`views/js/checkout-mutation-client.js` activates only inside the trusted module checkout root. It sends the current CSRF/cart/state binding plus operation data, aborts superseded requests, ignores out-of-order responses, retries the latest intent at most once after `stale_state`, validates the complete returned section set before DOM replacement, advances the authoritative state version and emits `jzopc:section:updated` for re-initialization. Saved-address controls use one atomic selection intent; the native address editor is presented/submitted through the guarded address-form endpoint and country changes ask Core to regenerate its fields. Serialized form fields may not overwrite `token`, `cartId` or `stateVersion`. Delivery-option radio changes use the guarded carrier endpoint through the same latest-intent-wins transport.
+Payment selection is parsed strictly and accepted only when module + option ID match a fresh Core-backed payment-option presentation. The selected value is server-persisted only as a canonical selection key; it is not final order authorization.
 
-Payment selection is parsed strictly and accepted only when module + option ID match a fresh Core-backed payment-option presentation. Agreement selection is accepted only when its key set exactly matches every freshly discovered required Core/module condition. The concrete `addressselection`, `addresssave`, `carrierselection`, `paymentselection` and `agreements` module front controllers delegate state changes to `CheckoutMutationOrchestrator` inside the common activation/security boundary.
+### Agreements and summary
 
-Remaining checkout sections are not exposed as fake placeholders. A mutation requiring an unimplemented renderer fails instead of returning an incomplete successful state.
+Agreements use Core `ConditionsToApproveFinder::getConditionsToApproveForTemplate()`, preserving configured shop terms plus `termsAndConditions` hook contributions. Approval succeeds only when the submitted key set exactly equals the current required set.
 
-`PrestaShopRuntimeProbe` deliberately allows PrestaShop to autoload legacy Core classes during capability checks. A real-install CI regression test caught the prior false-negative behavior caused by checking only already-loaded classes; the probe now distinguishes “autoloadable Core capability” from “class already touched in this process.”
+Summary uses Core `CartPresenter`, preserving `actionPresentCart` and server-calculated totals.
 
-See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and ADRs under `docs/`, especially ADR-0008 through ADR-0015 for shell/bootstrap, version-specific process, installed runtime, saved-address, carrier and native address-form decisions.
+## Browser mutation transport
+
+`views/js/checkout-mutation-client.js` activates only inside the trusted module checkout root. It sends the current CSRF/cart/state binding plus operation data, aborts superseded requests, ignores out-of-order responses, retries the latest intent at most once after `stale_state`, validates the complete returned section set before DOM replacement, advances the authoritative state version and emits `jzopc:section:updated` for re-initialization.
+
+Identity and native address forms are serialized with `FormData`; `token`, `cartId` and `stateVersion` are reserved and cannot be overwritten by native/theme/module fields. Identity submissions use the guarded server-generated identity URL. If a completed identity response contains a rotated CSRF token, the browser updates it before any next mutation. A cart-restoration response contains no old-cart section HTML and redirects to a fresh Core order-page bootstrap.
+
+Saved-address controls use one atomic selection intent; country changes ask Core to regenerate address fields. Delivery-option radio changes use the guarded carrier endpoint through the same latest-intent-wins transport. Browser prices, shipping costs, totals, payment eligibility and canonical server selections are never authoritative inputs.
+
+## Trusted HTML boundaries
+
+Module-owned ordinary values are escaped. Raw HTML is limited to explicit server-side PrestaShop/Core/theme/module boundaries:
+
+- native Core/theme customer and login forms;
+- native Core/theme address form;
+- carrier extra/before/after hook HTML;
+- payment top/additional-information/forms;
+- Core-formatted legal-condition HTML;
+- section HTML already produced by the trusted server renderers when composed into the module shell.
+
+Browser strings are not concatenated directly into these raw boundaries.
 
 ## Development setup
 
@@ -77,23 +116,27 @@ find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
-Baseline CI executes the source checks on PHP 8.4 and Node.js 22. The separate `PrestaShop Runtime` workflow provisions MariaDB 11.4, installs real PrestaShop 9.1.5 and 9.2.0-beta.1, installs this module through the PrestaShop CLI, and executes installed-runtime contracts. The 9.2 job also installs a pinned native `ps_onepagecheckout` revision to prove conflict detection.
+Baseline CI executes source checks on PHP 8.4 and Node.js 22. The separate `PrestaShop Runtime` workflow provisions MariaDB 11.4, installs real PrestaShop 9.1.5 and 9.2.0-beta.1, installs this module through the PrestaShop CLI, and executes installed-runtime contracts. The 9.2 job also installs a pinned native `ps_onepagecheckout` revision to prove conflict detection.
 
-At the moment, new workflow runs are intentionally deferred because the repository's GitHub Actions free quota is exhausted. Tests and runtime contracts continue to be added normally and must be executed after the quota resets; no unexecuted test is described as passed. This run also could not clone GitHub into the execution container, so the new address-form and hardened-carrier PHP/Node/smoke/runtime checks have not been executed locally.
+At the moment, new workflow runs are intentionally deferred because the repository's GitHub Actions free quota is exhausted. Tests/runtime contracts continue to be added normally and must be executed after quota reset; no unexecuted test is described as passed. The current execution environment also does not provide a local clone/runtime in which the new identity PHP/Node/smoke/runtime checks can be executed.
 
 ## Known limitations
 
 - the 9.0/9.1 adapter and 9.2+ provider are implemented but intentionally unreachable while `INTEGRATION_SHELL_READY=false`;
-- the installed-runtime suite contains real Smarty-shell and module-front `CheckoutSession` contracts, but the newly updated address-form/carrier-hardening contracts have not yet been executed because the GitHub Actions quota is exhausted; 9.0 runtime coverage and live HTTP/browser takeover are still missing;
-- address, delivery, payment, agreements and summary have concrete renderers; identity/customer capture is not implemented yet;
-- saved-address selection and Core-native address add/edit are implemented for a real cart-bound customer, but anonymous carts intentionally fail closed until guest/customer identity creation/login exists;
-- carrier/payment/agreement/address mutation endpoints and the stale-safe browser client remain unavailable in normal traffic while checkout takeover is disabled;
+- the installed-runtime suite contains real Smarty-shell and module-front `CheckoutSession` contracts, but the identity/address/carrier-hardening updates have not yet been executed after their latest changes because the GitHub Actions quota is exhausted;
+- PrestaShop 9.0 installed-runtime coverage and live HTTP/browser takeover are still missing;
+- Core-backed identity, address, delivery, payment, agreements and summary sections exist, but they remain unreachable in production while checkout takeover is disabled;
+- identity guest/account/login requires deferred installed-runtime/browser verification, including Core validation failures, duplicate-account/login behavior, module-added fields, CSRF rotation and `PS_CART_FOLLOWING` cart restoration;
 - representative carrier/payment modules and rapid browser mutation behavior still require the controlled runtime/browser matrix;
 - selection rows are removed on uninstall, but successful-order/abandoned-cart cleanup still belongs to final-submit lifecycle work;
-- no final-submit/idempotency/native payment handoff flow exists yet;
+- no final checkout preflight, submit idempotency/double-order guard or native payment handoff flow exists yet;
 - Back Office checkout-flow activation UI is not implemented yet.
 
 These limitations are intentional safety gates, not production-ready claims.
+
+## Architecture records
+
+See `docs/DISCOVERY.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and ADRs under `docs/`, especially ADR-0008 through ADR-0016 for trusted shell/bootstrap, version-specific process, installed runtime, saved-address, carrier, native address-form and Core identity decisions.
 
 ## Source of truth
 
