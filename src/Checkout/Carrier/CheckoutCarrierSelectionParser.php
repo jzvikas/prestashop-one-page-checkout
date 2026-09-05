@@ -12,14 +12,10 @@ final class CheckoutCarrierSelectionParser
     public function parse(array $request): CheckoutCarrierSelection
     {
         $deliveryOption = $request['deliveryOption'] ?? null;
-        if (!is_string($deliveryOption)) {
-            throw new CheckoutCarrierSelectionException('deliveryOption must be a string.');
-        }
-
-        $deliveryOption = trim($deliveryOption);
-        if ($deliveryOption === ''
+        if (!is_string($deliveryOption)
+            || $deliveryOption === ''
             || strlen($deliveryOption) > self::MAX_DELIVERY_OPTION_LENGTH
-            || preg_match('/^[0-9,]+$/D', $deliveryOption) !== 1) {
+            || preg_match('/^(?:[1-9][0-9]*,)+$/D', $deliveryOption) !== 1) {
             throw new CheckoutCarrierSelectionException('deliveryOption has an invalid format.');
         }
 

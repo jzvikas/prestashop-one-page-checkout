@@ -25,8 +25,17 @@ final readonly class CheckoutCarrierSelectionService
             throw new CheckoutCarrierSelectionException('Virtual carts do not accept a delivery option.');
         }
 
+        $customerId = (int) ($cart->id_customer ?? 0);
+        $deliveryAddressId = (int) ($cart->id_address_delivery ?? 0);
+        if ($customerId <= 0 || $deliveryAddressId <= 0) {
+            throw new CheckoutCarrierSelectionException('A customer-owned delivery address is required before selecting a delivery option.');
+        }
+        if (!\Customer::customerHasAddress($customerId, $deliveryAddressId)) {
+            throw new CheckoutCarrierSelectionException('The current delivery address is not available for this customer.');
+        }
+
         $checkoutSession = $this->checkoutSessionProvider->get($context);
-        if (!method_exists($checkoutSession, 'getDeliveryOptions') || !method_exists($checkoutSession, 'getSelectedDeliveryOption') || !method_exists($checkoutSession, 'setDeliveryOption')) {
+        if (!method_exists($checkoutSession, 'getDeliveryOptions') || !method_exists($checkoutSession, 'setDeliveryOption')) {
             throw new RuntimeException('The Core checkout session does not expose delivery selection methods.');
         }
 
@@ -51,16 +60,39 @@ final readonly class CheckoutCarrierSelectionService
             throw new CheckoutCarrierSelectionException('The selected delivery option is no longer available.');
         }
 
-        $selectedOption = $checkoutSession->getSelectedDeliveryOption();
-        $selectedOption = is_string($selectedOption) || is_int($selectedOption) ? (string) $selectedOption : null;
-        if ($selectedOption !== null && hash_equals($selectedOption, $canonicalOption)) {
+        if ($this->persistedOptionForAddress($cart, $deliveryAddressId) === $canonicalOption) {
             return false;
         }
 
-        if ($checkoutSession->setDeliveryOption($canonicalOption) !== true) {
+        // Native CheckoutDeliveryStep submits delivery_option as an address-keyed array.
+        // Keep the address identifier server-authoritative and pass the exact Core payload shape.
+        if ($checkoutSession->setDeliveryOption([
+            $deliveryAddressId => $canonicalOption,
+        ]) !== true) {
             throw new RuntimeException('PrestaShop could not persist the selected delivery option.');
         }
 
+        if ($this->persistedOptionForAddress($cart, $deliveryAddressId) !== $canonicalOption) {
+            throw new RuntimeException('PrestaShop did not retain the selected delivery option on the cart.');
+        }
+
         return true;
+    }
+
+    private function persistedOptionForAddress(\Cart $cart, int $deliveryAddressId): ?string
+    {
+        $raw = $cart->delivery_option ?? null;
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        $value = $decoded[$deliveryAddressId] ?? null;
+
+        return is_string($value) ? $value : null;
     }
 }
