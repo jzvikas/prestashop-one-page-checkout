@@ -92,7 +92,12 @@ if (!$builder instanceof CheckoutProcessBuilder) {
     $fail('CheckoutProcessBuilder service is unavailable in installed module container.');
 }
 
-$moduleProcess = $builder->build($context, $session, $translator);
+// This contract verifies the process/session adapter itself, not the full shell renderer. Use a
+// deterministic prepared shell so an empty fixture cart cannot turn this adapter check into an
+// unrelated payment/carrier/template compatibility test. Eager shell rendering is covered by the
+// dedicated integration-failure/runtime/browser contracts.
+$preparedShellHtml = '<div data-jzopc-runtime-shell="1"></div>';
+$moduleProcess = $builder->buildPrepared($context, $session, $translator, $preparedShellHtml);
 if (!$moduleProcess instanceof CheckoutProcess) {
     $fail('CheckoutProcessBuilder did not return a Core CheckoutProcess.');
 }
@@ -130,7 +135,7 @@ if (in_array($expectedFamily, ['9.0', '9.1'], true)) {
         $fail('PrestaShop 9.2 Context translator is not the required TranslatorComponent.');
     }
 
-    $provider = new CheckoutProcessProvider($context, $builder);
+    $provider = new CheckoutProcessProvider($context, $builder, $preparedShellHtml);
     if (!$provider->isEnabled()) {
         $fail('Direct provider contract must report enabled after activation has already selected it.');
     }

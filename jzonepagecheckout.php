@@ -21,6 +21,12 @@ final class JzOnePageCheckout extends Module
      */
     private const INTEGRATION_SHELL_READY = false;
 
+    /**
+     * Request-local circuit breaker. If checkout assets or process preparation fail, later module
+     * hooks in the same request must leave Core's native checkout untouched.
+     */
+    private bool $checkoutIntegrationFailed = false;
+
     public function __construct()
     {
         $this->name = 'jzonepagecheckout';
@@ -161,59 +167,113 @@ final class JzOnePageCheckout extends Module
 
     public function hookActionCheckoutBuildProcess(array $params = []): mixed
     {
-        if (!$this->isCustomCheckoutActive()) {
+        try {
+            if (!$this->isCustomCheckoutActive()) {
+                return null;
+            }
+
+            $providerInterface = 'PrestaShop\\PrestaShop\\Adapter\\Order\\Checkout\\CheckoutProcessProviderInterface';
+            $providerClass = \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider::class;
+            if (!interface_exists($providerInterface) || !class_exists($providerClass)) {
+                return null;
+            }
+
+            $builder = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class);
+            if (!$builder instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder) {
+                $this->failCheckoutIntegration(
+                    'provider_service',
+                    new UnexpectedValueException('Checkout process builder service is unavailable.')
+                );
+
+                return null;
+            }
+
+            // Pre-render every risky shell dependency before exposing a valid 9.2+ provider. Core's
+            // resolver falls back to its native process when this hook returns no valid provider.
+            $preparedShellHtml = $builder->prepareShell($this->context);
+
+            return new \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider(
+                $this->context,
+                $builder,
+                $preparedShellHtml,
+            );
+        } catch (Throwable $exception) {
+            $this->failCheckoutIntegration('provider_prepare', $exception);
+
             return null;
         }
-
-        $providerInterface = 'PrestaShop\\PrestaShop\\Adapter\\Order\\Checkout\\CheckoutProcessProviderInterface';
-        $providerClass = \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider::class;
-        if (!interface_exists($providerInterface) || !class_exists($providerClass)) {
-            return null;
-        }
-
-        $builder = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class);
-        if (!$builder instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder) {
-            return null;
-        }
-
-        return new \Jzvikas\OnePageCheckout\Integration\Provider\CheckoutProcessProvider(
-            $this->context,
-            $builder,
-        );
     }
 
     public function hookActionCheckoutRender(array $params = []): void
     {
-        if (!$this->isCustomCheckoutActive()) {
-            return;
-        }
+        try {
+            if (!$this->isCustomCheckoutActive()) {
+                return;
+            }
 
-        $adapter = $this->get(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class);
-        if (!$adapter instanceof \Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter) {
-            return;
-        }
+            $adapter = $this->get(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class);
+            if (!$adapter instanceof \Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter) {
+                $this->failCheckoutIntegration(
+                    'legacy_service',
+                    new UnexpectedValueException('Legacy checkout render adapter service is unavailable.')
+                );
 
-        $translator = $this->context->getTranslator();
-        if (!$translator instanceof \Symfony\Contracts\Translation\TranslatorInterface) {
-            return;
-        }
+                return;
+            }
 
-        $adapter->replaceProcess($params, $this->context, $translator);
+            $translator = $this->context->getTranslator();
+            if (!$translator instanceof \Symfony\Contracts\Translation\TranslatorInterface) {
+                $this->failCheckoutIntegration(
+                    'legacy_translator',
+                    new UnexpectedValueException('Checkout translator service is unavailable.')
+                );
+
+                return;
+            }
+
+            if (!$adapter->replaceProcess($params, $this->context, $translator)) {
+                $this->failCheckoutIntegration(
+                    'legacy_contract',
+                    new UnexpectedValueException('Core checkout process contract is unavailable.')
+                );
+            }
+        } catch (Throwable $exception) {
+            // Core built its native process before actionCheckoutRender. The adapter assigns a
+            // replacement only after eager shell preparation succeeds, so an exception here leaves
+            // the original Core process untouched.
+            $this->failCheckoutIntegration('legacy_prepare', $exception);
+        }
     }
 
     public function hookActionFrontControllerSetMedia(): void
     {
         $controller = $this->context->controller ?? null;
-        if (!$controller instanceof OrderController || !$this->isCustomCheckoutActive()) {
+        if (!$controller instanceof OrderController) {
             return;
         }
 
-        $registrar = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class);
-        if (!$registrar instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar) {
-            return;
-        }
+        try {
+            if (!$this->isCustomCheckoutActive()) {
+                return;
+            }
 
-        $registrar->register($this->context);
+            $registrar = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class);
+            if (!$registrar instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar) {
+                $this->failCheckoutIntegration(
+                    'assets_service',
+                    new UnexpectedValueException('Checkout frontend asset registrar service is unavailable.')
+                );
+
+                return;
+            }
+
+            $registrar->register($this->context);
+        } catch (Throwable $exception) {
+            // Core calls setMedia before OrderController::postProcess/bootstrap. The request-local
+            // circuit breaker therefore prevents a later process takeover when required OPC assets
+            // could not be registered safely.
+            $this->failCheckoutIntegration('assets_register', $exception);
+        }
     }
 
     public function hookActionValidateOrderAfter(array $params = []): void
@@ -241,20 +301,26 @@ final class JzOnePageCheckout extends Module
 
     public function isCustomCheckoutActive(): bool
     {
-        if (!$this->integrationClassesAvailable()) {
+        if ($this->checkoutIntegrationFailed || !$this->integrationClassesAvailable()) {
             return false;
         }
 
-        $detector = new \Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector(
-            new \Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe()
-        );
-        $policy = new \Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy();
+        try {
+            $detector = new \Jzvikas\OnePageCheckout\Integration\CheckoutCapabilityDetector(
+                new \Jzvikas\OnePageCheckout\Integration\PrestaShopRuntimeProbe()
+            );
+            $policy = new \Jzvikas\OnePageCheckout\Integration\CheckoutActivationPolicy();
 
-        return $policy->decide(
-            capabilities: $detector->detect(),
-            featureEnabled: (bool) Configuration::get(self::CONFIG_CHECKOUT_ENABLED),
-            integrationShellReady: self::INTEGRATION_SHELL_READY,
-        )->allowed;
+            return $policy->decide(
+                capabilities: $detector->detect(),
+                featureEnabled: (bool) Configuration::get(self::CONFIG_CHECKOUT_ENABLED),
+                integrationShellReady: self::INTEGRATION_SHELL_READY,
+            )->allowed;
+        } catch (Throwable $exception) {
+            $this->failCheckoutIntegration('activation_policy', $exception);
+
+            return false;
+        }
     }
 
     /** @param array<string,mixed> $params */
@@ -283,6 +349,40 @@ final class JzOnePageCheckout extends Module
             return (int) Order::getIdByCartId($cartId) > 0;
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    private function failCheckoutIntegration(string $stage, Throwable $exception): void
+    {
+        if ($this->checkoutIntegrationFailed) {
+            return;
+        }
+
+        $this->checkoutIntegrationFailed = true;
+
+        try {
+            $cart = $this->context->cart ?? null;
+            $shopId = $cart instanceof Cart
+                ? (int) ($cart->id_shop ?? 0)
+                : (int) ($this->context->shop->id ?? 0);
+            $cartId = $cart instanceof Cart ? (int) ($cart->id ?? 0) : 0;
+
+            PrestaShopLogger::addLog(
+                sprintf(
+                    'jzonepagecheckout: native checkout fallback [stage=%s] [%s] [shop=%d] [cart=%d]',
+                    $stage,
+                    $exception::class,
+                    $shopId,
+                    $cartId,
+                ),
+                2,
+                null,
+                'Module',
+                (int) ($this->id ?? 0),
+                true,
+            );
+        } catch (Throwable) {
+            // A logging failure must never defeat the native-checkout fallback circuit breaker.
         }
     }
 
