@@ -34,7 +34,7 @@ assert(str_contains($legacy, "$" . "params['checkoutProcess'] = $" . "replacemen
 assert(str_contains($step, 'extends \\AbstractCheckoutStep'));
 assert(str_contains($step, 'private readonly string $shellHtml'));
 assert(str_contains($step, 'renderTemplate('), 'Shell step must preserve actionCheckoutStepRenderTemplate through Core rendering.');
-assert(str_contains($step, "['jzopc_shell_html' => $this->shellHtml]"));
+assert(str_contains($step, "['jzopc_shell_html' => $" . "this->shellHtml]"));
 assert(!str_contains($step, 'CheckoutShellRenderer'), 'Shell rendering must finish before Core process takeover.');
 assert(str_contains($step, "return 'jzopc-one-page-checkout';"));
 assert(str_contains($step, 'setReachable(true)'));
