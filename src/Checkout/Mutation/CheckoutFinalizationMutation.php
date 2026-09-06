@@ -18,6 +18,7 @@ use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationPreflightR
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationPreflightService;
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationAlreadyActive;
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface;
+use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationUnavailable;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry;
 
 final readonly class CheckoutFinalizationMutation
@@ -60,7 +61,13 @@ final readonly class CheckoutFinalizationMutation
                 if ($action === self::ACTION_RELEASE) {
                     // Recovery is attempt-scoped and still runs behind the normal CSRF/cart/customer/
                     // stale-state guard. A random/foreign attempt cannot clear another reservation.
-                    $this->reservationStore->releaseAttempt($context, $attemptId);
+                    try {
+                        $this->reservationStore->releaseAttempt($context, $attemptId);
+                    } catch (CheckoutFinalizationReservationUnavailable) {
+                        // An uncertain release must never be presented as success: the reservation
+                        // may still be the only barrier preventing a second native payment handoff.
+                        return $this->reservationUnavailable($currentSelections, $translate);
+                    }
 
                     return CheckoutMutationOutcome::success($currentSelections, []);
                 }
@@ -105,6 +112,8 @@ final readonly class CheckoutFinalizationMutation
                             $translate('Order submission is already in progress for this cart. Please wait.'),
                         )],
                     );
+                } catch (CheckoutFinalizationReservationUnavailable) {
+                    return $this->reservationUnavailable($currentSelections, $translate);
                 }
 
                 return CheckoutMutationOutcome::success($currentSelections, []);
@@ -126,6 +135,22 @@ final readonly class CheckoutFinalizationMutation
     private function action(mixed $value): ?string
     {
         return $value === self::ACTION_BEGIN || $value === self::ACTION_RELEASE ? $value : null;
+    }
+
+    /**
+     * @param Closure(string):string $translate
+     */
+    private function reservationUnavailable(
+        CheckoutServerSelections $currentSelections,
+        Closure $translate,
+    ): CheckoutMutationOutcome {
+        return CheckoutMutationOutcome::failure(
+            $currentSelections,
+            [new CheckoutError(
+                'finalization_unavailable',
+                $translate('Order submission safety could not be verified. Please wait and try again.'),
+            )],
+        );
     }
 
     /** @param Closure(string):string $translate */
