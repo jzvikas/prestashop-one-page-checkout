@@ -20,7 +20,7 @@ The module uses `actionCheckoutRender`. `LegacyCheckoutRenderAdapter` receives t
 
 The installed-runtime workflow contains an explicit PrestaShop 9.0.3 job as family `9.0`, alongside 9.1.5. All four installed runtime contracts explicitly accept 9.0/9.1 as the legacy checkout-render family. The new 9.0.3 job has not yet executed because GitHub Actions quota remains exhausted, so PrestaShop 9.0 compatibility is configured but not runtime-verified.
 
-PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run.
+PrestaShop 9.1.5 installed-runtime capability/process coverage existed before the latest identity/address/carrier/finalization/BO deltas; those newer changes still require a fresh run. The 9.1.5 job now also contains an unexecuted fully orderable two-tab reservation gate using official `PrestaShop/ps_checkpayment` pinned to commit `163eea350e29616f7cff343285d8c4bcc2b6cc44`.
 
 ### PrestaShop 9.2+
 
@@ -33,6 +33,8 @@ The repository previously exercised installed-runtime capability/process behavio
 ## Installed runtime contract baseline
 
 The current installed module contract requires module version `>=0.4.0`, matching the finalization-reservation schema baseline, and verifies both frontend media registration and the `actionValidateOrderAfter` successful-order cleanup hook. A source smoke contract locks the 9.0/9.1/9.2 workflow-family matrix so future version/test drift is caught before runtime evidence is interpreted.
+
+The PrestaShop 9.1.5 runtime additionally wires sequential and process-concurrent MariaDB reservation contracts plus two Chromium contention layers: an intentionally incomplete preflight-before-reservation test and a fully orderable reservation-acquisition test. The latter prepares guest identity, address, carrier, official check-payment selection and current agreements through the active checkout browser surface, but deliberately stops before payment submission.
 
 These source checks are not a substitute for executing the installed matrix.
 
@@ -61,15 +63,22 @@ Implemented architecture:
 - finalization reservation defaults to a 15-minute database-time recovery window, with code-level overrides bounded to 60..3600 seconds;
 - explicit attempt release remains customer/attempt scoped and refuses to clear the barrier if Core already has an order for the cart or Core order state cannot be determined safely.
 
+Configured but not yet executed browser evidence:
+
+- the PrestaShop 9.1.5 job installs official `PrestaShop/ps_checkpayment` at pinned commit `163eea350e29616f7cff343285d8c4bcc2b6cc44` only in the disposable runtime shop;
+- the orderable two-tab gate selects that option through normal Core/OPC payment discovery, proves one finalization reservation winner and one `finalization_in_progress` loser, replays the winning attempt idempotently, proves a losing attempt cannot release the active barrier, and then performs the exact winning release;
+- the gate never submits the check-payment form and therefore does not claim completed-payment or order-creation compatibility.
+
 Still requiring real browser verification:
 
-- representative redirect payment module;
+- representative redirect payment module through actual native submission/completion;
 - representative embedded/form payment module, including visible submit and Enter-key attempts before reservation;
 - module with additional information and JavaScript reinitialization;
 - jQuery/native ordinary submit handlers and embedded/tokenization form fields through the one-shot authorization boundary;
 - binary click and binary form-submit paths;
 - thrown/partial third-party native handlers, including proof that automatic release cannot reopen a handoff already in progress;
 - payment failure/retry and abandoned-reservation recovery, including retry after TTL expiry;
+- successful Core-order cleanup after real module-owned order creation;
 - zero-total free order and duplicate refresh behavior.
 
 The ordinary browser guard applies to observable native submit events. It does not claim to make hostile or third-party low-level JavaScript submission authoritative; representative payment-module browser testing remains mandatory.
@@ -84,6 +93,8 @@ Implemented architecture:
 - Core address-keyed delivery-option persistence;
 - virtual carts reject carrier mutation and omit the delivery section;
 - final preflight revalidates the persisted carrier.
+
+The configured PrestaShop 9.1.5 orderable contention gate now requires a real Core delivery option to survive selection and finalization preflight, but it is not a representative third-party carrier compatibility test and has not executed yet.
 
 Still requiring real browser verification:
 
@@ -100,4 +111,4 @@ Still requiring real browser verification:
 
 ## Verification limitation
 
-GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contract, ordinary-payment-submit guard contract and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The current connected-repository environment also does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions execution is currently blocked by exhausted repository Actions quota. The PrestaShop 9.0.3 matrix job, reservation-recovery contract, ordinary-payment-submit guard contract, orderable concurrent-tab browser gate and updated PHP/runtime/smoke contracts are committed but unexecuted and therefore are not described as passing. The connected repository environment also does not provide a local installed PrestaShop/browser runtime.
