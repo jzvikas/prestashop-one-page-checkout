@@ -107,17 +107,17 @@ $applyPatch([
     public function register(\Context $context): void
     {
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
+        if (!is_object($controller)) {
 PHP,
     'replacement' => <<<'PHP'
     public function register(\Context $context): void
     {
         if (is_file(dirname(__DIR__, 2) . '/.jzopc-runtime-failure-assets')) {
-            throw new RuntimeException('Injected active checkout asset compatibility validation failure.');
+            throw new RuntimeException('Injected active checkout asset manifest validation failure.');
         }
 
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
+        if (!is_object($controller)) {
 PHP,
 ]);
 
