@@ -2,21 +2,25 @@
 
 ## Status
 
-Accepted as diagnostic runtime coverage for the PrestaShop 9.1.5 production milestone. Production checkout readiness remains closed.
+Accepted as executed diagnostic runtime coverage for the PrestaShop 9.1.5 production milestone. Production checkout readiness remains closed.
 
 ## Context
 
-The installed-runtime run `34023693438` on commit `37303922abbd07a63c2c0d1790a92f3f5d844397` executed the new active Core carrier availability contract successfully. The exact disposable carrier was retained by Core `Carrier::getCarriersForOrder()` for the configured guest group/default delivery zone and by `Carrier::getAvailableCarrierList()` for the physical runtime product.
+The installed-runtime run `34023693438` on commit `37303922abbd07a63c2c0d1790a92f3f5d844397` executed the active Core carrier availability contract successfully. The exact disposable carrier was retained by Core `Carrier::getCarriersForOrder()` for the configured guest group/default delivery zone and by `Carrier::getAvailableCarrierList()` for the physical runtime product.
 
-The same 9.1.5 job then passed active checkout, finalization preflight and concurrent-tab preflight Chromium coverage but failed again in the fully orderable two-tab contract because, after the real guest identity and Core address mutations, the rendered delivery section contained no `input[name="delivery_option"]`.
+The same 9.1.5 line of testing passed active checkout, finalization preflight and concurrent-tab preflight Chromium coverage but failed in the fully orderable two-tab contract because, after the real guest identity and Core address mutations, the rendered delivery section contained no `input[name="delivery_option"]`.
 
-That evidence removes initial carrier registration/product eligibility as the primary explanation. The remaining boundary is the live browser-created cart: customer/group binding, delivery/invoice address persistence and ownership, delivery-address country/zone, or Core cart-level delivery-option assembly after the address mutation.
+The first version of the post-browser diagnostic exposed two harness-only defects before it could answer the checkout question: an explicit `LIMIT 1` was incorrectly combined with PrestaShop `Db::getValue()` (which appends its own scalar limit), and the CLI process lacked the Symfony front kernel required by Core delivery calculation. Both diagnostic defects were corrected without changing browser expectations or production carrier behavior.
+
+Installed-runtime run `34024940439` then executed the kernel-aware diagnostic after the orderable Chromium failure and passed every persisted Core invariant. The exact browser-created cart retained its customer/group binding, delivery and invoice address ownership, active country/zone, eligible Core carrier, physical product, and a non-empty `Cart::getDeliveryOptionList($country, true)` entry for the persisted delivery address.
+
+That executed result removes fixture registration, persisted address binding and Core carrier eligibility as the primary explanation. The defect boundary therefore moves to same-request OPC checkout-session/delivery rendering after native address persistence.
 
 Changing production carrier selection or injecting a synthetic browser delivery option would hide the failure and violate the server-authoritative checkout contract.
 
 ## Decision
 
-1. Add `tests/Runtime/ActiveCartDeliveryStateContract.php` for the 9.1.5 runtime milestone.
+1. Keep `tests/Runtime/ActiveCartDeliveryStateContract.php` as a PrestaShop 9.1.5 diagnostic/runtime contract.
 2. Execute it after the orderable Chromium step with `if: always()` so the diagnostic still runs when that browser gate fails first.
 3. Locate the live runtime cart through the unique physical fixture product in the fresh `--fixtures=0` runtime database and inspect only Core-persisted state.
 4. Require the live cart to prove all of the following:
@@ -30,9 +34,11 @@ Changing production carrier selection or injecting a synthetic browser delivery 
    - `Carrier::getAvailableCarrierList()` retains it for the actual product plus delivery address;
    - the Core cart still contains the runtime product;
    - a fresh `Cart::getDeliveryOptionList($country, true)` exposes at least one option for the persisted delivery address.
-5. Emit bounded identifiers/booleans and carrier/error codes on diagnostic failure. Do not emit customer names, email, street fields, tokens, cookies or payment data.
-6. Keep the diagnostic read-only: it must not call `setDeliveryOption()`, write `delivery_option`, submit payment, call `validateOrder()` or create an `Order`.
-7. Keep the existing Chromium assertion unchanged: the browser must still receive a real Core-rendered `delivery_option` before normal guarded carrier selection can continue.
+5. Boot the installed PrestaShop front kernel before the final delivery-option calculation so the diagnostic exercises the same Core Symfony services required by modern Cart delivery internals.
+6. Let `Db::getValue()` own scalar limiting; do not append another `LIMIT 1` to its SQL.
+7. Emit bounded identifiers/booleans and carrier/error codes on diagnostic failure. Do not emit customer names, email, street fields, tokens, cookies or payment data.
+8. Keep the diagnostic read-only: it must not call `setDeliveryOption()`, write `delivery_option`, submit payment, call `validateOrder()` or create an `Order`.
+9. Keep the existing Chromium assertion unchanged: the browser must still receive a real Core-rendered `delivery_option` before normal guarded carrier selection can continue.
 
 ## Security and correctness consequences
 
@@ -45,10 +51,10 @@ Changing production carrier selection or injecting a synthetic browser delivery 
 
 ## Verification
 
-The pre-browser carrier gate is real passing evidence from runtime run `34023693438`. The new live-cart diagnostic is not passing evidence until an installed-runtime run executes the new commit. The orderable Chromium gate on `37303922abbd07a63c2c0d1790a92f3f5d844397` remains failed.
+Runtime run `34024940439` is executed evidence that the post-browser live Core cart is delivery-eligible even while the OPC orderable Chromium contract on that run fails to expose a delivery radio. This diagnostic gate is therefore passing evidence for the persisted-state side of the boundary, not for OPC delivery rendering or final-submit readiness.
 
 ## Remaining work
 
-Use the first failing live-cart invariant to make the smallest Core-compatible correction. If all live-cart/Core delivery-option assertions pass while the delivery template still renders no option, the defect moves to the OPC `CheckoutSession`/delivery presenter/rendering boundary. Native payment completion, successful Core-order reservation cleanup, failure/abandonment/TTL recovery and broader carrier/payment compatibility remain release blockers.
+ADR-0037 applies the smallest same-request correction: after a successful native address commit, dependent OPC sections must render from a freshly loaded, binding-checked Core Cart rather than a potentially pre-mutation in-memory cart. That implementation still requires exact-head installed-browser verification. Native payment completion, successful Core-order reservation cleanup, failure/abandonment/TTL recovery and broader carrier/payment compatibility remain release blockers.
 
 `INTEGRATION_SHELL_READY` stays `false`.
