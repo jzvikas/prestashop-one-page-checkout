@@ -170,8 +170,10 @@ jobs:
             "${{ matrix.family }}"
 
       - name: Start fail-closed Front Office HTTP server
+        env:
+          JZOPC_PRESTASHOP_ROOT: /tmp/prestashop
         run: |
-          nohup php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php \
+          nohup php -S 127.0.0.1:8080 -t /tmp/prestashop "$GITHUB_WORKSPACE/tests/Runtime/prestashop-http-router.php" \
             >/tmp/jzopc-prestashop-http.log 2>&1 &
           echo $! >/tmp/jzopc-prestashop-http.pid
           for attempt in $(seq 1 30); do
@@ -257,8 +259,10 @@ jobs:
 
       - name: Start active Front Office HTTP server
         if: matrix.native_opc == '0'
+        env:
+          JZOPC_PRESTASHOP_ROOT: /tmp/prestashop
         run: |
-          nohup php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php \
+          nohup php -S 127.0.0.1:8080 -t /tmp/prestashop "$GITHUB_WORKSPACE/tests/Runtime/prestashop-http-router.php" \
             >/tmp/jzopc-prestashop-active-http.log 2>&1 &
           echo $! >/tmp/jzopc-prestashop-active-http.pid
           for attempt in $(seq 1 30); do
