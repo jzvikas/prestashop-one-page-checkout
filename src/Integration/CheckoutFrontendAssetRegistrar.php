@@ -43,14 +43,24 @@ final readonly class CheckoutFrontendAssetRegistrar
      *
      * Required OPC JavaScript is intentionally no longer queued through Core's page-level asset
      * manager: on PrestaShop 9.0/9.1 that queue was finalized before the legacy checkout takeover,
-     * which allowed a custom shell to render without its safety runtime. Validating the manifest
-     * here keeps the existing fail-closed hook behavior while CheckoutShellRenderer is the sole
-     * delivery boundary. This also prevents duplicate script execution on themes where early Core
-     * registration would otherwise succeed.
+     * which allowed a custom shell to render without its safety runtime. The shell remains the sole
+     * delivery boundary for those six files.
+     *
+     * The checkout still renders Core/third-party identity, carrier and payment hooks/forms. Some
+     * legacy integrations legitimately depend on PrestaShop's Core-owned jQuery compatibility
+     * asset, while Hummingbird itself does not expose a global jQuery. Requesting Core jQuery from
+     * the authoritative FrontController during actionFrontControllerSetMedia preserves those forms
+     * without bundling, vendoring or impersonating jQuery inside the OPC module. Repeated calls at
+     * later takeover boundaries are idempotent in Core's asset collection.
      */
     public function register(\Context $context): void
     {
-        unset($context);
+        $controller = $context->controller ?? null;
+        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
+            throw new RuntimeException('PrestaShop FrontController jQuery compatibility boundary is unavailable.');
+        }
+
+        $controller->addJquery();
         $this->shellJavascriptUrls();
     }
 }
