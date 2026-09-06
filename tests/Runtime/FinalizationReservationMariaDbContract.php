@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationAlreadyActive;
 use Jzvikas\OnePageCheckout\Infrastructure\Persistence\DbalCheckoutFinalizationReservationStore;
-use PrestaShop\PrestaShop\Adapter\SymfonyContainer;
 
 $shopRoot = $argv[1] ?? '';
 $expectedFamily = $argv[2] ?? '';
@@ -35,14 +35,31 @@ if (!defined('_PS_VERSION_') || !str_starts_with((string) _PS_VERSION_, '9.1.'))
     $fail(sprintf('Expected PrestaShop 9.1 runtime, got %s.', defined('_PS_VERSION_') ? (string) _PS_VERSION_ : 'unknown'));
 }
 
-$container = SymfonyContainer::getInstance();
-if ($container === null) {
-    $fail('PrestaShop Symfony container is unavailable in the installed runtime contract.');
+$dbHost = defined('_DB_SERVER_') ? trim((string) constant('_DB_SERVER_')) : '';
+$dbPort = defined('_DB_PORT_') ? (int) constant('_DB_PORT_') : 0;
+if ($dbHost !== '' && $dbPort <= 0 && preg_match('/\A([^:]+):(\d+)\z/D', $dbHost, $hostParts) === 1) {
+    $dbHost = $hostParts[1];
+    $dbPort = (int) $hostParts[2];
+}
+if ($dbHost === '') {
+    $fail('Installed PrestaShop database host is unavailable.');
 }
 
-$connection = $container->get('doctrine.dbal.default_connection');
+$dbParams = [
+    'driver' => 'pdo_mysql',
+    'host' => $dbHost,
+    'dbname' => defined('_DB_NAME_') ? (string) constant('_DB_NAME_') : '',
+    'user' => defined('_DB_USER_') ? (string) constant('_DB_USER_') : '',
+    'password' => defined('_DB_PASSWD_') ? (string) constant('_DB_PASSWD_') : '',
+    'charset' => 'utf8mb4',
+];
+if ($dbPort > 0) {
+    $dbParams['port'] = $dbPort;
+}
+
+$connection = DriverManager::getConnection($dbParams);
 if (!$connection instanceof Connection) {
-    $fail('PrestaShop default Doctrine DBAL connection is unavailable.');
+    $fail('Unable to create the installed PrestaShop Doctrine DBAL connection.');
 }
 
 $prefix = defined('_DB_PREFIX_') ? (string) constant('_DB_PREFIX_') : '';
@@ -171,5 +188,6 @@ try {
         $cleanup();
     } finally {
         $context->cart = $originalCart;
+        $connection->close();
     }
 }
