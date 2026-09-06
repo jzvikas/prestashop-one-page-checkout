@@ -110,6 +110,28 @@ async function runMutation(page, attribute, trigger, stage) {
   return payload;
 }
 
+function deliverySectionDiagnostic(payload) {
+  const present = Boolean(
+    payload
+    && payload.sections
+    && typeof payload.sections === 'object'
+    && Object.prototype.hasOwnProperty.call(payload.sections, 'delivery'),
+  );
+  const html = present && typeof payload.sections.delivery === 'string'
+    ? payload.sections.delivery
+    : '';
+
+  return {
+    present,
+    length: html.length,
+    hasDeliveryOption: /\bname=(['"])delivery_option\1/i.test(html),
+  };
+}
+
+function formatDeliveryDiagnostic(label, diagnostic) {
+  return `${label}_present=${diagnostic.present ? 1 : 0},${label}_bytes=${diagnostic.length},${label}_has_delivery_option=${diagnostic.hasDeliveryOption ? 1 : 0}`;
+}
+
 async function fillIfPresent(scope, selector, value) {
   const field = scope.locator(selector);
   if (await field.count() === 0) {
@@ -197,7 +219,7 @@ async function completeDeliveryAddress(page) {
     }
   }
 
-  await runMutation(
+  const addressSavePayload = await runMutation(
     page,
     'data-jzopc-address-save-url',
     async () => form.evaluate((node) => {
@@ -211,8 +233,9 @@ async function completeDeliveryAddress(page) {
     .waitFor({ state: 'attached', timeout: 10000 });
 
   const sameAddress = page.locator('[data-jzopc-section="addresses"] input[name="use_same_address"]');
+  let sameAddressPayload = null;
   if (await sameAddress.count() === 1 && !(await sameAddress.isChecked())) {
-    await runMutation(
+    sameAddressPayload = await runMutation(
       page,
       'data-jzopc-address-url',
       async () => sameAddress.check(),
@@ -222,6 +245,27 @@ async function completeDeliveryAddress(page) {
 
   if (await page.locator('[data-jzopc-section="addresses"] input[name="id_address_invoice"]:checked').count() !== 1) {
     fail('address-save: checkout did not retain a selected invoice address.');
+  }
+
+  const addressSaveDelivery = deliverySectionDiagnostic(addressSavePayload);
+  const sameAddressDelivery = deliverySectionDiagnostic(sameAddressPayload);
+  const effectiveDelivery = sameAddressDelivery.present ? sameAddressDelivery : addressSaveDelivery;
+  const domDeliveryOptionCount = await page.locator(
+    '[data-jzopc-section="delivery"] input[name="delivery_option"]',
+  ).count();
+
+  if (domDeliveryOptionCount === 0) {
+    const diagnostic = [
+      formatDeliveryDiagnostic('address_save_delivery', addressSaveDelivery),
+      formatDeliveryDiagnostic('same_address_delivery', sameAddressDelivery),
+      `dom_delivery_options=${domDeliveryOptionCount}`,
+    ].join(';');
+
+    if (effectiveDelivery.hasDeliveryOption) {
+      fail(`address-delivery-boundary: mutation response contained a Core delivery_option but browser section replacement lost it [${diagnostic}].`);
+    }
+
+    fail(`address-delivery-boundary: authoritative address mutation response did not contain a Core delivery_option [${diagnostic}].`);
   }
 }
 
