@@ -8,8 +8,6 @@ use RuntimeException;
 
 final readonly class CheckoutFrontendAssetRegistrar
 {
-    private const MODULE_PATH = 'modules/jzonepagecheckout/';
-
     /** @var list<string> */
     private const JAVASCRIPT_PATHS = [
         'views/js/payment-controller.js',
@@ -40,22 +38,19 @@ final readonly class CheckoutFrontendAssetRegistrar
         );
     }
 
+    /**
+     * Compatibility boundary for the existing media/takeover hooks.
+     *
+     * Required OPC JavaScript is intentionally no longer queued through Core's page-level asset
+     * manager: on PrestaShop 9.0/9.1 that queue was finalized before the legacy checkout takeover,
+     * which allowed a custom shell to render without its safety runtime. Validating the manifest
+     * here keeps the existing fail-closed hook behavior while CheckoutShellRenderer is the sole
+     * delivery boundary. This also prevents duplicate script execution on themes where early Core
+     * registration would otherwise succeed.
+     */
     public function register(\Context $context): void
     {
-        $controller = $context->controller ?? null;
-        if (!is_object($controller) || !method_exists($controller, 'registerJavascript')) {
-            throw new RuntimeException('Front controller JavaScript registration is unavailable.');
-        }
-
-        foreach (self::JAVASCRIPT_PATHS as $index => $path) {
-            $controller->registerJavascript(
-                'module-jzonepagecheckout-' . (string) $index,
-                self::MODULE_PATH . $path,
-                [
-                    'position' => 'bottom',
-                    'priority' => 150 + $index,
-                ],
-            );
-        }
+        unset($context);
+        $this->shellJavascriptUrls();
     }
 }
