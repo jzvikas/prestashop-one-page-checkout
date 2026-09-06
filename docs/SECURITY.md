@@ -25,7 +25,11 @@ All checkout mutation controllers are POST-only and inherit the same activation 
 - disabled merchant feature flag;
 - closed `INTEGRATION_SHELL_READY`.
 
-`INTEGRATION_SHELL_READY` is currently `false`, so custom process takeover, checkout assets and mutation endpoints remain unreachable in normal production checkout traffic.
+`INTEGRATION_SHELL_READY` is currently `false`, so custom process takeover, checkout runtime assets and mutation endpoints remain unreachable in normal production checkout traffic.
+
+Required OPC JavaScript is bound to the successfully rendered custom shell rather than to Core's page-level asset queue. `CheckoutShellRenderer` must resolve the complete six-file manifest from PrestaShop's `_MODULE_DIR_` before shell rendering. If manifest resolution or shell preparation fails, provider exposure / legacy process replacement fails closed and Core remains authoritative. Native Core checkout and native-OPC conflict fallback do not render the custom shell and therefore do not receive OPC runtime scripts.
+
+The compatibility `register()` hook boundary no longer calls `FrontController::registerJavascript()`. This deliberately avoids a lifecycle state in PrestaShop 9.0/9.1 where a custom shell could render after the page-level JavaScript queue was already finalized, and also avoids duplicate execution on themes where an early registration could succeed.
 
 The Back Office activation page cannot bypass this gate. It allows writes only for one concrete shop and reruns the same capability/native-conflict/readiness decision before accepting `1`. Group/all-shop contexts do not write activation state.
 
@@ -167,9 +171,9 @@ A browser busy flag exists only for UX and is not the duplicate-order security b
 
 The longer default TTL deliberately prefers bounded temporary retry blocking over reopening a second native payment handoff while a slow redirect, payment initialization or out-of-process payment action may still be progressing. The same fail-closed rule applies to customer-binding ambiguity: stale traffic is not authorized to clean up an unexpired cart handoff barrier.
 
-A PrestaShop 9.1.5 fully orderable same-session two-tab Chromium gate is now committed. It prepares guest identity, a Core address, a Core carrier, the pinned official `ps_checkpayment` option and current legal agreements through normal browser mutations, then requires exactly one `begin` attempt to acquire the reservation and the competing attempt to receive `finalization_in_progress`. It also requires exact winning replay to remain idempotent, a foreign/losing release to leave `data-jzopc-finalization-reserved="1"`, and the exact winning release to restore `reserved="0"`. The payment form is deliberately never submitted, so this gate verifies the reservation boundary before native payment activation rather than order creation.
+A PrestaShop 9.1.5 fully orderable same-session two-tab Chromium gate is committed. It prepares guest identity, a Core address, a Core carrier, the pinned official `ps_checkpayment` option and current legal agreements through normal browser mutations, then requires exactly one `begin` attempt to acquire the reservation and the competing attempt to receive `finalization_in_progress`. It also requires exact winning replay to remain idempotent, a foreign/losing release to leave `data-jzopc-finalization-reserved="1"`, and the exact winning release to restore `reserved="0"`. The payment form is deliberately never submitted, so this gate verifies the reservation boundary before native payment activation rather than order creation.
 
-That new browser gate is source-reviewed but not executed while GitHub Actions quota is exhausted. Native payment submission, customer-binding transition under an already-active browser reservation, slow/abandoned payment recovery, thrown/partial third-party handlers, Core-order cleanup and TTL recovery remain mandatory production verification.
+Recent Actions execution is available again. Runtime run `34015527664` proved the 9.1.5 installed/MariaDB gates before failing at the earlier active-shell asset-delivery gate; therefore downstream orderable browser/payment assertions in that run were skipped and are not counted as passing. Native payment submission, customer-binding transition under an already-active browser reservation, slow/abandoned payment recovery, thrown/partial third-party handlers, Core-order cleanup and TTL recovery remain mandatory production verification.
 
 ## 12. Successful-order and abandoned-state cleanup
 
@@ -191,6 +195,8 @@ Module-owned values are escaped by context. Raw HTML is intentionally limited to
 - payment top/additional-information/forms;
 - Core-formatted legal-condition HTML;
 - already-rendered trusted section fragments when composing the shell.
+
+Required checkout runtime URLs are internal paths derived from PrestaShop's `_MODULE_DIR_`, not browser input, and are HTML-escaped before being emitted as external deferred `<script src>` attributes. No inline executable JavaScript is introduced by the shell-owned delivery mechanism.
 
 Browser request strings may be passed to Core forms/validators but are never directly concatenated into a new raw HTML boundary.
 
@@ -236,39 +242,6 @@ The internal readiness constant remains private production authority; the BO pag
 | Forged/missing agreements | Exact fresh Core condition-set validation + final recheck | Real TOS/module condition browser matrix |
 | Monetary tampering | Server-only totals/orderability inputs | Live cart/promotion/tax scenarios |
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
+| Missing checkout safety runtime | Shell-owned six-file manifest; unresolved manifest fails before takeover; native fallback receives no OPC runtime | Execute 9.0/9.1 Chromium and require all six asset responses + initialized lifecycle |
 | Concurrent final submission | Cart-level DB reservation; mismatched customer cannot erase active barrier; exact attempt release + atomic Core-order predicate + bounded 15-minute TTL; orderable same-session two-tab gate committed for one-winner/one-blocked + exact replay/release | Execute the committed gate; then verify customer transitions, slow payment, Core cleanup and TTL recovery |
 | Payment/order handoff | Native ordinary/binary/free-order paths + direct ordinary submit barrier + post-activation fail-closed reservation preservation | Real third-party module browser verification, especially embedded forms, thrown/partial handlers and TTL/Core cleanup recovery |
-| Persisted stale selection rows | Immediate order cleanup + bounded abandoned GC implemented | Execute lifecycle/GC/runtime verification |
-| Native OPC conflict | Shared policy blocks enabled `ps_onepagecheckout` provider | Re-run 9.2 installed/browser conflict matrix |
-| Multistore activation spillover | BO writes limited to exact shop scope | Real multistore BO verification |
-| XSS | Escaped normal values; explicit raw Core/theme/module boundaries | Theme/module compatibility testing |
-| SQL injection | DBAL parameters + validated identifiers/constants | Preserve isolation for future SQL |
-
-## 17. Logging rules
-
-Server logs may include operation name plus non-sensitive shop/cart identifiers and machine error codes. Do not log:
-
-- passwords;
-- payment secrets/credentials/form payloads;
-- CSRF/auth tokens;
-- cookies/session identifiers;
-- full customer/address payloads or unnecessary PII.
-
-Browser lifecycle events must likewise avoid tokens and form payloads.
-
-## 18. Verification state and release blockers
-
-The source contains final validation, cart-level duplicate-handoff barrier, native payment handoff, successful-order cleanup, abandoned-state cleanup, Back Office rollout controls and a capture-phase barrier against direct ordinary module-form submission before reservation. Reservation recovery uses a payment-safe default TTL, prevents mismatched customer traffic from deleting an active reservation, refuses explicit release after a Core order within the same deletion statement, and preserves the barrier after ambiguous ordinary/binary native-handler throws.
-
-A fully orderable PrestaShop 9.1.5 two-tab browser gate is now wired against pinned official `ps_checkpayment`. Its source passed syntax-only review (`node --check` for the browser file and `php -l` for its source smoke contract), but the Chromium/installed-runtime workflow itself has not executed and is not considered passing. GitHub Actions quota remains exhausted.
-
-Before `INTEGRATION_SHELL_READY` can be reconsidered:
-
-1. execute all deferred checks, including the new orderable concurrent-tab gate, and fix every failure;
-2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
-3. prove native fallback/takeover, identity, CSRF rotation/cart restoration and address flows in a browser;
-4. prove carrier/no-carrier and representative payment module compatibility, including direct ordinary-form submit blocking without breaking embedded/tokenization fields;
-5. prove zero-total free order, customer-binding transitions during an active reservation, slow/failed/abandoned payment recovery, thrown/partial native-handler fail-closed behavior, Core-order cleanup, TTL recovery and successful cleanup;
-6. complete responsive/accessibility/performance and final packaging/release review.
-
-Until then, production checkout takeover remains intentionally disabled.
