@@ -1,0 +1,186 @@
+name: Native Payment Runtime
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-payment-order-cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: prestashop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout module
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, dom, fileinfo, gd, intl, mbstring, mysqli, pdo_mysql, simplexml, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install module dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Checkout PrestaShop 9.1.5
+        run: git clone --depth 1 --branch '9.1.5' https://github.com/PrestaShop/PrestaShop.git /tmp/prestashop
+
+      - name: Install PrestaShop dependencies
+        working-directory: /tmp/prestashop
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Build PrestaShop front assets
+        working-directory: /tmp/prestashop
+        run: |
+          bash tools/assets/build.sh front-core
+          bash tools/assets/build.sh front-hummingbird
+
+      - name: Install PrestaShop
+        working-directory: /tmp/prestashop
+        run: |
+          php install-dev/index_cli.php -- \
+            --domain=localhost:8080 \
+            --base_uri=/ \
+            --db_server=127.0.0.1:3306 \
+            --db_name=prestashop \
+            --db_user=root \
+            --db_password=root \
+            --prefix=ps_ \
+            --firstname=Runtime \
+            --lastname=Tester \
+            --password='Runtime123!' \
+            --email=runtime@example.com \
+            --language=en \
+            --country=us \
+            --all_languages=0 \
+            --newsletter=0 \
+            --send_email=0 \
+            --ssl=0 \
+            --fixtures=0
+
+      - name: Mount and install jzonepagecheckout
+        run: |
+          rm -rf /tmp/prestashop/modules/jzonepagecheckout
+          ln -s "$GITHUB_WORKSPACE" /tmp/prestashop/modules/jzonepagecheckout
+          cd /tmp/prestashop
+          php bin/console prestashop:module install jzonepagecheckout --no-interaction
+          php bin/console cache:clear --no-warmup
+
+      - name: Build temporary active checkout fixture
+        env:
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
+        run: |
+          bash tests/Runtime/build-active-checkout-fixture.sh "$GITHUB_WORKSPACE" /tmp/jzopc-active-fixture
+          rm -rf /tmp/prestashop/modules/jzonepagecheckout
+          ln -s /tmp/jzopc-active-fixture /tmp/prestashop/modules/jzonepagecheckout
+          cd /tmp/prestashop
+          php bin/console cache:clear --no-warmup
+
+      - name: Install pinned check-payment fixture
+        working-directory: /tmp/prestashop
+        run: |
+          rm -rf modules/ps_checkpayment
+          git clone https://github.com/PrestaShop/ps_checkpayment.git modules/ps_checkpayment
+          cd modules/ps_checkpayment
+          git checkout 163eea350e29616f7cff343285d8c4bcc2b6cc44
+          composer install --no-interaction --no-progress --prefer-dist
+          cd ../..
+          php bin/console prestashop:module install ps_checkpayment --no-interaction
+          php -r '
+            require "config/config.inc.php";
+            if (!Configuration::updateValue("PS_GUEST_CHECKOUT_ENABLED", 1)
+                || !Configuration::updateValue("CHEQUE_NAME", "JZ OPC Runtime Payee")
+                || !Configuration::updateValue("CHEQUE_ADDRESS", "1 Runtime Payment Street")) {
+                fwrite(STDERR, "Unable to configure check-payment fixture.\n");
+                exit(1);
+            }
+          '
+          php bin/console cache:clear --no-warmup
+
+      - name: Prepare active checkout fixture
+        run: |
+          fixture_output="$(php /tmp/jzopc-active-fixture/tests/Runtime/PrepareActiveCheckoutHttpFixture.php /tmp/prestashop 9.1)"
+          printf '%s\n' "$fixture_output"
+          product_id="$(printf '%s\n' "$fixture_output" | tail -n 1)"
+          if ! [[ "$product_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Active checkout fixture did not return a valid product ID." >&2
+            exit 1
+          fi
+          echo "JZOPC_RUNTIME_PRODUCT_ID=$product_id" >> "$GITHUB_ENV"
+
+      - name: Verify Core carrier fixture
+        run: php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCoreCarrierAvailabilityContract.php /tmp/prestashop 9.1 "$JZOPC_RUNTIME_PRODUCT_ID"
+
+      - name: Install browser dependencies
+        working-directory: tests/Browser
+        run: |
+          npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start Front Office HTTP server
+        env:
+          JZOPC_PRESTASHOP_ROOT: /tmp/prestashop
+        run: |
+          nohup php -S 127.0.0.1:8080 -t /tmp/prestashop "$GITHUB_WORKSPACE/tests/Runtime/prestashop-http-router.php" >/tmp/jzopc-native-payment-http.log 2>&1 &
+          echo $! >/tmp/jzopc-native-payment-http.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://localhost:8080/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/jzopc-native-payment-http.log
+          exit 1
+
+      - name: Execute native payment order completion Chromium contract
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+        run: |
+          output="$(node native-payment-order-cleanup-browser-contract.mjs)"
+          printf '%s\n' "$output"
+          cart_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_NATIVE_ORDER_CART_ID=//p' | tail -n 1)"
+          order_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_NATIVE_ORDER_ID=//p' | tail -n 1)"
+          if ! [[ "$cart_id" =~ ^[1-9][0-9]*$ && "$order_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Browser contract did not return valid Core cart/order IDs." >&2
+            exit 1
+          fi
+          echo "JZOPC_NATIVE_ORDER_CART_ID=$cart_id" >> "$GITHUB_ENV"
+          echo "JZOPC_NATIVE_ORDER_ID=$order_id" >> "$GITHUB_ENV"
+
+      - name: Verify Core order ownership and OPC cleanup
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/CompletedOrderCleanupContract.php \
+            /tmp/prestashop \
+            9.1 \
+            "$JZOPC_NATIVE_ORDER_CART_ID" \
+            "$JZOPC_NATIVE_ORDER_ID"
+
+      - name: Show Front Office logs on failure
+        if: failure()
+        run: cat /tmp/jzopc-native-payment-http.log 2>/dev/null || true
