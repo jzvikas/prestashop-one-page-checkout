@@ -1,74 +1,74 @@
-# ADR-0034: Required OPC assets are owned by the custom checkout shell
+# ADR-0034: Required OPC and late-takeover compatibility assets are owned by the custom checkout shell
 
 ## Status
 
-Provisional; shell-owned delivery is implemented and source-contracted. The latest executed PrestaShop 9.0/9.1 Chromium run proved delivery of the six OPC scripts but exposed a separate Core-jQuery compatibility defect on Hummingbird. A modern Core asset-manager registration fix is now implemented and must pass the installed Chromium matrix before this boundary is treated as verified.
+Provisional. Shell-owned delivery of the six OPC safety scripts is proven far enough to expose the next browser dependency. A theme-aware shell-level Core-jQuery compatibility boundary is now implemented. Static CI is green for that implementation; the installed PrestaShop 9.0/9.1 Chromium matrix is the required runtime proof before this boundary is considered verified.
 
 ## Context
 
-The installed PrestaShop 9 browser matrix exposed a lifecycle mismatch that source-only contracts did not reveal. On the legacy 9.0/9.1 path the custom OPC shell rendered with valid server-generated cart, CSRF, state-version and mutation endpoint bindings, while none of the six required `jzonepagecheckout` JavaScript assets appeared in the document. Without those scripts the browser cannot initialize mutation serialization, stale-state handling, payment handoff or final-submit guards.
+The installed PrestaShop 9 browser matrix exposed a lifecycle mismatch that source-only contracts did not reveal. On the legacy 9.0/9.1 path the custom OPC shell could be selected after the page-level asset lists had already been prepared. A checkout shell without its browser safety runtime is unacceptable because mutation serialization, stale-state handling, payment handoff and final-submit guarding would be absent.
 
-Two Core asset-manager hypotheses were executed and disproved:
+The runtime investigation established the failure in layers:
 
-1. re-registering the keyed assets from `actionCheckoutRender` was too late; the custom shell still rendered with `scriptSources: []`;
-2. changing the early `actionFrontControllerSetMedia` controller guard from `instanceof OrderController` to the stable `php_self === 'order'` identity also did not close the defect. PrestaShop Runtime run `34015527664` on commit `352978569ca74fa60eee57127c2cd43e4e12f408` again reached the active 9.1.5 Chromium contract with a valid OPC bootstrap but no OPC script tags or network responses.
+1. Re-registering the six keyed OPC assets from `actionCheckoutRender` was too late; the custom shell rendered with no OPC script tags.
+2. Identifying the order controller by stable `php_self === 'order'` rather than one concrete controller alias did not change that lifecycle fact. Runtime run `34015527664` on commit `352978569ca74fa60eee57127c2cd43e4e12f408` again reached the 9.1.5 active Chromium gate with valid cart/CSRF/state/bootstrap data but no OPC runtime scripts.
+3. Moving the six OPC files into the shell produced their expected script tags. Runtime run `34016579028` on commit `f201126f913bcd7cc5c573bba828c441c596943e` then exposed a CI PHP-router defect: existing module JavaScript files were routed through Front Office and returned application 404 instead of being served statically. `tests/Runtime/prestashop-http-router.php` now preserves normal static-file semantics for safe existing GET/HEAD paths.
+4. After the static-router correction, runtime on HEAD `7b8a6511ba8c7c93fe302a50516a5e6538b134db` served all six OPC files but Chromium failed with `jQuery is not defined` on both the 9.0/9.1 active path. The 9.1.5 job had already passed installation, sequential/process-concurrent MariaDB reservation, Core process adapter, integration isolation, Smarty shell, session, fail-closed HTTP and active fixture preparation. The 9.2 native-OPC conflict job remained green.
+5. Replacing the deprecated `FrontController::addJquery()` helper with `Media::getJqueryPath()` plus modern `FrontController::registerJavascript()` was not sufficient. Runtime run `34018103684` on code HEAD `6acbe852661ae65d40c7d2202b98de9a112315d3` again reached the active 9.0.3/9.1.5 Chromium gate and failed with the same `jQuery is not defined`; 9.2.0-beta.1 conflict isolation succeeded.
 
-The second run is important evidence: installation, installed contracts, sequential MariaDB finalization reservation, process-concurrent MariaDB reservation, Core process adapter, failure isolation, Smarty shell, session, fail-closed HTTP and active fixture preparation all succeeded before Chromium failed solely on required asset delivery. The same run's 9.2.0-beta.1 native-OPC conflict scenario completed successfully and intentionally skipped active OPC browser takeover.
+The fifth result is decisive. PrestaShop's modern `JavascriptManager` is the correct Core page-level registration system, but an active legacy OPC takeover may be decided after the theme's JavaScript data has already been materialized for rendering. An idempotent late `registerJavascript()` call therefore cannot be the sole delivery authority for a dependency required by the newly selected custom checkout shell.
 
-Therefore page-level Core asset registration cannot be the safety boundary for a checkout process that is itself selected later in the request lifecycle.
-
-After moving delivery into the shell, executed PrestaShop Runtime run `34016579028` on commit `f201126f913bcd7cc5c573bba828c441c596943e` proved the next layer of the contract. The 9.1.5 browser received all six expected `<script>` URLs from the OPC shell, but `payment-controller.js` returned HTTP 404 and no mutation lifecycle initialized. Inspection of the runtime harness showed that the PHP development server was started with `/tmp/prestashop/index.php` as an unconditional router, so even an existing `/modules/jzonepagecheckout/views/js/*.js` request was sent through the PrestaShop Front Office controller and converted to an application 404 instead of being served as a static file.
-
-That 404 was a runtime-harness transport defect, not evidence that the production module URL was wrong. The runtime server now mirrors a normal web server through `tests/Runtime/prestashop-http-router.php`: safe GET/HEAD requests for existing files are returned to PHP's built-in static server, while dynamic, missing or traversal-like requests continue through the real PrestaShop `index.php` entry point.
-
-The next executed runtime on HEAD `7b8a6511ba8c7c93fe302a50516a5e6538b134db` reached the active 9.0.3 and 9.1.5 Chromium contract after the static-router fix. The six OPC scripts were served, but Chromium failed with `jQuery is not defined`. The same 9.1.5 job had already passed module installation, sequential MariaDB reservation, process-concurrent MariaDB reservation, Core process adapter, integration failure isolation, Smarty shell, session, fail-closed HTTP and active fixture preparation. The 9.2.0-beta.1 native-OPC conflict job was green.
-
-Source inspection against PrestaShop 9.1.5 explains that failure. `FrontController::addJquery()` is a deprecated compatibility helper which ultimately appends the Core-resolved jQuery path to the legacy `js_files` array. Hummingbird renders its normal JavaScript through the modern `JavascriptManager` pipeline and does not expose a global jQuery itself. Calling `addJquery()` therefore did not guarantee a browser-visible Core jQuery dependency on this checkout path even though the call itself succeeded.
+PrestaShop Core also provides the correct duplicate-avoidance capability: the active theme exposes `requiresCoreScripts()`. Themes that require Core scripts already receive Core's compatibility bundle and must not receive a second jQuery instance. Hummingbird can declare that Core scripts are not required, while third-party Core-rendered checkout fragments can still depend on the Core-owned jQuery API.
 
 ## Decision
 
-The rendered custom checkout shell remains the authoritative delivery boundary for the six required OPC external JavaScript files.
+The rendered custom checkout shell is the authoritative delivery boundary for assets whose necessity becomes known only when that shell is selected.
 
-`CheckoutFrontendAssetRegistrar` owns a single manifest of required OPC asset paths and derives their URLs from PrestaShop's module path. `CheckoutShellRenderer` resolves that manifest before rendering the shell and passes it to `checkout-shell.tpl`. The template emits escaped, same-origin, deferred `<script>` elements only after the OPC root has been rendered.
+`CheckoutFrontendAssetRegistrar` owns two shell manifests:
 
-Core jQuery is a separate compatibility dependency, not an OPC-owned runtime asset. The registrar now resolves it through PrestaShop `Media::getJqueryPath()` and registers that Core-owned path through the authoritative `FrontController::registerJavascript()` modern asset manager with a stable `jzopc-core-jquery` ID, head position and earliest priority. Repeated calls from media/provider/legacy takeover boundaries are idempotent by asset ID. The module does not vendor, copy, rewrite or impersonate jQuery.
+- `shellJavascriptUrls()` contains exactly the six OPC safety/runtime files and derives their URLs from PrestaShop `_MODULE_DIR_`;
+- `shellCompatibilityJavascriptUrls(Context)` is theme-aware. If the active theme's `requiresCoreScripts()` returns true, it returns an empty list so Core's existing compatibility stack remains the only copy. If Core scripts are not required, it returns only the jQuery file resolved by PrestaShop `Media::getJqueryPath()`.
 
-The deprecated `FrontController::addJquery()` path is no longer used by OPC because it writes only to the legacy queue that failed the real Hummingbird runtime contract. The modern manager is used only for the Core jQuery compatibility dependency. The six OPC safety scripts are intentionally not registered there, preserving the shell as their sole delivery boundary and preventing duplicate execution.
+`CheckoutShellRenderer` resolves both manifests before rendering. `checkout-shell.tpl` emits Core compatibility files synchronously before any trusted Core/theme/module checkout section fragment is parsed, because those fragments can contain inline/native integration code that expects jQuery at parse time. The six OPC safety files remain escaped, same-origin, deferred external scripts after the shell markup.
 
-This has four safety properties:
+The early compatibility hook still registers Core jQuery through `FrontController::registerJavascript()` with stable asset ID `jzopc-core-jquery`, head position and priority 0. That remains useful when activation is known early enough, but it is no longer treated as authoritative for a late legacy takeover. The shell manifest closes that lifecycle gap.
 
-- if shell preparation cannot resolve the required OPC manifest, shell preparation throws before provider exposure / legacy process replacement and the existing request-local fallback keeps Core checkout authoritative;
-- if the Core jQuery resolver or modern JavaScript registration boundary is unavailable, takeover fails closed before the custom process is exposed;
-- native Core checkout or an incompatible/native OPC conflict never renders the custom shell, so it never receives the OPC JavaScript runtime;
-- the custom shell can no longer depend on a Core page-level asset queue whose lifecycle precedes legacy checkout takeover, while Core/third-party forms still receive a Core-owned compatibility dependency through the asset system Hummingbird actually renders.
+The module never vendors, copies, modifies or impersonates jQuery. It resolves the exact Core-owned path. It also never injects a second jQuery instance into themes that declare Core scripts are already required.
 
-No payment form ownership, carrier mechanics, mutation authority, reservation semantics or Core order creation path changes. The OPC module still never calls `PaymentModule::validateOrder()` or creates orders directly. `INTEGRATION_SHELL_READY` remains `false` in production source.
+The six OPC files are never registered through the page-level JavaScript manager. This preserves one execution authority for them and avoids duplicated mutation/payment/final-submit handlers.
+
+If the theme capability, Core jQuery resolver, page-level registration boundary or either shell manifest cannot be validated, shell preparation/takeover fails closed and Core checkout remains authoritative.
+
+No payment-form ownership, carrier mechanics, server mutation authority, reservation semantics or Core order creation path changes. The OPC module still never calls `PaymentModule::validateOrder()` or creates orders directly. `INTEGRATION_SHELL_READY` remains `false` in repository production source.
 
 ## Verification
 
-`tests/Smoke/CheckoutTakeoverAssetRegistrationContractSmokeTest.php` locks all of the following:
+Source/smoke contracts now lock all of the following:
 
-- the manifest contains all six required OPC runtime files;
-- the manifest resolves from the module path;
-- Core jQuery is resolved with `Media::getJqueryPath()`;
-- Core jQuery is registered through `FrontController::registerJavascript()` at the compatibility boundary before shell-manifest validation;
-- the deprecated `addJquery()` helper is not used;
-- the modern manager registration occurs exactly once in the registrar source so OPC safety scripts remain shell-owned;
-- `CheckoutShellRenderer` binds the manifest into the shell;
-- `checkout-shell.tpl` emits escaped deferred runtime asset tags;
-- provider/legacy takeover still validates the compatibility/manifest boundary before exposing the custom process;
+- all six OPC runtime files remain in the shell-owned manifest;
+- runtime URLs derive from PrestaShop's module URI and are escaped;
+- Core jQuery derives from `Media::getJqueryPath()`;
+- the early page-level path uses modern `FrontController::registerJavascript()` rather than deprecated `addJquery()`;
+- shell compatibility selection uses the active theme's `requiresCoreScripts()` contract;
+- Core-script themes receive no shell-level jQuery duplicate;
+- non-Core-script themes receive only the Core-resolved jQuery URL;
+- compatibility assets are emitted synchronously before trusted checkout section fragments;
+- OPC safety scripts remain deferred and shell-owned;
+- provider/legacy takeover validates asset compatibility before exposing the custom process;
 - production readiness remains closed and no takeover hook calls `validateOrder()`.
 
-`tests/Browser/active-checkout-browser-contract.mjs` remains the authoritative runtime proof: it rejects any browser page error, requires successful network responses for all six OPC assets, a defined mutation client and the `jzopc:checkout:initialized` lifecycle event. The existing `jQuery is not defined` failure is therefore not suppressed or reclassified; the compatibility fix must make that unchanged browser contract pass.
+`tests/Browser/active-checkout-browser-contract.mjs` remains the runtime authority. It rejects browser page errors, requires successful responses for every OPC safety script, requires `window.JzOpcMutationClient`, requires the `jzopc:checkout:initialized` lifecycle event and therefore still fails naturally if jQuery-dependent Core/module checkout integration executes without jQuery. The prior `jQuery is not defined` failure has not been suppressed or reclassified.
 
-`tests/Runtime/prestashop-http-router.php` exists only to make the CI PHP development server preserve normal static-vs-dynamic web-server semantics. It refuses static traversal-like paths, serves only existing GET/HEAD files through the built-in server, and routes every other request through PrestaShop Core.
+Static CI run `34018435831` on implementation/test HEAD `b0d4faa8777cca02621a4a780958206d2617cdfe` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
 
-The modern jQuery registration delta is not runtime-verified until a new PrestaShop 9.0/9.1 Chromium run passes on the resulting HEAD. Source/smoke success alone is insufficient.
+Installed PrestaShop Runtime run `34018435959` on the same code/test HEAD is the required browser/runtime proof for the new theme-aware shell compatibility boundary. Until its 9.0/9.1 Chromium jobs complete successfully, the change is implemented but not runtime-verified.
 
 ## Invariants
 
-- no custom shell may be considered production-ready unless all required OPC JavaScript and required Core compatibility dependencies are actually delivered and initialize without browser errors;
+- no custom shell may be considered production-ready unless every required OPC runtime and Core compatibility dependency is actually delivered and initializes without browser errors;
 - native/conflicting checkout fallback remains free of OPC runtime assets;
+- a Core-script theme must not receive a second jQuery instance from OPC;
+- a non-Core-script theme may receive only PrestaShop Core's own resolved jQuery path, never a module-vendored replacement;
 - browser state remains non-authoritative; server cart/customer/CSRF/state-version validation and cart mutex semantics remain unchanged;
 - third-party payment/carrier forms remain Core/module-owned and are not recreated by OPC;
 - the OPC module never creates orders directly and never calls `PaymentModule::validateOrder()`;
