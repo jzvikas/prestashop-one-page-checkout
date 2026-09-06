@@ -53,23 +53,25 @@ $assetRegisterAnchor = <<<'PHP'
     public function register(\Context $context): void
     {
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
+        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
 PHP;
 assertActiveRuntimeFixtureIsolation(
     substr_count($assetRegistrar, $assetRegisterAnchor) === 1,
-    'production asset registrar must expose the exact Core-jQuery/shell-manifest compatibility boundary instrumented by the runtime fixture',
+    'production asset registrar must expose the exact modern Core-jQuery/shell-manifest compatibility boundary instrumented by the runtime fixture',
 );
 assertActiveRuntimeFixtureIsolation(
-    str_contains($assetRegistrar, '$controller->addJquery();')
-        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();'),
-    'production asset compatibility boundary must request Core-owned jQuery and validate the shell manifest',
+    str_contains($assetRegistrar, '$jqueryPath = \\Media::getJqueryPath();')
+        && str_contains($assetRegistrar, '$controller->registerJavascript(')
+        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
+        && !str_contains($assetRegistrar, '$controller->addJquery();'),
+    'production asset compatibility boundary must resolve/register Core-owned jQuery through the modern asset manager and validate the shell manifest',
 );
 assertActiveRuntimeFixtureIsolation(
     str_contains($instrumenter, "'path' => 'src/Integration/CheckoutFrontendAssetRegistrar.php'")
         && str_contains($instrumenter, "'marker' => '.jzopc-runtime-failure-assets'")
         && str_contains($instrumenter, $assetRegisterAnchor)
         && str_contains($instrumenter, 'Injected active checkout asset compatibility validation failure.'),
-    'runtime failure instrumenter must stay aligned with the Core-jQuery/shell-manifest compatibility boundary',
+    'runtime failure instrumenter must stay aligned with the modern Core-jQuery/shell-manifest compatibility boundary',
 );
 
 assertActiveRuntimeFixtureIsolation(
