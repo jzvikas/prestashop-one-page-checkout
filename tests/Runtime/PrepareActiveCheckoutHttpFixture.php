@@ -183,6 +183,38 @@ if (!Configuration::updateValue('PS_CARRIER_DEFAULT', (int) $carrier->id, false,
     $fail('Unable to make the runtime Core carrier the shop default.');
 }
 
+// The 9.1 browser gate installs the official ps_checkpayment module before this deterministic
+// --fixtures=0 carrier exists. Core PaymentModule::install() snapshots the carrier restrictions that
+// exist at install time, so the later test carrier must be added to that payment module's normal
+// module_carrier restriction table or Core will correctly filter the module out. This is fixture-only
+// state repair; production OPC never changes payment-module carrier restrictions.
+if ($expectedFamily === '9.1') {
+    $checkPayment = Module::getInstanceByName('ps_checkpayment');
+    $carrierReference = (int) $carrier->id_reference;
+    if (!$checkPayment instanceof PaymentModule || !Module::isEnabled('ps_checkpayment') || (int) $checkPayment->id <= 0) {
+        $carrier->delete();
+        $fail('PrestaShop 9.1 runtime payment fixture is not installed and enabled.');
+    }
+    if ($carrierReference <= 0) {
+        $carrier->delete();
+        $fail('Runtime carrier does not expose a positive Core carrier reference for payment restrictions.');
+    }
+    if (!$db->insert(
+        'module_carrier',
+        [
+            'id_module' => (int) $checkPayment->id,
+            'id_shop' => $shopId,
+            'id_reference' => $carrierReference,
+        ],
+        false,
+        true,
+        Db::INSERT_IGNORE,
+    )) {
+        $carrier->delete();
+        $fail('Unable to associate ps_checkpayment with the deterministic runtime carrier restriction.');
+    }
+}
+
 $suffix = bin2hex(random_bytes(4));
 $product = new Product();
 $product->id_shop_default = $shopId;
