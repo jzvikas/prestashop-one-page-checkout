@@ -29,11 +29,11 @@ assertActiveHttpPersistentSession(
 
 foreach ([
     '$add = $session->request($addUrl);',
-    "$healthy = \$session->request(\$baseUrl . '/order');",
-    "$fallback = \$session->request(\$baseUrl . '/order');",
-    "$recovered = \$session->request(\$baseUrl . '/order');",
-    "$modeFallback = \$session->request(\$baseUrl . '/order');",
-    "$modeRecovered = \$session->request(\$baseUrl . '/order');",
+    "\$healthy = \$session->request(\$baseUrl . '/order');",
+    "\$fallback = \$session->request(\$baseUrl . '/order');",
+    "\$recovered = \$session->request(\$baseUrl . '/order');",
+    "\$modeFallback = \$session->request(\$baseUrl . '/order');",
+    "\$modeRecovered = \$session->request(\$baseUrl . '/order');",
 ] as $requestBoundary) {
     assertActiveHttpPersistentSession(
         str_contains($http, $requestBoundary),
