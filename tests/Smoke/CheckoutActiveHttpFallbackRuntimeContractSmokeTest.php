@@ -77,8 +77,8 @@ foreach ([
 assertActiveHttpFallbackRuntime(
     str_contains($instrumenter, "throw new \\RuntimeException('Injected active checkout shell service failure.')")
         && str_contains($instrumenter, "__jzopc_runtime_missing_template__.tpl")
-        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset registration failure.')"),
-    'temporary fixture must inject service, real Smarty-template and asset-registration failures at their production boundaries',
+        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset manifest validation failure.')"),
+    'temporary fixture must inject service, real Smarty-template and shell asset-manifest validation failures at their production boundaries',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
