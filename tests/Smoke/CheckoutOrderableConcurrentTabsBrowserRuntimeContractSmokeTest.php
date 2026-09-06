@@ -47,8 +47,9 @@ assertOrderableConcurrentTabsBrowserContract(
     str_contains($browser, 'deliverySectionDiagnostic(payload)')
         && str_contains($browser, "Object.prototype.hasOwnProperty.call(payload.sections, 'delivery')")
         && str_contains($browser, "hasDeliveryOption: /\\bname=(['\"])delivery_option\\1/i.test(html)")
-        && str_contains($browser, 'address_save_delivery_has_delivery_option=')
-        && str_contains($browser, 'same_address_delivery_has_delivery_option=')
+        && str_contains($browser, "formatDeliveryDiagnostic('address_save_delivery'")
+        && str_contains($browser, "formatDeliveryDiagnostic('same_address_delivery'")
+        && str_contains($browser, '${label}_has_delivery_option=')
         && str_contains($browser, 'dom_delivery_options=')
         && str_contains($browser, 'mutation response contained a Core delivery_option but browser section replacement lost it')
         && str_contains($browser, 'authoritative address mutation response did not contain a Core delivery_option'),
