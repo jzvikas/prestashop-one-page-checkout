@@ -68,8 +68,14 @@ assertOrdinaryPaymentSubmitGuardContract(
 );
 assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, "form.getAttribute(ACTION_FORM_ATTRIBUTE) === '1'")
-        && str_contains($guard, 'HTMLFormElement.prototype.submit.call(form);'),
-    'authorized action-only forms must cross directly into their Core-presented payment action',
+        && str_contains($guard, 'event.stopImmediatePropagation();')
+        && str_contains($guard, 'Promise.resolve().then(() => {')
+        && str_contains($guard, "if (!form.isConnected) {\n              return;\n            }\n            HTMLFormElement.prototype.submit.call(form);"),
+    'authorized action-only forms must defer native submission until the observable submit event unwinds',
+);
+assertOrdinaryPaymentSubmitGuardContract(
+    !str_contains($guard, "event.stopImmediatePropagation();\n          HTMLFormElement.prototype.submit.call(form);"),
+    'action-only native submission must not reenter the low-level form submission algorithm inside the active submit event',
 );
 assertOrdinaryPaymentSubmitGuardContract(
     substr_count($payment, 'data-jzopc-payment-action-form="1"') === 1

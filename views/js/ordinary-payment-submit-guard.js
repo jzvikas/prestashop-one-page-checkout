@@ -59,13 +59,20 @@
         // When Core presents PaymentOption::setAction() without module-owned form markup, OPC has
         // created only the thin action form visible in payment.tpl. Its whole payment contract is
         // the form action + successful controls; there are no module-owned form submit handlers to
-        // replay. The observable requestSubmit event above consumes the reservation authorization,
-        // then the platform-native submit crosses directly into that Core-presented payment action.
+        // replay. Stop the observable requestSubmit event, then cross into the platform-native form
+        // submission from a microtask after the current submit event has fully unwound. Calling the
+        // low-level submit method reentrantly from inside the active submit event is browser-sensitive
+        // and executed 9.1.5 runtime evidence showed that path can fail to start the payment request.
         // Module-supplied option.form markup never has this marker and keeps its full submit lifecycle.
         if (form.getAttribute(ACTION_FORM_ATTRIBUTE) === '1') {
           event.preventDefault();
           event.stopImmediatePropagation();
-          HTMLFormElement.prototype.submit.call(form);
+          Promise.resolve().then(() => {
+            if (!form.isConnected) {
+              return;
+            }
+            HTMLFormElement.prototype.submit.call(form);
+          });
         }
         return;
       }
