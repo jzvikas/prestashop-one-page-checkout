@@ -62,6 +62,21 @@ assertOrdinaryPaymentSubmitGuardContract(
     'an observable authorized native submit must consume its authorization immediately',
 );
 assertOrdinaryPaymentSubmitGuardContract(
+    str_contains($guard, "const ACTION_FORM_ATTRIBUTE = 'data-jzopc-payment-action-form';")
+        && str_contains($payment, 'data-jzopc-payment-action-form="1"'),
+    'only OPC-generated PaymentOption action forms may use the direct action handoff marker',
+);
+assertOrdinaryPaymentSubmitGuardContract(
+    str_contains($guard, "form.getAttribute(ACTION_FORM_ATTRIBUTE) === '1'")
+        && str_contains($guard, 'HTMLFormElement.prototype.submit.call(form);'),
+    'authorized action-only forms must cross directly into their Core-presented payment action',
+);
+assertOrdinaryPaymentSubmitGuardContract(
+    substr_count($payment, 'data-jzopc-payment-action-form="1"') === 1
+        && strpos($payment, 'data-jzopc-payment-action-form="1"') > strpos($payment, '{else}'),
+    'module-provided option.form markup must never receive the action-only direct-submit marker',
+);
+assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, 'Promise.resolve().then(() => {')
         && str_contains($guard, 'this.authorizedForm === form && this.authorizedPaymentOptionId === paymentOptionId'),
     'handoff authorization must also expire after the current synchronous stack when no native submit event is observed',
