@@ -211,6 +211,28 @@ jobs:
           cd /tmp/prestashop
           php bin/console cache:clear --no-warmup
 
+      - name: Install PrestaShop 9.1 check-payment browser fixture
+        if: matrix.family == '9.1'
+        working-directory: /tmp/prestashop
+        run: |
+          rm -rf modules/ps_checkpayment
+          git clone https://github.com/PrestaShop/ps_checkpayment.git modules/ps_checkpayment
+          cd modules/ps_checkpayment
+          git checkout 163eea350e29616f7cff343285d8c4bcc2b6cc44
+          composer install --no-interaction --no-progress --prefer-dist
+          cd ../..
+          php bin/console prestashop:module install ps_checkpayment --no-interaction
+          php -r '
+            require "config/config.inc.php";
+            if (!Configuration::updateValue("PS_GUEST_CHECKOUT_ENABLED", 1)
+                || !Configuration::updateValue("CHEQUE_NAME", "JZ OPC Runtime Payee")
+                || !Configuration::updateValue("CHEQUE_ADDRESS", "1 Runtime Payment Street")) {
+                fwrite(STDERR, "Unable to configure the PrestaShop 9.1 browser payment fixture.\n");
+                exit(1);
+            }
+          '
+          php bin/console cache:clear --no-warmup
+
       - name: Prepare active checkout HTTP fixture
         run: |
           fixture_output="$(php /tmp/jzopc-active-fixture/tests/Runtime/PrepareActiveCheckoutHttpFixture.php \
@@ -263,6 +285,13 @@ jobs:
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-concurrent-tabs-preflight-browser-contract.mjs
+
+      - name: Execute PrestaShop 9.1 orderable concurrent-tab finalization Chromium contract
+        if: matrix.family == '9.1'
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+        run: node finalization-orderable-concurrent-tabs-browser-contract.mjs
 
       - name: Execute active checkout failure fallback HTTP contract
         run: |
