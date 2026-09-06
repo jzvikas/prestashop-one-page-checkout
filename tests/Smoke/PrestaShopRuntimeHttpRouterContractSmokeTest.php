@@ -39,9 +39,10 @@ assertRuntimeHttpRouter(
     'dynamic and missing resources must continue through the real PrestaShop Front Office entry point',
 );
 assertRuntimeHttpRouter(
-    substr_count($workflow, 'JZOPC_PRESTASHOP_ROOT: /tmp/prestashop') === 2
-        && substr_count($workflow, 'tests/Runtime/prestashop-http-router.php') === 2,
-    'both closed and active runtime HTTP servers must use the same static-aware router',
+    substr_count($workflow, 'php -S 127.0.0.1:8080 -t /tmp/prestashop') === 2
+        && substr_count($workflow, 'tests/Runtime/prestashop-http-router.php') === 2
+        && substr_count($workflow, 'JZOPC_PRESTASHOP_ROOT: /tmp/prestashop') >= 2,
+    'both closed and active runtime HTTP servers must use the same static-aware router even when later browser fixture steps also receive the shop-root environment',
 );
 assertRuntimeHttpRouter(
     !str_contains($workflow, '-t /tmp/prestashop /tmp/prestashop/index.php'),
