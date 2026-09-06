@@ -1,3 +1,14 @@
+{* Third-party identity/carrier/payment fragments may execute inline compatibility code while this
+   shell is parsed. Themes that opt out of PrestaShop Core scripts therefore receive only Core's own
+   resolved jQuery file here, synchronously and before any checkout fragment. Core-script themes
+   receive an empty list, preventing a second jQuery instance. *}
+{foreach $jzopc_compatibility_javascript_urls as $jzopc_compatibility_javascript_url}
+  <script
+    src="{$jzopc_compatibility_javascript_url|escape:'htmlall':'UTF-8'}"
+    data-jzopc-core-compatibility-asset
+  ></script>
+{/foreach}
+
 <div
   class="jzopc-checkout"
   data-jzopc-checkout
@@ -44,8 +55,8 @@
   </div>
 </div>
 
-{* The custom shell is the authoritative asset boundary. These external same-origin scripts are
-   emitted only when OPC takeover actually rendered, so native/Core fallback cannot receive the
+{* The custom shell is the authoritative OPC runtime boundary. These external same-origin scripts
+   are emitted only when OPC takeover actually rendered, so native/Core fallback cannot receive the
    checkout runtime while the custom shell cannot exist without its safety controllers. *}
 {foreach $jzopc_javascript_urls as $jzopc_javascript_url}
   <script
