@@ -28,6 +28,9 @@ $assert(str_contains($browser, 'paymentHandoffShape()'), 'browser contract must 
 $assert(str_contains($browser, 'form.evaluate((node, evaluatedOptionId) => {'), 'browser form-shape diagnostics must explicitly pass the selected option identity into the browser realm');
 $assert(str_contains($browser, 'optionId: evaluatedOptionId,'), 'browser form-shape diagnostics must not depend on an unserialized Node-side closure');
 $assert(str_contains($browser, '}, optionId);'), 'browser form-shape diagnostics must transport the selected option identity as the evaluate argument');
+$assert(str_contains($browser, 'waitForSafeHandoffTrace'), 'browser contract must await lifecycle evidence outside the navigating page execution context');
+$assert(str_contains($browser, 'new Promise((resolve) => setTimeout(resolve, 20))'), 'navigation-safe lifecycle wait must yield through the Node event loop');
+$assert(!str_contains($browser, 'page.waitForFunction(() => true'), 'post-handoff synchronization must not depend on a page execution context destroyed by native navigation');
 $assert(str_contains($browser, 'action_path='), 'handoff failure diagnostics must expose only the payment action path');
 $assert(str_contains($browser, 'final_path='), 'handoff failure diagnostics must expose only the final navigation path');
 $assert(str_contains($browser, 'validation_status='), 'post-validation failure diagnostics must preserve structural response status');
