@@ -19,21 +19,23 @@ function assertExplicitBodyCapture(bool $condition, string $message): void
 }
 
 assertExplicitBodyCapture(
-    !str_contains($http, 'CURLOPT_RETURNTRANSFER')
+    str_contains($http, 'curl_setopt($this->handle, CURLOPT_NOBODY, false)')
+        && str_contains($http, 'curl_setopt($this->handle, CURLOPT_HEADER, false)')
+        && str_contains($http, 'curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, false)')
+        && str_contains($http, 'curl_setopt($this->handle, CURLOPT_HTTPGET, true)')
         && str_contains($http, 'CURLOPT_WRITEFUNCTION')
         && str_contains($http, '$body .= $chunk;')
         && str_contains($http, 'return strlen($chunk);')
         && str_contains($http, '$executed !== true'),
-    'fallback HTTP runtime must capture response bytes through an explicit write callback and fail on cURL execution errors',
+    'fallback HTTP runtime must explicitly clear no-body/header-only modes, select GET and capture response bytes through its write callback',
 );
 
 assertExplicitBodyCapture(
-    str_contains($http, 'CURLOPT_HTTPGET')
-        && str_contains($http, 'CURLINFO_SIZE_DOWNLOAD')
+    str_contains($http, 'CURLINFO_SIZE_DOWNLOAD')
         && str_contains($http, 'CURLINFO_CONTENT_LENGTH_DOWNLOAD')
         && str_contains($http, "'transfer_bytes' => \$transferBytes")
         && str_contains($http, "'content_length' => \$contentLength"),
-    'each persistent-session request must restore GET semantics and retain structural transfer-size evidence',
+    'persistent-session requests must retain structural transfer-size evidence after restoring response-body GET semantics',
 );
 
 assertExplicitBodyCapture(
