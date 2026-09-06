@@ -40,20 +40,26 @@ assertTakeoverAssets(
     str_contains($provider, 'CheckoutFrontendAssetRegistrar::class')
         && str_contains($provider, '$registrar->register($this->context);')
         && strpos($provider, '$registrar->register($this->context);') < strpos($provider, '$builder = $this->get('),
-    'provider takeover must validate the required asset manifest before shell preparation',
+    'provider takeover must validate the required compatibility/asset boundary before shell preparation',
 );
 assertTakeoverAssets(
     str_contains($legacy, 'CheckoutFrontendAssetRegistrar::class')
         && str_contains($legacy, '$registrar->register($this->context);')
         && strpos($legacy, '$registrar->register($this->context);') < strpos($legacy, '$adapter = $this->get('),
-    'legacy takeover must validate the required asset manifest before replacing Core checkout',
+    'legacy takeover must validate the required compatibility/asset boundary before replacing Core checkout',
 );
 assertTakeoverAssets(
     str_contains($registrar, 'private const JAVASCRIPT_PATHS = [')
         && str_contains($registrar, 'public function shellJavascriptUrls(): array')
         && str_contains($registrar, "constant('_MODULE_DIR_')")
         && !str_contains($registrar, 'registerJavascript('),
-    'shell asset manifest must own the six required URLs without also queuing duplicate Core scripts',
+    'shell asset manifest must own the six required OPC URLs without also queuing duplicate OPC scripts through Core',
+);
+assertTakeoverAssets(
+    str_contains($registrar, "is_callable([\$controller, 'addJquery'])")
+        && str_contains($registrar, '$controller->addJquery();')
+        && strpos($registrar, '$controller->addJquery();') < strpos($registrar, '$this->shellJavascriptUrls();'),
+    'active OPC compatibility boundary must request PrestaShop Core-owned jQuery before validating the shell runtime manifest',
 );
 
 foreach ([
