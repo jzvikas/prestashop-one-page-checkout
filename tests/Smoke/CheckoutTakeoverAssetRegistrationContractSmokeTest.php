@@ -60,6 +60,11 @@ assertTakeoverAssets(
     'legacy assets must be registered before the Core checkout process is replaced',
 );
 assertTakeoverAssets(
+    str_contains($media, "(string) (\$controller->php_self ?? '') !== 'order'")
+        && !str_contains($media, 'instanceof OrderController'),
+    'early media hook must recognize the Core order page without depending on a legacy OrderController alias',
+);
+assertTakeoverAssets(
     str_contains($media, 'CheckoutFrontendAssetRegistrar::class')
         && str_contains($media, '$registrar->register($this->context);')
         && str_contains($media, "'assets_register'"),
