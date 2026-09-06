@@ -30,9 +30,8 @@ assertFinalizationReservationConcurrencyRuntimeContract(
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
     str_contains($runtime, "if (!function_exists('proc_open'))")
-        && str_contains($runtime, 'if ($mode === \'worker\')')
-        && str_contains($runtime, "$ready = $gate . '.ready.' . $workerId;") === false,
-    'literal interpolation sentinel must remain false'
+        && str_contains($runtime, 'if ($mode === \'worker\')'),
+    'runtime contract must use independent PHP worker processes'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
     str_contains($runtime, '$ready = $gate . \'.ready.\' . $workerId;')
