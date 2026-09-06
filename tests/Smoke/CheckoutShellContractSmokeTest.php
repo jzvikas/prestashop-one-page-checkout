@@ -38,6 +38,9 @@ assertShellContract(str_contains($shell, 'data-jzopc-final-status'), 'final orde
 assertShellContract(str_contains($shell, "data-jzopc-final-message=\"payment-required\""), 'final submit client messages must come from translated Smarty markup');
 assertShellContract(str_contains($shell, "|escape:'htmlall':'UTF-8'"), 'bootstrap attributes must remain escaped');
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
+assertShellContract(str_contains($shell, '{foreach $jzopc_javascript_urls as $jzopc_javascript_url}'), 'custom shell must own required runtime asset delivery');
+assertShellContract(str_contains($shell, 'data-jzopc-runtime-asset'), 'custom shell runtime scripts must be explicitly identifiable');
+assertShellContract(str_contains($shell, 'src="{$jzopc_javascript_url|escape:'), 'runtime asset URLs must remain escaped');
 
 assertShellContract(is_string($renderer) && str_contains($renderer, 'CheckoutServerSelectionsStoreInterface'), 'renderer must load canonical server selections');
 assertShellContract(
@@ -47,6 +50,11 @@ assertShellContract(
 assertShellContract(
     str_contains($renderer, "'jzopc_finalization_reserved' => $" . "this->finalizationReservationStore->isActive($" . "context)"),
     'renderer must derive the finalization reservation marker at render time',
+);
+assertShellContract(
+    str_contains($renderer, 'CheckoutFrontendAssetRegistrar $frontendAssets')
+        && str_contains($renderer, "'jzopc_javascript_urls' => $" . "this->frontendAssets->shellJavascriptUrls()"),
+    'renderer must resolve the required runtime manifest before rendering the custom shell',
 );
 assertShellContract(str_contains($renderer, 'CheckoutSection::Identity'), 'identity renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Addresses'), 'addresses renderer is required');
@@ -67,10 +75,12 @@ assertShellContract(str_contains($factory, "'finalize'"), 'finalization URL must
 assertShellContract(str_contains($factory, 'stateVersioner->version'), 'bootstrap must derive authoritative state version');
 assertShellContract(str_contains($factory, 'stateFactory->create'), 'bootstrap must derive state from Core context');
 
-assertShellContract(is_string($assets) && str_contains($assets, 'payment-controller.js'), 'payment controller asset must remain registered');
-assertShellContract(str_contains($assets, 'checkout-mutation-client.js'), 'mutation transport asset must remain registered');
-assertShellContract(str_contains($assets, 'final-submit-controller.js'), 'final-submit controller asset must be registered after mutation transport');
-assertShellContract(str_contains($assets, 'registerJavascript'), 'assets must use front controller registration API');
+assertShellContract(is_string($assets) && str_contains($assets, 'payment-controller.js'), 'payment controller asset must remain in the runtime manifest');
+assertShellContract(str_contains($assets, 'checkout-mutation-client.js'), 'mutation transport asset must remain in the runtime manifest');
+assertShellContract(str_contains($assets, 'final-submit-controller.js'), 'final-submit controller asset must remain in the runtime manifest');
+assertShellContract(str_contains($assets, 'shellJavascriptUrls'), 'asset service must expose the shell-owned runtime manifest');
+assertShellContract(str_contains($assets, "constant('_MODULE_DIR_')"), 'runtime URLs must derive from PrestaShop module base URI');
+assertShellContract(!str_contains($assets, 'registerJavascript('), 'Core page-level registration must not duplicate shell-owned runtime scripts');
 assertShellContract(is_string($module) && str_contains($module, 'private const INTEGRATION_SHELL_READY = false;'), 'production readiness gate must remain closed');
 
 echo "CheckoutShellContractSmokeTest OK\n";
