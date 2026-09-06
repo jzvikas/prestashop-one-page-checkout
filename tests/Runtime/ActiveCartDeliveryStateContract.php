@@ -53,7 +53,7 @@ $cartId = (int) $db->getValue(
     . ' INNER JOIN `' . _DB_PREFIX_ . 'cart_product` cp ON cp.`id_cart` = c.`id_cart`'
     . ' WHERE cp.`id_product` = ' . $productId
     . ' AND c.`id_shop` = ' . $shopId
-    . ' ORDER BY c.`id_cart` DESC LIMIT 1'
+    . ' ORDER BY c.`id_cart` DESC'
 );
 if ($cartId <= 0) {
     $fail('No live Core cart contains the runtime product after the browser checkout preparation.');
