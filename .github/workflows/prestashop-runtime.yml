@@ -70,6 +70,10 @@ jobs:
         working-directory: /tmp/prestashop
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      - name: Build PrestaShop Front Core assets
+        working-directory: /tmp/prestashop
+        run: bash tools/assets/build.sh front-core
+
       - name: Build Classic theme assets for PrestaShop 9.0
         if: matrix.family == '9.0'
         working-directory: /tmp/prestashop
