@@ -167,7 +167,9 @@ A browser busy flag exists only for UX and is not the duplicate-order security b
 
 The longer default TTL deliberately prefers bounded temporary retry blocking over reopening a second native payment handoff while a slow redirect, payment initialization or out-of-process payment action may still be progressing. The same fail-closed rule applies to customer-binding ambiguity: stale traffic is not authorized to clean up an unexpired cart handoff barrier.
 
-Real concurrent-tab/browser verification is still required before this control is considered production-proven. In particular, representative third-party handlers that start work and throw must be verified to remain behind the preserved reservation, customer-binding transitions/stale tabs must not clear a competing reservation, and ordinary module forms must reject direct visible/Enter-key submission before reservation while preserving embedded/tokenization behavior during the authorized native handoff.
+A PrestaShop 9.1.5 fully orderable same-session two-tab Chromium gate is now committed. It prepares guest identity, a Core address, a Core carrier, the pinned official `ps_checkpayment` option and current legal agreements through normal browser mutations, then requires exactly one `begin` attempt to acquire the reservation and the competing attempt to receive `finalization_in_progress`. It also requires exact winning replay to remain idempotent, a foreign/losing release to leave `data-jzopc-finalization-reserved="1"`, and the exact winning release to restore `reserved="0"`. The payment form is deliberately never submitted, so this gate verifies the reservation boundary before native payment activation rather than order creation.
+
+That new browser gate is source-reviewed but not executed while GitHub Actions quota is exhausted. Native payment submission, customer-binding transition under an already-active browser reservation, slow/abandoned payment recovery, thrown/partial third-party handlers, Core-order cleanup and TTL recovery remain mandatory production verification.
 
 ## 12. Successful-order and abandoned-state cleanup
 
@@ -234,7 +236,7 @@ The internal readiness constant remains private production authority; the BO pag
 | Forged/missing agreements | Exact fresh Core condition-set validation + final recheck | Real TOS/module condition browser matrix |
 | Monetary tampering | Server-only totals/orderability inputs | Live cart/promotion/tax scenarios |
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
-| Concurrent final submission | Cart-level DB reservation; mismatched customer cannot erase active barrier; exact attempt release + atomic Core-order predicate + bounded 15-minute TTL | Real concurrent-tab/customer-transition/process and slow-payment verification |
+| Concurrent final submission | Cart-level DB reservation; mismatched customer cannot erase active barrier; exact attempt release + atomic Core-order predicate + bounded 15-minute TTL; orderable same-session two-tab gate committed for one-winner/one-blocked + exact replay/release | Execute the committed gate; then verify customer transitions, slow payment, Core cleanup and TTL recovery |
 | Payment/order handoff | Native ordinary/binary/free-order paths + direct ordinary submit barrier + post-activation fail-closed reservation preservation | Real third-party module browser verification, especially embedded forms, thrown/partial handlers and TTL/Core cleanup recovery |
 | Persisted stale selection rows | Immediate order cleanup + bounded abandoned GC implemented | Execute lifecycle/GC/runtime verification |
 | Native OPC conflict | Shared policy blocks enabled `ps_onepagecheckout` provider | Re-run 9.2 installed/browser conflict matrix |
@@ -258,15 +260,15 @@ Browser lifecycle events must likewise avoid tokens and form payloads.
 
 The source contains final validation, cart-level duplicate-handoff barrier, native payment handoff, successful-order cleanup, abandoned-state cleanup, Back Office rollout controls and a capture-phase barrier against direct ordinary module-form submission before reservation. Reservation recovery uses a payment-safe default TTL, prevents mismatched customer traffic from deleting an active reservation, refuses explicit release after a Core order within the same deletion statement, and preserves the barrier after ambiguous ordinary/binary native-handler throws.
 
-They are still not production-proven. GitHub Actions quota is exhausted, so the latest PHP/Node/smoke/installed-runtime contracts, including the cart-level reservation ownership regression, updated final-submit browser source contract and ordinary-payment-submit guard contract, have not executed.
+A fully orderable PrestaShop 9.1.5 two-tab browser gate is now wired against pinned official `ps_checkpayment`. Its source passed syntax-only review (`node --check` for the browser file and `php -l` for its source smoke contract), but the Chromium/installed-runtime workflow itself has not executed and is not considered passing. GitHub Actions quota remains exhausted.
 
 Before `INTEGRATION_SHELL_READY` can be reconsidered:
 
-1. execute all deferred checks and fix every failure;
+1. execute all deferred checks, including the new orderable concurrent-tab gate, and fix every failure;
 2. execute the configured PrestaShop 9.0/9.1/9.2 installed-runtime matrix;
 3. prove native fallback/takeover, identity, CSRF rotation/cart restoration and address flows in a browser;
 4. prove carrier/no-carrier and representative payment module compatibility, including direct ordinary-form submit blocking without breaking embedded/tokenization fields;
-5. prove zero-total free order, concurrent-tab/customer-binding reservation, slow/failed/abandoned payment recovery, thrown/partial native-handler fail-closed behavior, Core/TTL recovery and successful cleanup;
+5. prove zero-total free order, customer-binding transitions during an active reservation, slow/failed/abandoned payment recovery, thrown/partial native-handler fail-closed behavior, Core-order cleanup, TTL recovery and successful cleanup;
 6. complete responsive/accessibility/performance and final packaging/release review.
 
 Until then, production checkout takeover remains intentionally disabled.
