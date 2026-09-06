@@ -54,47 +54,21 @@ foreach ($failureMarkers as $mode => $markerPath) {
     }
 }
 
-$cookieJar = tempnam(sys_get_temp_dir(), 'jzopc-http-cookie-');
-if (!is_string($cookieJar) || $cookieJar === '') {
-    fwrite(STDERR, "Unable to create runtime HTTP cookie jar.\n");
-    exit(2);
-}
-
 final class ActiveCheckoutHttpSession
 {
-    /** @var CurlHandle */
-    private $handle;
-
-    public function __construct(string $cookieJar)
-    {
-        $handle = curl_init();
-        if ($handle === false) {
-            throw new RuntimeException('Unable to initialize cURL session.');
-        }
-
-        $this->handle = $handle;
-        curl_setopt_array($this->handle, [
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 8,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 25,
-            CURLOPT_COOKIEJAR => $cookieJar,
-            // Empty COOKIEFILE activates libcurl's in-memory cookie engine. The same CurlHandle is
-            // intentionally reused for the entire contract, so cart/session identity cannot depend
-            // on cookie-jar flush timing between separate handles.
-            CURLOPT_COOKIEFILE => '',
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 JzOpcRuntime/1.0',
-            CURLOPT_HTTPHEADER => [
-                'Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
-            ],
-        ]);
-    }
+    /** @var list<string> */
+    private array $cookies = [];
 
     /**
      * @return array{status:int,body:string,effective_url:string,content_type:string,transfer_bytes:int,content_length:int}
      */
     public function request(string $url): array
     {
+        $handle = curl_init();
+        if ($handle === false) {
+            throw new RuntimeException('Unable to initialize cURL request.');
+        }
+
         $body = '';
         $writeCallback = static function ($handle, string $chunk) use (&$body): int {
             $body .= $chunk;
@@ -102,52 +76,69 @@ final class ActiveCheckoutHttpSession
             return strlen($chunk);
         };
 
-        // The CurlHandle is deliberately persistent for its in-memory cookie engine, but request
-        // semantics must not be. Explicitly clear every libcurl mode that can suppress a response
-        // body before selecting GET; otherwise a stale HEAD/no-body state would look like a valid
-        // HTTP 200 checkout with zero transferred bytes and hide the real fallback contract.
-        if (!curl_setopt($this->handle, CURLOPT_URL, $url)
-            || !curl_setopt($this->handle, CURLOPT_NOBODY, false)
-            || !curl_setopt($this->handle, CURLOPT_HEADER, false)
-            || !curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, false)
-            || !curl_setopt($this->handle, CURLOPT_HTTPGET, true)
-            || !curl_setopt($this->handle, CURLOPT_WRITEFUNCTION, $writeCallback)) {
-            throw new RuntimeException('Unable to configure runtime HTTP request.');
+        try {
+            $configured = curl_setopt_array($handle, [
+                CURLOPT_URL => $url,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 8,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 25,
+                CURLOPT_NOBODY => false,
+                CURLOPT_HEADER => false,
+                CURLOPT_RETURNTRANSFER => false,
+                CURLOPT_HTTPGET => true,
+                // Activate libcurl's cookie engine for this isolated request. Session continuity is
+                // carried explicitly via COOKIELIST instead of reusing transport/request state.
+                CURLOPT_COOKIEFILE => '',
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 JzOpcRuntime/1.0',
+                CURLOPT_HTTPHEADER => [
+                    'Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+                ],
+                CURLOPT_WRITEFUNCTION => $writeCallback,
+            ]);
+            if (!$configured) {
+                throw new RuntimeException('Unable to configure runtime HTTP request.');
+            }
+
+            foreach ($this->cookies as $cookie) {
+                if (!curl_setopt($handle, CURLOPT_COOKIELIST, $cookie)) {
+                    throw new RuntimeException('Unable to restore runtime HTTP session cookie state.');
+                }
+            }
+
+            $executed = curl_exec($handle);
+            if ($executed !== true) {
+                throw new RuntimeException('HTTP request failed: ' . curl_error($handle));
+            }
+
+            $cookies = curl_getinfo($handle, CURLINFO_COOKIELIST);
+            if (is_array($cookies)) {
+                $this->cookies = array_values(array_filter(
+                    $cookies,
+                    static fn ($cookie): bool => is_string($cookie) && $cookie !== '',
+                ));
+            }
+
+            $transferBytes = (int) round((float) curl_getinfo($handle, CURLINFO_SIZE_DOWNLOAD));
+            $contentLength = (int) round((float) curl_getinfo($handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD));
+
+            return [
+                'status' => (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE),
+                'body' => $body,
+                'effective_url' => (string) curl_getinfo($handle, CURLINFO_EFFECTIVE_URL),
+                'content_type' => (string) curl_getinfo($handle, CURLINFO_CONTENT_TYPE),
+                'transfer_bytes' => $transferBytes,
+                'content_length' => $contentLength,
+            ];
+        } finally {
+            curl_close($handle);
         }
-
-        $executed = curl_exec($this->handle);
-        if ($executed !== true) {
-            throw new RuntimeException('HTTP request failed: ' . curl_error($this->handle));
-        }
-
-        $transferBytes = (int) round((float) curl_getinfo($this->handle, CURLINFO_SIZE_DOWNLOAD));
-        $contentLength = (int) round((float) curl_getinfo($this->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD));
-
-        return [
-            'status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE),
-            'body' => $body,
-            'effective_url' => (string) curl_getinfo($this->handle, CURLINFO_EFFECTIVE_URL),
-            'content_type' => (string) curl_getinfo($this->handle, CURLINFO_CONTENT_TYPE),
-            'transfer_bytes' => $transferBytes,
-            'content_length' => $contentLength,
-        ];
     }
 
     /** @return list<string> */
     public function cookies(): array
     {
-        $cookies = curl_getinfo($this->handle, CURLINFO_COOKIELIST);
-
-        return is_array($cookies)
-            ? array_values(array_filter($cookies, static fn ($cookie): bool => is_string($cookie) && $cookie !== ''))
-            : [];
-    }
-
-    public function close(): void
-    {
-        if ($this->handle instanceof CurlHandle) {
-            curl_close($this->handle);
-        }
+        return $this->cookies;
     }
 }
 
@@ -271,11 +262,11 @@ $stageStatuses = [];
 try {
     expectActiveHttp(Validate::isLoadedObject($product), 'Runtime checkout product is not loaded.');
 
-    $session = new ActiveCheckoutHttpSession($cookieJar);
+    $session = new ActiveCheckoutHttpSession();
 
-    // Seed through the same real Core CartController AJAX add surface exercised by Chromium. The
-    // persistent cURL handle is the HTTP-session boundary: Core cookies stay in libcurl memory for
-    // cart add, healthy checkout, injected failures and recovery requests alike.
+    // Seed through the same real Core CartController AJAX add surface exercised by Chromium. Each
+    // HTTP transfer gets a fresh CurlHandle while libcurl's cookie-list format carries the same
+    // Core cart/session identity across healthy checkout, injected failures and recovery requests.
     $addUrl = $baseUrl . '/cart?' . http_build_query([
         'add' => 1,
         'ajax' => 1,
@@ -289,7 +280,7 @@ try {
     );
     expectActiveHttp(
         $session->cookies() !== [],
-        'Core cart product-add request did not establish any HTTP cookie in the persistent session.',
+        'Core cart product-add request did not establish any HTTP cookie in the carried session.',
     );
 
     $healthy = $session->request($baseUrl . '/order');
@@ -386,11 +377,6 @@ try {
             $failure ??= $cleanupException;
         }
     }
-
-    if ($session instanceof ActiveCheckoutHttpSession) {
-        $session->close();
-    }
-    @unlink($cookieJar);
 }
 
 if ($failure instanceof Throwable) {
