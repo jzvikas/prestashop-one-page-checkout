@@ -81,10 +81,14 @@ assertActiveHttpFallbackRuntime(
     'temporary fixture must inject service, real Smarty-template and asset-compatibility failures at their production boundaries',
 );
 assertActiveHttpFallbackRuntime(
-    str_contains($assetRegistrar, "is_callable([\$controller, 'addJquery'])")
-        && str_contains($assetRegistrar, '$controller->addJquery();')
-        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();'),
-    'active checkout asset boundary must require Core-owned jQuery compatibility and the shell runtime manifest',
+    str_contains($assetRegistrar, "is_callable([\$controller, 'registerJavascript'])")
+        && str_contains($assetRegistrar, "is_callable([\\Media::class, 'getJqueryPath'])")
+        && str_contains($assetRegistrar, '$jqueryPath = \\Media::getJqueryPath();')
+        && str_contains($assetRegistrar, '$controller->registerJavascript(')
+        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
+        && !str_contains($assetRegistrar, '$controller->addJquery();')
+        && str_contains($instrumenter, "is_callable([\$controller, 'registerJavascript'])"),
+    'active checkout asset boundary must require Core-resolved jQuery through the modern asset manager plus the shell runtime manifest, and failure instrumentation must target that same boundary',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
