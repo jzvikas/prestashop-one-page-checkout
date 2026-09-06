@@ -20,11 +20,22 @@ function assertActiveHttpPersistentSession(bool $condition, string $message): vo
 
 assertActiveHttpPersistentSession(
     str_contains($http, 'final class ActiveCheckoutHttpSession')
-        && substr_count($http, 'curl_init(') === 1
+        && str_contains($http, 'private array $cookies = [];')
+        && str_contains($http, '$handle = curl_init();')
         && str_contains($http, "CURLOPT_COOKIEFILE => ''")
-        && str_contains($http, 'CURLOPT_COOKIEJAR => $cookieJar')
-        && str_contains($http, '$session = new ActiveCheckoutHttpSession($cookieJar);'),
-    'fallback HTTP contract must reuse one libcurl cookie engine instead of rebuilding a session per request',
+        && str_contains($http, 'CURLOPT_COOKIELIST, $cookie')
+        && str_contains($http, 'CURLINFO_COOKIELIST')
+        && str_contains($http, 'curl_close($handle);')
+        && str_contains($http, '$session = new ActiveCheckoutHttpSession();'),
+    'fallback HTTP contract must isolate every transfer while explicitly carrying only libcurl cookie/session state between requests',
+);
+
+assertActiveHttpPersistentSession(
+    substr_count($http, 'curl_init();') === 1
+        && !str_contains($http, 'private $handle;')
+        && !str_contains($http, 'CURLOPT_COOKIEJAR')
+        && !str_contains($http, 'tempnam('),
+    'fallback session must not reuse a CurlHandle or depend on a disk cookie jar across request boundaries',
 );
 
 foreach ([
@@ -37,14 +48,14 @@ foreach ([
 ] as $requestBoundary) {
     assertActiveHttpPersistentSession(
         str_contains($http, $requestBoundary),
-        'cart seed, healthy checkout, injected failures and recovery must share the persistent HTTP session',
+        'cart seed, healthy checkout, injected failures and recovery must share the carried Core HTTP session',
     );
 }
 
 assertActiveHttpPersistentSession(
     str_contains($http, '$session->cookies() !== []')
-        && str_contains($http, 'did not establish any HTTP cookie in the persistent session'),
-    'Core cart seeding must prove that the persistent HTTP session actually received cookie state before /order',
+        && str_contains($http, 'did not establish any HTTP cookie in the carried session'),
+    'Core cart seeding must prove that cookie state exists before the first /order request',
 );
 
 assertActiveHttpPersistentSession(
@@ -52,14 +63,14 @@ assertActiveHttpPersistentSession(
         && str_contains($http, "'ajax' => 1")
         && str_contains($http, "'id_product' => \$productId")
         && str_contains($http, 'CURLOPT_USERAGENT'),
-    'persistent session must still seed through Core AJAX cart mutation with browser-like traffic',
+    'session must still seed through Core AJAX cart mutation with browser-like traffic',
 );
 
 assertActiveHttpPersistentSession(
     !str_contains($http, 'validateOrder(')
         && !str_contains($http, 'INSERT INTO')
         && !str_contains($http, 'finalizationAction'),
-    'persistent HTTP harness must remain outside order creation and finalization ownership',
+    'fallback HTTP harness must remain outside order creation and finalization ownership',
 );
 
-fwrite(STDOUT, "Active HTTP persistent-session source contract OK.\n");
+fwrite(STDOUT, "Active HTTP isolated-session source contract OK.\n");
