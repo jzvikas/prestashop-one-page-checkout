@@ -36,6 +36,13 @@ assertActiveBrowserRuntime(
     'installed shop domain, browser base URL and loopback server must agree on port 8080',
 );
 assertActiveBrowserRuntime(
+    str_contains($workflow, "- ps_ref: '9.2.0-beta.1'")
+        && str_contains($workflow, "native_opc: '1'")
+        && substr_count($workflow, "if: matrix.native_opc == '0'") >= 7
+        && str_contains($workflow, "if: matrix.family == '9.1' && matrix.native_opc == '0'"),
+    'native-OPC conflict rows must remain fail-closed compatibility scenarios and must not enter active takeover/browser fixture steps',
+);
+assertActiveBrowserRuntime(
     str_contains($browser, "from 'playwright'")
         && str_contains($browser, 'chromium.launch({ headless: true })'),
     'active browser contract must execute a real headless Chromium instance',
