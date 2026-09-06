@@ -131,25 +131,26 @@ if ($carrier->delay === [] || !$carrier->add() || (int) $carrier->id <= 0) {
     $fail('Unable to create the runtime carrier through PrestaShop Carrier.');
 }
 
+// This standalone runtime bootstrap intentionally has no Symfony kernel container. PrestaShop 9.1
+// Carrier::delete() calls Carrier::isUsed(), which requires that container and can therefore mask the
+// actual fixture failure with ContainerNotFoundException. The CI database is disposable and this script
+// exits immediately on failure, so failure paths must remain fail-fast instead of attempting model cleanup.
 foreach ($activeZones as $zoneRow) {
     $zoneId = (int) ($zoneRow['id_zone'] ?? 0);
     if ($zoneId <= 0) {
         continue;
     }
     if (!$carrier->addZone($zoneId)) {
-        $carrier->delete();
         $fail(sprintf('Unable to associate the runtime carrier with Core delivery zone %d.', $zoneId));
     }
 }
 if (!Carrier::checkCarrierZone((int) $carrier->id, (int) $country->id_zone)) {
-    $carrier->delete();
     $fail('Runtime carrier is unavailable in the default Core delivery zone after association.');
 }
 
 $db = Db::getInstance();
 $groupRows = $db->executeS('SELECT `id_group` FROM `' . _DB_PREFIX_ . 'group`');
 if (!is_array($groupRows) || $groupRows === []) {
-    $carrier->delete();
     $fail('No Core customer group exists for runtime carrier association.');
 }
 foreach ($groupRows as $groupRow) {
@@ -164,7 +165,6 @@ foreach ($groupRows as $groupRow) {
         true,
         Db::INSERT_IGNORE,
     )) {
-        $carrier->delete();
         $fail(sprintf('Unable to associate runtime carrier with Core customer group %d.', $groupId));
     }
 }
@@ -175,11 +175,9 @@ if (!$db->insert(
     true,
     Db::INSERT_IGNORE,
 )) {
-    $carrier->delete();
     $fail('Unable to associate runtime carrier with the runtime shop.');
 }
 if (!Configuration::updateValue('PS_CARRIER_DEFAULT', (int) $carrier->id, false, $shopGroupId, $shopId)) {
-    $carrier->delete();
     $fail('Unable to make the runtime Core carrier the shop default.');
 }
 
@@ -192,11 +190,9 @@ if ($expectedFamily === '9.1') {
     $checkPayment = Module::getInstanceByName('ps_checkpayment');
     $carrierReference = (int) $carrier->id_reference;
     if (!$checkPayment instanceof PaymentModule || !Module::isEnabled('ps_checkpayment') || (int) $checkPayment->id <= 0) {
-        $carrier->delete();
         $fail('PrestaShop 9.1 runtime payment fixture is not installed and enabled.');
     }
     if ($carrierReference <= 0) {
-        $carrier->delete();
         $fail('Runtime carrier does not expose a positive Core carrier reference for payment restrictions.');
     }
     if (!$db->insert(
@@ -210,7 +206,6 @@ if ($expectedFamily === '9.1') {
         true,
         Db::INSERT_IGNORE,
     )) {
-        $carrier->delete();
         $fail('Unable to associate ps_checkpayment with the deterministic runtime carrier restriction.');
     }
 }
@@ -241,24 +236,20 @@ foreach ($languages as $language) {
     $product->link_rewrite[$idLang] = 'jz-opc-runtime-checkout-' . $suffix;
 }
 if ($product->name === [] || $product->link_rewrite === []) {
-    $carrier->delete();
     $fail('Unable to build multilingual runtime product fields.');
 }
 
 if (!$product->add()) {
-    $carrier->delete();
     $fail('Unable to create runtime checkout product through PrestaShop Product.');
 }
 if (!$product->addToCategories([$homeCategoryId])) {
     $product->delete();
-    $carrier->delete();
     $fail('Unable to assign runtime checkout product to the home category.');
 }
 
 StockAvailable::setQuantity((int) $product->id, 0, 25, $shopId);
 if ((int) Product::getQuantity((int) $product->id) < 1) {
     $product->delete();
-    $carrier->delete();
     $fail('Runtime checkout product stock was not persisted.');
 }
 
