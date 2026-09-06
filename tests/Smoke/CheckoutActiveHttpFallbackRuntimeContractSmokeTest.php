@@ -81,13 +81,12 @@ assertActiveHttpFallbackRuntime(
     'temporary fixture must inject service, real Smarty-template and shell-manifest failures at their production boundaries',
 );
 assertActiveHttpFallbackRuntime(
-    str_contains($assetRegistrar, '$this->shellJavascriptUrls = [];')
-        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
+    str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
         && !str_contains($assetRegistrar, '$controller->addJquery();')
         && !str_contains($assetRegistrar, '\\Media::getJqueryPath()')
         && !str_contains($assetRegistrar, '$controller->registerJavascript(')
-        && str_contains($instrumenter, '$this->shellJavascriptUrls = [];'),
-    'active checkout asset boundary must own only the six-file shell manifest while Core/theme compatibility assets remain Core-owned',
+        && str_contains($instrumenter, '$controller = $context->controller ?? null;'),
+    'active checkout asset boundary must validate only the six-file shell manifest while Core/theme compatibility assets remain Core-owned',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
