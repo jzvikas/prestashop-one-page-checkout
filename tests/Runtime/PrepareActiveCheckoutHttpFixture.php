@@ -131,6 +131,14 @@ if ($carrier->delay === [] || !$carrier->add() || (int) $carrier->id <= 0) {
     $fail('Unable to create the runtime carrier through PrestaShop Carrier.');
 }
 
+// Carrier::add() persists id_reference=id_carrier in SQL after ObjectModel::add(), but it does not
+// mutate the already-instantiated object's id_reference property. Reload through Core before any
+// payment-module restriction reads so the fixture observes the persisted server-authoritative value.
+$carrier = new Carrier((int) $carrier->id, $languageId);
+if (!Validate::isLoadedObject($carrier) || (int) $carrier->id_reference <= 0) {
+    $fail('Runtime carrier could not be reloaded with its persisted Core carrier reference.');
+}
+
 // This standalone runtime bootstrap intentionally has no Symfony kernel container. PrestaShop 9.1
 // Carrier::delete() calls Carrier::isUsed(), which requires that container and can therefore mask the
 // actual fixture failure with ContainerNotFoundException. The CI database is disposable and this script
