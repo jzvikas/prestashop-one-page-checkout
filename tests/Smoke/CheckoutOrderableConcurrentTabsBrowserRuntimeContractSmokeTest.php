@@ -44,6 +44,23 @@ assertOrderableConcurrentTabsBrowserContract(
     'browser contract must prepare identity, address, carrier, payment and agreements through checkout browser mutations'
 );
 assertOrderableConcurrentTabsBrowserContract(
+    str_contains($browser, 'deliverySectionDiagnostic(payload)')
+        && str_contains($browser, "Object.prototype.hasOwnProperty.call(payload.sections, 'delivery')")
+        && str_contains($browser, "hasDeliveryOption: /\\bname=(['\"])delivery_option\\1/i.test(html)")
+        && str_contains($browser, 'address_save_delivery_has_delivery_option=')
+        && str_contains($browser, 'same_address_delivery_has_delivery_option=')
+        && str_contains($browser, 'dom_delivery_options=')
+        && str_contains($browser, 'mutation response contained a Core delivery_option but browser section replacement lost it')
+        && str_contains($browser, 'authoritative address mutation response did not contain a Core delivery_option'),
+    'browser contract must classify the address-mutation response versus DOM delivery-option boundary without dumping checkout HTML'
+);
+assertOrderableConcurrentTabsBrowserContract(
+    !str_contains($browser, 'console.log(payload')
+        && !str_contains($browser, 'JSON.stringify(payload')
+        && !str_contains($browser, 'response.text()'),
+    'delivery diagnostics must remain bounded and must not dump mutation payloads, tokens or address HTML'
+);
+assertOrderableConcurrentTabsBrowserContract(
     str_contains($browser, 'data-module-name="ps_checkpayment"')
         && str_contains($browser, "finalizationRequest(pageA, bindingA, 'begin', attemptA)")
         && str_contains($browser, "finalizationRequest(pageB, bindingB, 'begin', attemptB)")
