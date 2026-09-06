@@ -257,6 +257,13 @@ jobs:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-preflight-browser-contract.mjs
 
+      - name: Execute PrestaShop 9.1 concurrent-tab finalization preflight Chromium contract
+        if: matrix.family == '9.1'
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+        run: node finalization-concurrent-tabs-preflight-browser-contract.mjs
+
       - name: Execute active checkout failure fallback HTTP contract
         run: |
           php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCheckoutFallbackHttpContract.php \
