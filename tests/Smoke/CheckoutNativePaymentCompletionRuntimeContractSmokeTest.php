@@ -25,6 +25,9 @@ $assert(str_contains($browser, 'isCheckPaymentValidation'), 'browser contract mu
 $assert(str_contains($browser, 'page.waitForRequest('), 'browser contract must prove that the payment-module validation request actually leaves Chromium');
 $assert(str_contains($browser, 'page.waitForResponse('), 'browser contract must observe the payment-module validation response structurally');
 $assert(str_contains($browser, 'paymentHandoffShape()'), 'browser contract must validate action-only form shape before native handoff');
+$assert(str_contains($browser, 'form.evaluate((node, evaluatedOptionId) => {'), 'browser form-shape diagnostics must explicitly pass the selected option identity into the browser realm');
+$assert(str_contains($browser, 'optionId: evaluatedOptionId,'), 'browser form-shape diagnostics must not depend on an unserialized Node-side closure');
+$assert(str_contains($browser, '}, optionId);'), 'browser form-shape diagnostics must transport the selected option identity as the evaluate argument');
 $assert(str_contains($browser, 'action_path='), 'handoff failure diagnostics must expose only the payment action path');
 $assert(str_contains($browser, 'final_path='), 'handoff failure diagnostics must expose only the final navigation path');
 $assert(str_contains($browser, 'validation_status='), 'post-validation failure diagnostics must preserve structural response status');
