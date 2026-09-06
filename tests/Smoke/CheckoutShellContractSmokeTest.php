@@ -38,6 +38,13 @@ assertShellContract(str_contains($shell, 'data-jzopc-final-status'), 'final orde
 assertShellContract(str_contains($shell, "data-jzopc-final-message=\"payment-required\""), 'final submit client messages must come from translated Smarty markup');
 assertShellContract(str_contains($shell, "|escape:'htmlall':'UTF-8'"), 'bootstrap attributes must remain escaped');
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
+assertShellContract(str_contains($shell, '{foreach $jzopc_compatibility_javascript_urls as $jzopc_compatibility_javascript_url}'), 'custom shell must own late-takeover Core compatibility delivery');
+assertShellContract(str_contains($shell, 'data-jzopc-core-compatibility-asset'), 'Core compatibility script must be explicitly identifiable');
+assertShellContract(str_contains($shell, 'src="{$jzopc_compatibility_javascript_url|escape:'), 'Core compatibility URL must remain escaped');
+assertShellContract(
+    strpos($shell, 'data-jzopc-core-compatibility-asset') < strpos($shell, 'data-jzopc-checkout'),
+    'Core compatibility dependency must execute synchronously before third-party checkout fragments are parsed',
+);
 assertShellContract(str_contains($shell, '{foreach $jzopc_javascript_urls as $jzopc_javascript_url}'), 'custom shell must own required runtime asset delivery');
 assertShellContract(str_contains($shell, 'data-jzopc-runtime-asset'), 'custom shell runtime scripts must be explicitly identifiable');
 assertShellContract(str_contains($shell, 'src="{$jzopc_javascript_url|escape:'), 'runtime asset URLs must remain escaped');
@@ -53,8 +60,9 @@ assertShellContract(
 );
 assertShellContract(
     str_contains($renderer, 'CheckoutFrontendAssetRegistrar $frontendAssets')
+        && str_contains($renderer, "'jzopc_compatibility_javascript_urls' => $" . "this->frontendAssets->shellCompatibilityJavascriptUrls($" . "context)")
         && str_contains($renderer, "'jzopc_javascript_urls' => $" . "this->frontendAssets->shellJavascriptUrls()"),
-    'renderer must resolve the required runtime manifest before rendering the custom shell',
+    'renderer must resolve both theme-aware Core compatibility and OPC runtime manifests before rendering the custom shell',
 );
 assertShellContract(str_contains($renderer, 'CheckoutSection::Identity'), 'identity renderer is required');
 assertShellContract(str_contains($renderer, 'CheckoutSection::Addresses'), 'addresses renderer is required');
@@ -81,10 +89,17 @@ assertShellContract(str_contains($assets, 'final-submit-controller.js'), 'final-
 assertShellContract(str_contains($assets, 'shellJavascriptUrls'), 'asset service must expose the shell-owned runtime manifest');
 assertShellContract(str_contains($assets, "constant('_MODULE_DIR_')"), 'runtime URLs must derive from PrestaShop module base URI');
 assertShellContract(
+    str_contains($assets, 'public function shellCompatibilityJavascriptUrls(\\Context $context): array')
+        && str_contains($assets, "is_callable([$" . "theme, 'requiresCoreScripts'])")
+        && str_contains($assets, 'if ((bool) $theme->requiresCoreScripts())')
+        && str_contains($assets, 'return [$this->coreJqueryPath()];'),
+    'shell compatibility delivery must use the theme Core-script capability to avoid a duplicate jQuery instance',
+);
+assertShellContract(
     substr_count($assets, '$controller->registerJavascript(') === 1
         && str_contains($assets, "private const CORE_JQUERY_ASSET_ID = 'jzopc-core-jquery';")
         && str_contains($assets, '$jqueryPath = \\Media::getJqueryPath();'),
-    'modern Core page-level registration must be limited to the Core-owned jQuery compatibility dependency',
+    'early modern Core registration must remain limited to the Core-owned jQuery compatibility dependency',
 );
 foreach ([
     'payment-controller.js',
