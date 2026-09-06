@@ -35,6 +35,20 @@ assertResponseMapper($completed->statusCode === 200, 'successful refresh must ma
 assertResponseMapper($completed->body['success'] === true, 'successful response body must remain successful');
 assertResponseMapper($completed->body['retryable'] === false, 'completed response must not be marked retryable');
 assertResponseMapper($completed->body['csrfToken'] === 'rotated-token', 'completed guarded response may carry a fresh Core CSRF token');
+$completedJson = json_decode($completed->toJson(), false, 512, JSON_THROW_ON_ERROR);
+assertResponseMapper(is_object($completedJson->sections), 'rendered sections must serialize as a JSON object map');
+assertResponseMapper(isset($completedJson->sections->summary), 'rendered section keys must survive JSON object serialization');
+
+$emptyCompleted = $mapper->map(
+    CheckoutMutationExecutionResult::completed(
+        CheckoutRefreshResult::success('v1:empty-sections', [])
+    ),
+    $translate,
+);
+$emptyCompletedJson = json_decode($emptyCompleted->toJson(), false, 512, JSON_THROW_ON_ERROR);
+assertResponseMapper(is_object($emptyCompletedJson->sections), 'empty sections must serialize as an empty JSON object, never a JSON list');
+assertResponseMapper(get_object_vars($emptyCompletedJson->sections) === [], 'empty sections JSON object must remain empty');
+assertResponseMapper(is_array($emptyCompletedJson->errors), 'errors must remain a JSON list while sections is normalized as a map');
 
 $validation = $mapper->map(
     CheckoutMutationExecutionResult::completed(
@@ -48,6 +62,9 @@ $validation = $mapper->map(
 assertResponseMapper($validation->statusCode === 422, 'business validation failure must map to HTTP 422');
 assertResponseMapper($validation->body['errors'][0]['code'] === 'invalid_address', 'handler error code must be preserved');
 assertResponseMapper(!array_key_exists('csrfToken', $validation->body), 'ordinary completed responses must not invent token rotation');
+$validationJson = json_decode($validation->toJson(), false, 512, JSON_THROW_ON_ERROR);
+assertResponseMapper(is_object($validationJson->sections), 'validation responses with no refresh sections must keep the JSON object-map contract');
+assertResponseMapper(is_array($validationJson->errors), 'validation response errors must stay a JSON list');
 
 $currentState = new CheckoutState(
     shopId: 2,
@@ -89,6 +106,9 @@ assertResponseMapper($busy->statusCode === 409, 'cart lock contention must map t
 assertResponseMapper($busy->body['errors'][0]['code'] === 'checkout_busy', 'busy response must have stable machine code');
 assertResponseMapper($busy->body['retryable'] === true, 'busy checkout is retryable');
 assertResponseMapper(!array_key_exists('csrfToken', $busy->body), 'busy requests must never receive replacement CSRF material');
+$busyJson = json_decode($busy->toJson(), false, 512, JSON_THROW_ON_ERROR);
+assertResponseMapper(is_object($busyJson->sections), 'guard errors must serialize empty sections as a JSON object map');
+assertResponseMapper(is_array($busyJson->errors), 'guard errors must preserve errors as a JSON list');
 
 try {
     $mapper->map(

@@ -57,8 +57,18 @@ final readonly class CheckoutJsonResponse
     /** @throws JsonException */
     public function toJson(): string
     {
+        $body = $this->body;
+
+        // `sections` is a JSON object/map contract even when no DOM refresh is required. PHP's
+        // empty array would otherwise serialize as `[]`, which the browser correctly rejects as a
+        // malformed mutation response. Keep the internal PHP representation as array<string,string>
+        // and normalize only at the transport boundary so errors remains a JSON list.
+        if (array_key_exists('sections', $body) && is_array($body['sections'])) {
+            $body['sections'] = (object) $body['sections'];
+        }
+
         return json_encode(
-            $this->body,
+            $body,
             JSON_THROW_ON_ERROR
                 | JSON_UNESCAPED_UNICODE
                 | JSON_UNESCAPED_SLASHES
