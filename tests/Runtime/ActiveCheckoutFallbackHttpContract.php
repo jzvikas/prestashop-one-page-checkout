@@ -102,7 +102,14 @@ final class ActiveCheckoutHttpSession
             return strlen($chunk);
         };
 
+        // The CurlHandle is deliberately persistent for its in-memory cookie engine, but request
+        // semantics must not be. Explicitly clear every libcurl mode that can suppress a response
+        // body before selecting GET; otherwise a stale HEAD/no-body state would look like a valid
+        // HTTP 200 checkout with zero transferred bytes and hide the real fallback contract.
         if (!curl_setopt($this->handle, CURLOPT_URL, $url)
+            || !curl_setopt($this->handle, CURLOPT_NOBODY, false)
+            || !curl_setopt($this->handle, CURLOPT_HEADER, false)
+            || !curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, false)
             || !curl_setopt($this->handle, CURLOPT_HTTPGET, true)
             || !curl_setopt($this->handle, CURLOPT_WRITEFUNCTION, $writeCallback)) {
             throw new RuntimeException('Unable to configure runtime HTTP request.');
