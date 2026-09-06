@@ -289,6 +289,7 @@ async function assertNativeFallback(stage) {
 try {
   const cartUrl = new URL('/cart', baseUrl);
   cartUrl.searchParams.set('add', '1');
+  cartUrl.searchParams.set('ajax', '1');
   cartUrl.searchParams.set('id_product', String(productId));
   cartUrl.searchParams.set('qty', '1');
   await navigate(cartUrl.toString(), 'core-cart-add');
