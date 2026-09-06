@@ -36,6 +36,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - `finalization-concurrent-tabs-preflight-browser-contract.mjs` and ADR-0031 locking the 9.1.5 two-tab preflight-before-reservation invariant for an intentionally incomplete checkout.
 - `CheckoutFinalizationReservationUnavailable` and ADR-0032 defining an explicit fail-closed domain boundary for ambiguous reservation reads, writes and releases.
 - `finalization-orderable-concurrent-tabs-browser-contract.mjs`, `CheckoutOrderableConcurrentTabsBrowserRuntimeContractSmokeTest.php` and ADR-0033 for a fully orderable PrestaShop 9.1.5 two-tab reservation contention gate using a pinned official `ps_checkpayment` option without submitting the payment form.
+- `tests/Runtime/prestashop-http-router.php` to preserve normal web-server static-file semantics in the PHP runtime harness while still routing dynamic checkout URLs through the real PrestaShop Front Office entry point.
 
 ### Changed
 
@@ -55,14 +56,16 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The active runtime browser phase now runs the takeover/fallback contract and separate finalization-preflight/concurrent-tab preflight rejection contracts before HTTP fixture cleanup.
 - The installed PrestaShop 9.1.5 runtime job now contains dedicated sequential and process-concurrent production-store/MariaDB reservation contracts before the broader Core process/browser gates; no equivalent 9.2 requirement is added to the current 9.1.5 production milestone.
 - The PrestaShop 9.1.5 active-browser phase now pins official `PrestaShop/ps_checkpayment` commit `163eea350e29616f7cff343285d8c4bcc2b6cc44`, enables guest checkout in the disposable runtime shop, prepares identity/address/carrier/payment/agreement state through real browser mutations, and exercises successful reservation acquisition against a competing tab without invoking native payment submission.
+- Both fail-closed and active PHP development servers now use the static-aware runtime router so existing module/theme assets are served directly instead of being incorrectly converted into PrestaShop application 404 responses.
 
 ### Verification
 
 - CI #113 on `239f2ad61a802d351ca92e8106bad4c7a1c5d0bb` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
 - PrestaShop Runtime #63 on the same commit completed successfully for 9.0.3, 9.1.5 and 9.2.0-beta.1. Every family passed module installation, Core process adapter, the new integration-failure-isolation contract, installed Smarty shell, module-front CheckoutSession and fail-closed Front Office HTTP checks.
 - CI #112 previously verified the reservation-browser hardening source/smoke layer on `852181de9687726521f95de479f3f2f58986ce8b`.
-- The new orderable concurrent-tab browser source passed local `node --check`, and its PHP source smoke contract passed local `php -l`; these are syntax-only checks, not runtime/browser verification.
-- The atomic reservation-release, cross-customer cart-level reservation, race-safe expiry cleanup, active HTTP/Chromium, finalization-preflight/concurrent-tab Chromium, fully orderable concurrent-tab Chromium, PrestaShop 9.1.5 sequential/process-concurrency MariaDB reservation-runtime and reservation-storage-uncertainty deltas have not executed in this delta and must not be counted as passing while GitHub Actions quota remains exhausted.
+- CI run `34016579023` on `f201126f913bcd7cc5c573bba828c441c596943e` completed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite after the temporary failure-instrumentation anchors were realigned with shell-owned asset validation.
+- PrestaShop Runtime run `34016579028` on the same commit completed successfully for the 9.2 native-OPC conflict job and, on 9.1.5, passed installation, sequential/process-concurrent MariaDB reservation, Core process, integration isolation, Smarty, session, fail-closed HTTP and active fixture preparation before Chromium failed because the CI PHP router converted an existing module JavaScript URL into HTTP 404. The shell did emit all six required script URLs, so this run is evidence for shell markup but is not a passing browser/runtime result.
+- The static-aware PHP runtime-router delta is committed but must not be counted as verified until the latest 9.0/9.1 Chromium jobs execute successfully.
 - Representative real payment completion, carrier diversity, successful Core-order cleanup/TTL recovery, zero-total order completion and full account/address browser flows remain release blockers.
 
 ### Safety
@@ -74,6 +77,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The orderable concurrent-tab contract uses Core-rendered guest/address forms, Core carrier/payment/agreement selection and the real guarded finalization endpoint; it deliberately stops before the pinned official payment module's native form submission, never calls `validateOrder()`, and verifies that only the exact winning attempt can clear the active reservation.
 - The 9.1.5 reservation MariaDB contracts use synthetic cart/customer identities only in the module-owned reservation table; the process-concurrency workers call only the production reservation store, never `validateOrder()`, never create a Core `Order`, and never change the production readiness gate.
 - Active reservation ownership is fail-closed at shop/cart level: a mismatched customer cannot clear an unexpired handoff barrier, expired-row cleanup cannot erase a concurrently refreshed barrier, explicit release remains exact customer/attempt scoped, Core-order absence is part of the same database statement that removes the barrier, ambiguous reservation persistence is never reported as success, and ambiguous post-activation payment-handler failure still preserves the reservation.
+- The test-only PHP router rejects traversal-like static paths and only delegates existing GET/HEAD files to the built-in static server; dynamic or missing paths continue through PrestaShop Core. It does not alter production routing or module behavior.
 - No module version bump: reservation ownership/release/expiry/storage hardening, browser policy, fallback containment and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
 
 ## 0.4.0
