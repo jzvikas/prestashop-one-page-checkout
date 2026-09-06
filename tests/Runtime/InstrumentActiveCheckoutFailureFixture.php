@@ -106,18 +106,18 @@ $applyPatch([
     'anchor' => <<<'PHP'
     public function register(\Context $context): void
     {
-        unset($context);
-        $this->shellJavascriptUrls();
+        $controller = $context->controller ?? null;
+        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
 PHP,
     'replacement' => <<<'PHP'
     public function register(\Context $context): void
     {
         if (is_file(dirname(__DIR__, 2) . '/.jzopc-runtime-failure-assets')) {
-            throw new RuntimeException('Injected active checkout asset manifest validation failure.');
+            throw new RuntimeException('Injected active checkout asset compatibility validation failure.');
         }
 
-        unset($context);
-        $this->shellJavascriptUrls();
+        $controller = $context->controller ?? null;
+        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
 PHP,
 ]);
 
