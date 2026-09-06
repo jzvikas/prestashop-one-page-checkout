@@ -7,6 +7,7 @@ namespace Jzvikas\OnePageCheckout\Infrastructure\Persistence;
 use Doctrine\DBAL\Connection;
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationAlreadyActive;
 use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationStoreInterface;
+use Jzvikas\OnePageCheckout\Checkout\Finalization\CheckoutFinalizationReservationUnavailable;
 use RuntimeException;
 use Throwable;
 
@@ -44,9 +45,13 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             throw new RuntimeException('Checkout finalization requires a cart-bound customer.');
         }
 
-        $this->purgeExpired();
+        try {
+            $this->purgeExpired();
+            $existing = $this->activeReservation($shopId, $cartId);
+        } catch (Throwable $exception) {
+            throw $this->unavailable('Unable to determine checkout finalization reservation state.', $exception);
+        }
 
-        $existing = $this->activeReservation($shopId, $cartId);
         if ($existing !== null) {
             if (
                 (int) ($existing['id_customer'] ?? -1) === $customerId
@@ -68,7 +73,15 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
                 [$shopId, $cartId, $customerId, $stateVersion, $paymentSelection, $attemptId, $this->ttlSeconds],
             );
         } catch (Throwable $exception) {
-            $existing = $this->activeReservation($shopId, $cartId);
+            try {
+                $existing = $this->activeReservation($shopId, $cartId);
+            } catch (Throwable $readException) {
+                throw $this->unavailable(
+                    'Checkout finalization reservation outcome is uncertain after a database write failure.',
+                    $readException,
+                );
+            }
+
             if (
                 $existing !== null
                 && (int) ($existing['id_customer'] ?? -1) === $customerId
@@ -84,7 +97,7 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
                 );
             }
 
-            throw $exception;
+            throw $this->unavailable('Unable to reserve checkout finalization safely.', $exception);
         }
     }
 
@@ -92,7 +105,11 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
     {
         [$shopId, $cartId] = $this->identity($context);
 
-        return $this->activeReservation($shopId, $cartId) !== null;
+        try {
+            return $this->activeReservation($shopId, $cartId) !== null;
+        } catch (Throwable $exception) {
+            throw $this->unavailable('Unable to determine whether checkout finalization is active.', $exception);
+        }
     }
 
     public function releaseAttempt(\Context $context, string $attemptId): void
@@ -103,17 +120,24 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
             return;
         }
 
-        $this->connection->executeStatement(
-            sprintf(
-                'DELETE reservation FROM `%1$s` reservation '
-                . 'WHERE reservation.id_shop = ? AND reservation.id_cart = ? '
-                . 'AND reservation.id_customer = ? AND reservation.attempt_id = ? '
-                . 'AND NOT EXISTS (SELECT 1 FROM `%2$s` orders WHERE orders.id_cart = ?)',
-                $this->tableName(),
-                $this->ordersTableName(),
-            ),
-            [$shopId, $cartId, $customerId, $attemptId, $cartId],
-        );
+        try {
+            $this->connection->executeStatement(
+                sprintf(
+                    'DELETE reservation FROM `%1$s` reservation '
+                    . 'WHERE reservation.id_shop = ? AND reservation.id_cart = ? '
+                    . 'AND reservation.id_customer = ? AND reservation.attempt_id = ? '
+                    . 'AND NOT EXISTS (SELECT 1 FROM `%2$s` orders WHERE orders.id_cart = ?)',
+                    $this->tableName(),
+                    $this->ordersTableName(),
+                ),
+                [$shopId, $cartId, $customerId, $attemptId, $cartId],
+            );
+        } catch (Throwable $exception) {
+            throw $this->unavailable(
+                'Unable to prove checkout finalization reservation release safely.',
+                $exception,
+            );
+        }
     }
 
     public function clear(\Context $context): void
@@ -242,5 +266,14 @@ final readonly class DbalCheckoutFinalizationReservationStore implements Checkou
         }
 
         return $prefix . $table;
+    }
+
+    private function unavailable(string $message, Throwable $previous): CheckoutFinalizationReservationUnavailable
+    {
+        if ($previous instanceof CheckoutFinalizationReservationUnavailable) {
+            return $previous;
+        }
+
+        return new CheckoutFinalizationReservationUnavailable($message, 0, $previous);
     }
 }
