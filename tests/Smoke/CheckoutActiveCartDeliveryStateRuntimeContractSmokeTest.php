@@ -36,8 +36,8 @@ assertLiveCartDeliveryStateContract(
     'Db::getValue() must own scalar-query limiting so the diagnostic cannot emit a duplicate LIMIT clause'
 );
 assertLiveCartDeliveryStateContract(
-    str_contains($contract, "require_once $appKernelPath;")
-        && str_contains($contract, "require_once $frontKernelPath;")
+    str_contains($contract, 'require_once $appKernelPath;')
+        && str_contains($contract, 'require_once $frontKernelPath;')
         && str_contains($contract, "new FrontKernel('prod', false)")
         && str_contains($contract, '$kernel->boot()')
         && str_contains($contract, '$context->container = $kernel->getContainer();'),
