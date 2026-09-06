@@ -41,7 +41,7 @@
             {if !empty($option.form)}
               {$option.form nofilter}
             {else}
-              <form id="payment-{$option.id|escape:'html':'UTF-8'}-form" method="POST" action="{$option.action|default:''|escape:'html':'UTF-8'}">
+              <form id="payment-{$option.id|escape:'html':'UTF-8'}-form" method="POST" action="{$option.action|default:''|escape:'html':'UTF-8'}" data-jzopc-payment-action-form="1">
                 {if !empty($option.inputs)}
                   {foreach from=$option.inputs item=input}
                     <input
