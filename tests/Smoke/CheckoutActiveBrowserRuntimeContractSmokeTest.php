@@ -5,6 +5,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 $package = file_get_contents($root . '/tests/Browser/package.json');
 $browser = file_get_contents($root . '/tests/Browser/active-checkout-browser-contract.mjs');
+$persistenceControl = file_get_contents($root . '/tests/Runtime/ActiveCheckoutPersistenceFailureControl.php');
 $workflow = file_get_contents($root . '/.github/workflows/prestashop-runtime.yml');
 $mutationClient = file_get_contents($root . '/views/js/checkout-mutation-client.js');
 $identityTemplate = file_get_contents($root . '/views/templates/front/sections/identity.tpl');
@@ -18,7 +19,7 @@ function assertActiveBrowserRuntime(bool $condition, string $message): void
     }
 }
 
-foreach ([$package, $browser, $workflow, $mutationClient, $identityTemplate, $module] as $source) {
+foreach ([$package, $browser, $persistenceControl, $workflow, $mutationClient, $identityTemplate, $module] as $source) {
     assertActiveBrowserRuntime(
         is_string($source) && $source !== '',
         'active browser runtime source must be readable',
@@ -44,15 +45,28 @@ assertActiveBrowserRuntime(
 );
 assertActiveBrowserRuntime(
     str_contains($browser, "from 'playwright'")
+        && str_contains($browser, "from 'node:child_process'")
         && str_contains($browser, 'chromium.launch({ headless: true })'),
-    'active browser contract must execute a real headless Chromium instance',
+    'active browser contract must execute a real headless Chromium instance and isolated fixture controls',
 );
 assertActiveBrowserRuntime(
     str_contains($browser, 'JZOPC_ACTIVE_FIXTURE_ROOT')
         && str_contains($browser, "'/tmp/jzopc-active-fixture'")
-        && str_contains($browser, "'.jzopc-runtime-failure-service'"),
-    'browser failure injection must be restricted to the disposable active fixture',
+        && str_contains($browser, 'JZOPC_PRESTASHOP_ROOT')
+        && str_contains($browser, "shopRoot !== '/tmp/prestashop'")
+        && str_contains($browser, "process.env.JZOPC_RUNTIME_ACTIVE_FIXTURE !== '1'"),
+    'browser failure injection must be restricted to the disposable active fixture and runtime shop',
 );
+foreach ([
+    '.jzopc-runtime-failure-service',
+    '.jzopc-runtime-failure-template',
+    '.jzopc-runtime-failure-assets',
+] as $marker) {
+    assertActiveBrowserRuntime(
+        str_contains($browser, "'{$marker}'"),
+        sprintf('browser fallback matrix must include %s', $marker),
+    );
+}
 assertActiveBrowserRuntime(
     str_contains($browser, "new URL('/cart', baseUrl)")
         && str_contains($browser, "cartUrl.searchParams.set('add', '1')")
@@ -118,16 +132,34 @@ assertActiveBrowserRuntime(
     'all server-generated checkout endpoints must be present and constrained to the runtime browser origin',
 );
 assertActiveBrowserRuntime(
-    str_contains($browser, "fs.writeFileSync(serviceFailureMarker, 'browser\\n', { flag: 'wx' })")
-        && str_contains($browser, "await assertNativeFallback('service-fallback')")
-        && str_contains($browser, "await assertHealthyCheckout('recovered-opc', false)")
-        && str_contains($browser, 'recoveredState.cartId !== initialState.cartId'),
-    'browser contract must inject one shell-service failure and prove native fallback plus same-cart recovery',
+    str_contains($browser, "setPersistenceFailure('drop')")
+        && str_contains($browser, "await assertNativeFallback('persistence-fallback')")
+        && str_contains($browser, "setPersistenceFailure('restore')")
+        && str_contains($browser, "await assertRecoveredSameCart('persistence-recovered', initialState.cartId)"),
+    'browser contract must prove persistence failure fallback and same-cart recovery inside the same Chromium context',
 );
 assertActiveBrowserRuntime(
-    str_contains($browser, 'if (fs.existsSync(serviceFailureMarker))')
-        && str_contains($browser, 'fs.unlinkSync(serviceFailureMarker)'),
-    'browser failure marker must have nested and outer cleanup protection',
+    str_contains($browser, 'for (const [mode, marker] of failureMarkers)')
+        && str_contains($browser, "await assertNativeFallback(`${mode}-fallback`)")
+        && str_contains($browser, "await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId)"),
+    'service/template/assets failures must each prove Core fallback and exact same-cart recovery in Chromium',
+);
+assertActiveBrowserRuntime(
+    str_contains($persistenceControl, "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'")
+        && str_contains($persistenceControl, "\$shopRoot !== '/tmp/prestashop'")
+        && str_contains($persistenceControl, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture-')")
+        && str_contains($persistenceControl, "\$action === 'drop'")
+        && str_contains($persistenceControl, '$schema->uninstall()')
+        && str_contains($persistenceControl, "\$action === 'restore'")
+        && str_contains($persistenceControl, '$schema->install()'),
+    'persistence failure control must be opt-in, disposable-tree-only and use the module schema boundary',
+);
+assertActiveBrowserRuntime(
+    str_contains($browser, 'if (persistenceDropped)')
+        && str_contains($browser, "setPersistenceFailure('restore')")
+        && str_contains($browser, 'for (const marker of failureMarkers.values())')
+        && str_contains($browser, 'fs.unlinkSync(marker)'),
+    'browser failure injection must restore schema and marker state through outer cleanup boundaries',
 );
 assertActiveBrowserRuntime(
     str_contains($browser, "page.on('pageerror'")
@@ -139,34 +171,43 @@ assertActiveBrowserRuntime(
         && !str_contains($browser, 'validateOrder(')
         && !str_contains($browser, 'data-jzopc-final-submit]')
         && !str_contains($browser, "'/module/jzonepagecheckout/finalize'")
-        && !str_contains($browser, 'PaymentModule'),
-    'identity/takeover/fallback browser gate must never initiate finalization, payment or order creation',
+        && !str_contains($browser, 'PaymentModule')
+        && !str_contains($persistenceControl, 'validateOrder(')
+        && !str_contains($persistenceControl, 'PaymentModule'),
+    'identity/takeover/fallback browser gate and fixture control must never initiate finalization, payment or order creation',
 );
 
 $activeServerPosition = strpos($workflow, 'Start active Front Office HTTP server');
 $browserInstallPosition = strpos($workflow, 'Install active browser contract dependencies');
 $browserRunPosition = strpos($workflow, 'Execute active checkout Chromium contract');
-$activeHttpPosition = strpos($workflow, 'Execute active checkout failure fallback HTTP contract');
+$finalizationRunPosition = strpos($workflow, 'Execute active finalization preflight Chromium contract');
 assertActiveBrowserRuntime(
     $browserInstallPosition !== false
         && $activeServerPosition !== false
         && $browserRunPosition !== false
-        && $activeHttpPosition !== false
+        && $finalizationRunPosition !== false
         && $browserInstallPosition < $activeServerPosition
         && $activeServerPosition < $browserRunPosition
-        && $browserRunPosition < $activeHttpPosition,
-    'browser dependencies/server/Chromium contract must run before the active HTTP contract removes the fixture product',
+        && $browserRunPosition < $finalizationRunPosition,
+    'browser dependencies/server/fallback matrix must execute before later finalization browser gates',
+);
+assertActiveBrowserRuntime(
+    str_contains($workflow, 'JZOPC_PRESTASHOP_ROOT: /tmp/prestashop')
+        && str_contains($workflow, "JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'")
+        && str_contains($workflow, 'JZOPC_ACTIVE_FIXTURE_ROOT: /tmp/jzopc-active-fixture')
+        && str_contains($workflow, 'run: node active-checkout-browser-contract.mjs')
+        && !str_contains($workflow, 'ActiveCheckoutFallbackHttpContract.php'),
+    'runtime matrix must make the same-session Chromium fallback matrix authoritative instead of the standalone PHP HTTP transport',
 );
 assertActiveBrowserRuntime(
     str_contains($workflow, 'npm install --no-package-lock --ignore-scripts --no-audit --no-fund')
-        && str_contains($workflow, './node_modules/.bin/playwright install --with-deps chromium')
-        && str_contains($workflow, 'run: node active-checkout-browser-contract.mjs'),
-    'runtime matrix must install only the pinned test dependency/browser and execute the standalone browser contract',
+        && str_contains($workflow, './node_modules/.bin/playwright install --with-deps chromium'),
+    'runtime matrix must install only the pinned test dependency/browser before executing the standalone browser contract',
 );
 assertActiveBrowserRuntime(
     str_contains($module, 'private const INTEGRATION_SHELL_READY = false;')
         && !str_contains($module, 'private const INTEGRATION_SHELL_READY = true;'),
-    'production integration readiness must remain closed while browser runtime evidence is pending',
+    'production integration readiness must remain closed while final-submit/runtime evidence is incomplete',
 );
 
-fwrite(STDOUT, "Active Chromium browser runtime source contract OK.\n");
+fwrite(STDOUT, "Active Chromium browser fallback matrix source contract OK.\n");
