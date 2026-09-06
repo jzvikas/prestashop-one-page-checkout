@@ -315,6 +315,14 @@ jobs:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-orderable-concurrent-tabs-browser-contract.mjs
 
+      - name: Execute PrestaShop 9.1 live-cart delivery-state diagnostic
+        if: always() && matrix.family == '9.1' && matrix.native_opc == '0'
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCartDeliveryStateContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}" \
+            "$JZOPC_RUNTIME_PRODUCT_ID"
+
       - name: Execute active checkout failure fallback HTTP contract
         if: matrix.native_opc == '0'
         run: |
