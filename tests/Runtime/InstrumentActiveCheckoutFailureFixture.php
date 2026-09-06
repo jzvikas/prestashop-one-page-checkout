@@ -107,7 +107,7 @@ $applyPatch([
     public function register(\Context $context): void
     {
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
+        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
 PHP,
     'replacement' => <<<'PHP'
     public function register(\Context $context): void
@@ -117,7 +117,7 @@ PHP,
         }
 
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
+        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
 PHP,
 ]);
 
