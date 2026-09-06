@@ -140,8 +140,8 @@ assertActiveBrowserRuntime(
 );
 assertActiveBrowserRuntime(
     str_contains($browser, 'for (const [mode, marker] of failureMarkers)')
-        && str_contains($browser, "await assertNativeFallback(`${mode}-fallback`)")
-        && str_contains($browser, "await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId)"),
+        && str_contains($browser, 'await assertNativeFallback(`${mode}-fallback`)')
+        && str_contains($browser, 'await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId)'),
     'service/template/assets failures must each prove Core fallback and exact same-cart recovery in Chromium',
 );
 assertActiveBrowserRuntime(
