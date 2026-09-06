@@ -58,7 +58,7 @@ if ($dbPort > 0) {
     $dbParams['port'] = $dbPort;
 }
 
-$prefix = defined('_DB_PREFIX_') ? (string) constant('_DB_PREFIX_) : '';
+$prefix = defined('_DB_PREFIX_') ? (string) constant('_DB_PREFIX_') : '';
 if (preg_match('/\A[A-Za-z0-9_]*\z/D', $prefix) !== 1) {
     $fail('Runtime database prefix is invalid.');
 }
