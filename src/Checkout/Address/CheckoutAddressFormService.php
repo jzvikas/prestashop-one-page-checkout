@@ -96,12 +96,6 @@ final readonly class CheckoutAddressFormService
             $session->setIdAddressInvoice($savedAddressId);
         }
 
-        // Address persistence can invalidate Cart package/delivery calculations already evaluated
-        // earlier in the same OPC request. Dependent carrier/payment rendering must therefore use
-        // a fresh Core Cart loaded from the just-committed database state, never a pre-mutation
-        // in-memory object. We still let Core CheckoutSession own every address write above.
-        $this->refreshAuthoritativeCart($context, $role, $savedAddressId, $useSameAddress);
-
         return CheckoutAddressFormSubmission::saved($savedAddressId, $form->render());
     }
 
@@ -149,40 +143,6 @@ final readonly class CheckoutAddressFormService
         if ($customerId <= 0 || (int) $cart->id_customer !== $customerId) {
             throw new CheckoutAddressFormException('address_customer_required', 'Customer information must be completed before saving an address.');
         }
-    }
-
-    private function refreshAuthoritativeCart(\Context $context, string $role, int $savedAddressId, bool $useSameAddress): void
-    {
-        $currentCart = $context->cart ?? null;
-        $customer = $context->customer ?? null;
-        if (!$currentCart instanceof \Cart || !$customer instanceof \Customer) {
-            throw new CheckoutAddressFormException('address_cart_refresh_failed', 'Checkout cart state could not be refreshed safely.');
-        }
-
-        $cartId = (int) $currentCart->id;
-        $customerId = (int) $customer->id;
-        $shopId = (int) ($context->shop->id ?? 0);
-        if ($cartId <= 0 || $customerId <= 0 || $shopId <= 0) {
-            throw new CheckoutAddressFormException('address_cart_refresh_failed', 'Checkout cart state could not be refreshed safely.');
-        }
-
-        $freshCart = new \Cart($cartId);
-        if (!\Validate::isLoadedObject($freshCart)
-            || (int) $freshCart->id_customer !== $customerId
-            || (int) $freshCart->id_shop !== $shopId) {
-            throw new CheckoutAddressFormException('address_cart_refresh_failed', 'Checkout cart binding changed while saving the address.');
-        }
-
-        if ($role === 'delivery') {
-            if ((int) $freshCart->id_address_delivery !== $savedAddressId
-                || ($useSameAddress && (int) $freshCart->id_address_invoice !== $savedAddressId)) {
-                throw new CheckoutAddressFormException('address_cart_refresh_failed', 'The saved delivery address was not committed to the checkout cart.');
-            }
-        } elseif ((int) $freshCart->id_address_invoice !== $savedAddressId) {
-            throw new CheckoutAddressFormException('address_cart_refresh_failed', 'The saved invoice address was not committed to the checkout cart.');
-        }
-
-        $context->cart = $freshCart;
     }
 
     private function assertOwnedAddress(\Context $context, int $addressId): void
