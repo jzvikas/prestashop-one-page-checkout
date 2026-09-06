@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const baseUrl = String(process.env.JZOPC_BROWSER_BASE_URL || '').replace(/\/$/, '');
 const productId = Number.parseInt(String(process.env.JZOPC_RUNTIME_PRODUCT_ID || ''), 10);
 const configuredFixtureRoot = String(process.env.JZOPC_ACTIVE_FIXTURE_ROOT || '');
+const configuredShopRoot = String(process.env.JZOPC_PRESTASHOP_ROOT || '');
 
 function fail(message) {
   throw new Error(message);
@@ -19,6 +21,12 @@ if (!Number.isInteger(productId) || productId <= 0) {
 if (!configuredFixtureRoot) {
   fail('JZOPC_ACTIVE_FIXTURE_ROOT is required.');
 }
+if (!configuredShopRoot) {
+  fail('JZOPC_PRESTASHOP_ROOT is required.');
+}
+if (process.env.JZOPC_RUNTIME_ACTIVE_FIXTURE !== '1') {
+  fail('JZOPC_RUNTIME_ACTIVE_FIXTURE=1 is required for controlled failure injection.');
+}
 
 const baseOrigin = new URL(baseUrl).origin;
 const fixtureRoot = fs.realpathSync(configuredFixtureRoot);
@@ -28,10 +36,25 @@ if (
 ) {
   fail('Browser contract refuses a fixture outside /tmp/jzopc-active-fixture*.');
 }
+const shopRoot = fs.realpathSync(configuredShopRoot);
+if (shopRoot !== '/tmp/prestashop') {
+  fail('Browser contract refuses a PrestaShop root outside /tmp/prestashop.');
+}
 
-const serviceFailureMarker = path.join(fixtureRoot, '.jzopc-runtime-failure-service');
-if (fs.existsSync(serviceFailureMarker)) {
-  fail('Service failure marker must not already exist before browser execution.');
+const persistenceControl = path.join(fixtureRoot, 'tests/Runtime/ActiveCheckoutPersistenceFailureControl.php');
+if (!fs.existsSync(persistenceControl)) {
+  fail('Browser persistence failure control is missing from the disposable fixture.');
+}
+
+const failureMarkers = new Map([
+  ['service', path.join(fixtureRoot, '.jzopc-runtime-failure-service')],
+  ['template', path.join(fixtureRoot, '.jzopc-runtime-failure-template')],
+  ['assets', path.join(fixtureRoot, '.jzopc-runtime-failure-assets')],
+]);
+for (const [mode, marker] of failureMarkers) {
+  if (fs.existsSync(marker)) {
+    fail(`${mode} failure marker must not already exist before browser execution.`);
+  }
 }
 
 const requiredAssets = new Set([
@@ -49,6 +72,7 @@ const page = await context.newPage();
 const assetResponses = new Map();
 const pageErrors = [];
 let currentStage = 'bootstrap';
+let persistenceDropped = false;
 
 page.on('pageerror', (error) => {
   pageErrors.push(`${currentStage}: ${error instanceof Error ? error.message : String(error)}`);
@@ -86,6 +110,25 @@ await page.addInitScript(() => {
     });
   });
 });
+
+function setPersistenceFailure(action) {
+  if (action !== 'drop' && action !== 'restore') {
+    fail('Unsupported persistence failure action.');
+  }
+
+  try {
+    execFileSync('php', [persistenceControl, shopRoot, action], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        JZOPC_RUNTIME_ACTIVE_FIXTURE: '1',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    fail(`Persistence failure control could not ${action} the disposable checkout-selection schema.`);
+  }
+}
 
 async function navigate(url, stage) {
   currentStage = stage;
@@ -286,6 +329,14 @@ async function assertNativeFallback(stage) {
   }
 }
 
+async function assertRecoveredSameCart(stage, expectedCartId) {
+  await navigate(`${baseUrl}/order`, stage);
+  const recovered = await assertHealthyCheckout(stage, false);
+  if (recovered.cartId !== expectedCartId) {
+    fail(`${stage}: recovered OPC did not preserve the same Core browser cart.`);
+  }
+}
+
 try {
   const cartUrl = new URL('/cart', baseUrl);
   cartUrl.searchParams.set('add', '1');
@@ -298,32 +349,50 @@ try {
   const initialState = await assertHealthyCheckout('healthy-opc', true);
   await assertIdentityValidationFailure(initialState.cartId);
 
-  fs.writeFileSync(serviceFailureMarker, 'browser\n', { flag: 'wx' });
+  setPersistenceFailure('drop');
+  persistenceDropped = true;
   try {
-    await navigate(`${baseUrl}/order`, 'service-fallback');
-    await assertNativeFallback('service-fallback');
+    await navigate(`${baseUrl}/order`, 'persistence-fallback');
+    await assertNativeFallback('persistence-fallback');
   } finally {
-    if (fs.existsSync(serviceFailureMarker)) {
-      fs.unlinkSync(serviceFailureMarker);
-    }
+    setPersistenceFailure('restore');
+    persistenceDropped = false;
   }
+  await assertRecoveredSameCart('persistence-recovered', initialState.cartId);
 
-  await navigate(`${baseUrl}/order`, 'recovered-opc');
-  const recoveredState = await assertHealthyCheckout('recovered-opc', false);
-  if (recoveredState.cartId !== initialState.cartId) {
-    fail('Recovered OPC did not preserve the same Core browser cart.');
+  for (const [mode, marker] of failureMarkers) {
+    fs.writeFileSync(marker, `${mode}\n`, { flag: 'wx' });
+    try {
+      await navigate(`${baseUrl}/order`, `${mode}-fallback`);
+      await assertNativeFallback(`${mode}-fallback`);
+    } finally {
+      if (fs.existsSync(marker)) {
+        fs.unlinkSync(marker);
+      }
+    }
+
+    await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId);
   }
 
   process.stdout.write(
-    `Active browser identity/takeover/fallback contract OK: cart=${initialState.cartId}, assets=${requiredAssets.size}, origin=${baseOrigin}\n`,
+    `Active browser identity/takeover/fallback matrix OK: cart=${initialState.cartId}, failures=${failureMarkers.size + 1}, assets=${requiredAssets.size}, origin=${baseOrigin}\n`,
   );
 } finally {
-  if (fs.existsSync(serviceFailureMarker)) {
+  for (const marker of failureMarkers.values()) {
+    if (fs.existsSync(marker)) {
+      try {
+        fs.unlinkSync(marker);
+      } catch {
+        // The original browser-contract failure remains authoritative. A stale marker will also
+        // fail the next disposable fixture/browser gate before it can be interpreted as healthy.
+      }
+    }
+  }
+  if (persistenceDropped) {
     try {
-      fs.unlinkSync(serviceFailureMarker);
+      setPersistenceFailure('restore');
     } catch {
-      // The original browser-contract failure remains authoritative; the HTTP cleanup layer also
-      // refuses stale markers before it starts and will report a persistent marker separately.
+      // Preserve the original browser failure. The disposable runtime job must still fail.
     }
   }
   await context.close();
