@@ -80,7 +80,25 @@ assertShellContract(str_contains($assets, 'checkout-mutation-client.js'), 'mutat
 assertShellContract(str_contains($assets, 'final-submit-controller.js'), 'final-submit controller asset must remain in the runtime manifest');
 assertShellContract(str_contains($assets, 'shellJavascriptUrls'), 'asset service must expose the shell-owned runtime manifest');
 assertShellContract(str_contains($assets, "constant('_MODULE_DIR_')"), 'runtime URLs must derive from PrestaShop module base URI');
-assertShellContract(!str_contains($assets, 'registerJavascript('), 'Core page-level registration must not duplicate shell-owned runtime scripts');
+assertShellContract(
+    substr_count($assets, '$controller->registerJavascript(') === 1
+        && str_contains($assets, "private const CORE_JQUERY_ASSET_ID = 'jzopc-core-jquery';")
+        && str_contains($assets, '$jqueryPath = \\Media::getJqueryPath();'),
+    'modern Core page-level registration must be limited to the Core-owned jQuery compatibility dependency',
+);
+foreach ([
+    'payment-controller.js',
+    'checkout-mutation-client.js',
+    'final-submit-controller.js',
+    'ordinary-payment-submit-guard.js',
+    'binary-payment-controller.js',
+    'payment-handoff-ambiguity-guard.js',
+] as $runtimeAsset) {
+    assertShellContract(
+        str_contains($assets, "'views/js/{$runtimeAsset}'"),
+        sprintf('shell-owned runtime manifest must retain %s', $runtimeAsset),
+    );
+}
 assertShellContract(is_string($module) && str_contains($module, 'private const INTEGRATION_SHELL_READY = false;'), 'production readiness gate must remain closed');
 
 echo "CheckoutShellContractSmokeTest OK\n";
