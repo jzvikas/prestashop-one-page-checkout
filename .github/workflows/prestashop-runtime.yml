@@ -200,6 +200,7 @@ jobs:
           fi
 
       - name: Build temporary active checkout fixture
+        if: matrix.native_opc == '0'
         env:
           JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
         run: |
@@ -212,7 +213,7 @@ jobs:
           php bin/console cache:clear --no-warmup
 
       - name: Install PrestaShop 9.1 check-payment browser fixture
-        if: matrix.family == '9.1'
+        if: matrix.family == '9.1' && matrix.native_opc == '0'
         working-directory: /tmp/prestashop
         run: |
           rm -rf modules/ps_checkpayment
@@ -234,6 +235,7 @@ jobs:
           php bin/console cache:clear --no-warmup
 
       - name: Prepare active checkout HTTP fixture
+        if: matrix.native_opc == '0'
         run: |
           fixture_output="$(php /tmp/jzopc-active-fixture/tests/Runtime/PrepareActiveCheckoutHttpFixture.php \
             /tmp/prestashop \
@@ -247,12 +249,14 @@ jobs:
           echo "JZOPC_RUNTIME_PRODUCT_ID=$product_id" >> "$GITHUB_ENV"
 
       - name: Install active browser contract dependencies
+        if: matrix.native_opc == '0'
         working-directory: tests/Browser
         run: |
           npm install --no-package-lock --ignore-scripts --no-audit --no-fund
           ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Start active Front Office HTTP server
+        if: matrix.native_opc == '0'
         run: |
           nohup php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php \
             >/tmp/jzopc-prestashop-active-http.log 2>&1 &
@@ -267,6 +271,7 @@ jobs:
           exit 1
 
       - name: Execute active checkout Chromium contract
+        if: matrix.native_opc == '0'
         working-directory: tests/Browser
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
@@ -274,26 +279,28 @@ jobs:
         run: node active-checkout-browser-contract.mjs
 
       - name: Execute active finalization preflight Chromium contract
+        if: matrix.native_opc == '0'
         working-directory: tests/Browser
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-preflight-browser-contract.mjs
 
       - name: Execute PrestaShop 9.1 concurrent-tab finalization preflight Chromium contract
-        if: matrix.family == '9.1'
+        if: matrix.family == '9.1' && matrix.native_opc == '0'
         working-directory: tests/Browser
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-concurrent-tabs-preflight-browser-contract.mjs
 
       - name: Execute PrestaShop 9.1 orderable concurrent-tab finalization Chromium contract
-        if: matrix.family == '9.1'
+        if: matrix.family == '9.1' && matrix.native_opc == '0'
         working-directory: tests/Browser
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
         run: node finalization-orderable-concurrent-tabs-browser-contract.mjs
 
       - name: Execute active checkout failure fallback HTTP contract
+        if: matrix.native_opc == '0'
         run: |
           php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCheckoutFallbackHttpContract.php \
             http://localhost:8080 \
