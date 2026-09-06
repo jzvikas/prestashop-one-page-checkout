@@ -21,7 +21,7 @@ function assertActiveHttpPersistentSession(bool $condition, string $message): vo
 assertActiveHttpPersistentSession(
     str_contains($http, 'final class ActiveCheckoutHttpSession')
         && str_contains($http, 'private array $cookies = [];')
-        && str_contains($http, '$handle = curl_init();')
+        && str_contains($http, '$handle = curl_init($url);')
         && str_contains($http, "CURLOPT_COOKIEFILE => ''")
         && str_contains($http, 'CURLOPT_COOKIELIST, $cookie')
         && str_contains($http, 'CURLINFO_COOKIELIST')
@@ -31,7 +31,7 @@ assertActiveHttpPersistentSession(
 );
 
 assertActiveHttpPersistentSession(
-    substr_count($http, 'curl_init();') === 1
+    substr_count($http, 'curl_init($url);') === 1
         && !str_contains($http, 'private $handle;')
         && !str_contains($http, 'CURLOPT_COOKIEJAR')
         && !str_contains($http, 'tempnam('),

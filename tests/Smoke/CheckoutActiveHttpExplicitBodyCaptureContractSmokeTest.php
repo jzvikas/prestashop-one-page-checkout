@@ -19,15 +19,23 @@ function assertExplicitBodyCapture(bool $condition, string $message): void
 }
 
 assertExplicitBodyCapture(
-    str_contains($http, 'CURLOPT_NOBODY => false')
+    str_contains($http, '$handle = curl_init($url);')
+        && str_contains($http, 'CURLOPT_NOBODY => false')
         && str_contains($http, 'CURLOPT_HEADER => false')
-        && str_contains($http, 'CURLOPT_RETURNTRANSFER => false')
+        && str_contains($http, 'CURLOPT_RETURNTRANSFER => true')
         && str_contains($http, 'CURLOPT_HTTPGET => true')
-        && str_contains($http, 'CURLOPT_WRITEFUNCTION => $writeCallback')
-        && str_contains($http, '$body .= $chunk;')
-        && str_contains($http, 'return strlen($chunk);')
-        && str_contains($http, '$executed !== true'),
-    'each isolated fallback HTTP request must select body-bearing GET semantics and capture every response byte through its write callback',
+        && str_contains($http, '$body = curl_exec($handle);')
+        && str_contains($http, '!is_string($body)')
+        && !str_contains($http, 'CURLOPT_WRITEFUNCTION'),
+    'each isolated fallback HTTP request must use libcurl standard returned-body GET semantics rather than a custom write callback',
+);
+
+assertExplicitBodyCapture(
+    str_contains($http, "defined('CURLINFO_EFFECTIVE_METHOD')")
+        && str_contains($http, 'CURLINFO_EFFECTIVE_METHOD')
+        && str_contains($http, "strtoupper(\$effectiveMethod) !== 'GET'")
+        && str_contains($http, "'effective_method' => \$effectiveMethod"),
+    'runtime request diagnostics must verify the effective request method when supported by libcurl',
 );
 
 assertExplicitBodyCapture(
@@ -39,11 +47,11 @@ assertExplicitBodyCapture(
 );
 
 assertExplicitBodyCapture(
-    str_contains($http, 'captured_bytes=%d transfer_bytes=%d content_length=%d')
+    str_contains($http, 'status=%d method=%s path=%s content_type=%s captured_bytes=%d transfer_bytes=%d content_length=%d')
         && !str_contains($http, "fwrite(STDERR, \$response['body'])")
         && !str_contains($http, 'Set-Cookie:')
         && !str_contains($http, 'Authorization:'),
-    'runtime diagnostics must compare captured and libcurl byte counts without logging response bodies or credential-bearing headers',
+    'runtime diagnostics must compare returned and libcurl byte counts without logging response bodies or credential-bearing headers',
 );
 
 assertExplicitBodyCapture(
@@ -53,4 +61,4 @@ assertExplicitBodyCapture(
     'body-capture diagnostics must stay outside payment-module/Core order creation and OPC finalization ownership',
 );
 
-fwrite(STDOUT, "Active HTTP explicit body-capture source contract OK.\n");
+fwrite(STDOUT, "Active HTTP returned-body capture source contract OK.\n");

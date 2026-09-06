@@ -60,32 +60,24 @@ final class ActiveCheckoutHttpSession
     private array $cookies = [];
 
     /**
-     * @return array{status:int,body:string,effective_url:string,content_type:string,transfer_bytes:int,content_length:int}
+     * @return array{status:int,body:string,effective_url:string,effective_method:string,content_type:string,transfer_bytes:int,content_length:int}
      */
     public function request(string $url): array
     {
-        $handle = curl_init();
+        $handle = curl_init($url);
         if ($handle === false) {
             throw new RuntimeException('Unable to initialize cURL request.');
         }
 
-        $body = '';
-        $writeCallback = static function ($handle, string $chunk) use (&$body): int {
-            $body .= $chunk;
-
-            return strlen($chunk);
-        };
-
         try {
             $configured = curl_setopt_array($handle, [
-                CURLOPT_URL => $url,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_MAXREDIRS => 8,
                 CURLOPT_CONNECTTIMEOUT => 5,
                 CURLOPT_TIMEOUT => 25,
                 CURLOPT_NOBODY => false,
                 CURLOPT_HEADER => false,
-                CURLOPT_RETURNTRANSFER => false,
+                CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPGET => true,
                 // Activate libcurl's cookie engine for this isolated request. Session continuity is
                 // carried explicitly via COOKIELIST instead of reusing transport/request state.
@@ -94,7 +86,6 @@ final class ActiveCheckoutHttpSession
                 CURLOPT_HTTPHEADER => [
                     'Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
                 ],
-                CURLOPT_WRITEFUNCTION => $writeCallback,
             ]);
             if (!$configured) {
                 throw new RuntimeException('Unable to configure runtime HTTP request.');
@@ -106,8 +97,8 @@ final class ActiveCheckoutHttpSession
                 }
             }
 
-            $executed = curl_exec($handle);
-            if ($executed !== true) {
+            $body = curl_exec($handle);
+            if (!is_string($body)) {
                 throw new RuntimeException('HTTP request failed: ' . curl_error($handle));
             }
 
@@ -119,6 +110,13 @@ final class ActiveCheckoutHttpSession
                 ));
             }
 
+            $effectiveMethod = defined('CURLINFO_EFFECTIVE_METHOD')
+                ? (string) curl_getinfo($handle, CURLINFO_EFFECTIVE_METHOD)
+                : '[unavailable]';
+            if ($effectiveMethod !== '[unavailable]' && strtoupper($effectiveMethod) !== 'GET') {
+                throw new RuntimeException(sprintf('Runtime HTTP request unexpectedly used %s instead of GET.', $effectiveMethod));
+            }
+
             $transferBytes = (int) round((float) curl_getinfo($handle, CURLINFO_SIZE_DOWNLOAD));
             $contentLength = (int) round((float) curl_getinfo($handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD));
 
@@ -126,6 +124,7 @@ final class ActiveCheckoutHttpSession
                 'status' => (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE),
                 'body' => $body,
                 'effective_url' => (string) curl_getinfo($handle, CURLINFO_EFFECTIVE_URL),
+                'effective_method' => $effectiveMethod,
                 'content_type' => (string) curl_getinfo($handle, CURLINFO_CONTENT_TYPE),
                 'transfer_bytes' => $transferBytes,
                 'content_length' => $contentLength,
@@ -166,8 +165,11 @@ function activeCheckoutResponseDiagnostics(array $response): string
     }
 
     return sprintf(
-        'status=%d path=%s content_type=%s captured_bytes=%d transfer_bytes=%d content_length=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d',
+        'status=%d method=%s path=%s content_type=%s captured_bytes=%d transfer_bytes=%d content_length=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d',
         isset($response['status']) ? (int) $response['status'] : 0,
+        isset($response['effective_method']) && is_string($response['effective_method']) && $response['effective_method'] !== ''
+            ? $response['effective_method']
+            : '[unknown]',
         $effectivePath !== '' ? $effectivePath : '[unknown]',
         isset($response['content_type']) && is_string($response['content_type']) && $response['content_type'] !== ''
             ? $response['content_type']
