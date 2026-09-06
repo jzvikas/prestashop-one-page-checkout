@@ -77,18 +77,17 @@ foreach ([
 assertActiveHttpFallbackRuntime(
     str_contains($instrumenter, "throw new \\RuntimeException('Injected active checkout shell service failure.')")
         && str_contains($instrumenter, "__jzopc_runtime_missing_template__.tpl")
-        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset compatibility validation failure.')"),
-    'temporary fixture must inject service, real Smarty-template and asset-compatibility failures at their production boundaries',
+        && str_contains($instrumenter, "throw new \\RuntimeException('Injected active checkout asset manifest validation failure.')"),
+    'temporary fixture must inject service, real Smarty-template and shell-manifest failures at their production boundaries',
 );
 assertActiveHttpFallbackRuntime(
-    str_contains($assetRegistrar, "is_callable([\$controller, 'registerJavascript'])")
-        && str_contains($assetRegistrar, "is_callable([\\Media::class, 'getJqueryPath'])")
-        && str_contains($assetRegistrar, '$jqueryPath = \\Media::getJqueryPath();')
-        && str_contains($assetRegistrar, '$controller->registerJavascript(')
+    str_contains($assetRegistrar, '$this->shellJavascriptUrls = [];')
         && str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
         && !str_contains($assetRegistrar, '$controller->addJquery();')
-        && str_contains($instrumenter, "is_callable([\$controller, 'registerJavascript'])"),
-    'active checkout asset boundary must require Core-resolved jQuery through the modern asset manager plus the shell runtime manifest, and failure instrumentation must target that same boundary',
+        && !str_contains($assetRegistrar, '\\Media::getJqueryPath()')
+        && !str_contains($assetRegistrar, '$controller->registerJavascript(')
+        && str_contains($instrumenter, '$this->shellJavascriptUrls = [];'),
+    'active checkout asset boundary must own only the six-file shell manifest while Core/theme compatibility assets remain Core-owned',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
@@ -113,6 +112,15 @@ assertActiveHttpFallbackRuntime(
         && str_contains($setup, '$product->addToCategories([$homeCategoryId])')
         && str_contains($setup, 'StockAvailable::setQuantity('),
     'runtime product fixture must use PrestaShop Core product/category/stock APIs',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($setup, 'new Carrier()')
+        && str_contains($setup, 'Carrier::SHIPPING_METHOD_FREE')
+        && str_contains($setup, '$carrier->addZone(')
+        && str_contains($setup, "'carrier_group'")
+        && str_contains($setup, "'carrier_shop'")
+        && str_contains($setup, "'PS_CARRIER_DEFAULT'"),
+    'fixtures=0 runtime setup must create a Core carrier with real shop, zone and customer-group associations',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($http, "'/cart?' . http_build_query(")
