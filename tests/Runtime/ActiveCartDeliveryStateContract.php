@@ -30,6 +30,20 @@ if (!str_starts_with((string) _PS_VERSION_, $expectedFamily . '.')) {
     $fail(sprintf('Installed PrestaShop version %s does not match expected family %s.', _PS_VERSION_, $expectedFamily));
 }
 
+$appKernelPath = $shopRoot . '/app/AppKernel.php';
+$frontKernelPath = $shopRoot . '/app/FrontKernel.php';
+if (!is_file($appKernelPath) || !is_file($frontKernelPath)) {
+    $fail('Installed PrestaShop front-kernel bootstrap is missing.');
+}
+require_once $appKernelPath;
+require_once $frontKernelPath;
+
+global $kernel;
+if (!isset($kernel) || !$kernel instanceof Symfony\Component\HttpKernel\KernelInterface) {
+    $kernel = new FrontKernel('prod', false);
+    $kernel->boot();
+}
+
 $shopId = (int) Configuration::get('PS_SHOP_DEFAULT');
 $shopGroupId = (int) Shop::getGroupFromShop($shopId);
 $languageId = (int) Configuration::get('PS_LANG_DEFAULT');
@@ -45,6 +59,7 @@ $context->shop = new Shop($shopId);
 $context->language = new Language($languageId);
 $context->currency = new Currency($currencyId);
 $context->country = new Country($defaultCountryId);
+$context->container = $kernel->getContainer();
 
 $db = Db::getInstance();
 $cartId = (int) $db->getValue(
