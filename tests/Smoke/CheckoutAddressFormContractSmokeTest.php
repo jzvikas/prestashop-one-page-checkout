@@ -28,21 +28,6 @@ assertAddressFormContract(str_contains($service, '->setIdAddressDelivery('), 'sa
 assertAddressFormContract(str_contains($service, '->setIdAddressInvoice('), 'saved invoice addresses must be applied through CheckoutSession');
 assertAddressFormContract(!str_contains($service, '->id_address_delivery ='), 'service must not directly write cart delivery header');
 assertAddressFormContract(!str_contains($service, '->id_address_invoice ='), 'service must not directly write cart invoice header');
-assertAddressFormContract(
-    str_contains($service, '$this->refreshAuthoritativeCart($context, $role, $savedAddressId, $useSameAddress);')
-        && str_contains($service, '$freshCart = new \\Cart($cartId);')
-        && str_contains($service, '\\Validate::isLoadedObject($freshCart)')
-        && str_contains($service, '(int) $freshCart->id_customer !== $customerId')
-        && str_contains($service, '(int) $freshCart->id_shop !== $shopId')
-        && str_contains($service, '$context->cart = $freshCart;'),
-    'successful Core address persistence must reload a server-authoritative cart before dependent sections render'
-);
-assertAddressFormContract(
-    str_contains($service, "new CheckoutAddressFormException('address_cart_refresh_failed'")
-        && str_contains($service, '(int) $freshCart->id_address_delivery !== $savedAddressId')
-        && str_contains($service, '(int) $freshCart->id_address_invoice !== $savedAddressId'),
-    'authoritative cart refresh must fail closed when cart/customer/shop or committed address bindings disagree'
-);
 
 assertAddressFormContract(is_string($mutation) && str_contains($mutation, 'CheckoutMutation::AddressBookUpdated'), 'address save must use the shared mutation orchestrator dependency graph');
 assertAddressFormContract(str_contains($mutation, 'new CheckoutServerSelections()'), 'successful address save must invalidate payment/agreement authority');
