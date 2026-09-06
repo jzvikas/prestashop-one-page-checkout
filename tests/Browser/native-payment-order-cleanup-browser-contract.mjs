@@ -18,9 +18,21 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
 const pageErrors = [];
+const nativePaymentTrace = {
+  handoff: 0,
+  blocked: 0,
+  ambiguous: 0,
+  preflight: 0,
+};
 
 page.on('pageerror', (error) => {
   pageErrors.push(error instanceof Error ? error.message : String(error));
+});
+
+await page.exposeFunction('jzopcRuntimeTraceEvent', (eventName) => {
+  if (Object.prototype.hasOwnProperty.call(nativePaymentTrace, eventName)) {
+    nativePaymentTrace[eventName] += 1;
+  }
 });
 
 async function navigate(url, stage) {
@@ -314,33 +326,23 @@ async function paymentHandoffShape() {
 
 async function installSafeHandoffTrace() {
   await page.locator('[data-jzopc-checkout]').evaluate((root) => {
-    const trace = {
-      handoff: 0,
-      blocked: 0,
-      ambiguous: 0,
-      preflight: 0,
-    };
-    window.__jzopcNativePaymentTrace = trace;
-    root.addEventListener('jzopc:checkout:payment-handoff', () => { trace.handoff += 1; });
-    root.addEventListener('jzopc:checkout:payment-submit-blocked', () => { trace.blocked += 1; });
-    root.addEventListener('jzopc:checkout:payment-handoff-ambiguous', () => { trace.ambiguous += 1; });
-    root.addEventListener('jzopc:checkout:final-preflight-completed', () => { trace.preflight += 1; });
+    root.addEventListener('jzopc:checkout:payment-handoff', () => {
+      void window.jzopcRuntimeTraceEvent('handoff');
+    });
+    root.addEventListener('jzopc:checkout:payment-submit-blocked', () => {
+      void window.jzopcRuntimeTraceEvent('blocked');
+    });
+    root.addEventListener('jzopc:checkout:payment-handoff-ambiguous', () => {
+      void window.jzopcRuntimeTraceEvent('ambiguous');
+    });
+    root.addEventListener('jzopc:checkout:final-preflight-completed', () => {
+      void window.jzopcRuntimeTraceEvent('preflight');
+    });
   });
 }
 
-async function safeHandoffTrace() {
-  return page.evaluate(() => {
-    const trace = window.__jzopcNativePaymentTrace;
-    if (!trace || typeof trace !== 'object') {
-      return { handoff: 0, blocked: 0, ambiguous: 0, preflight: 0 };
-    }
-    return {
-      handoff: Number(trace.handoff) || 0,
-      blocked: Number(trace.blocked) || 0,
-      ambiguous: Number(trace.ambiguous) || 0,
-      preflight: Number(trace.preflight) || 0,
-    };
-  });
+function safeHandoffTrace() {
+  return { ...nativePaymentTrace };
 }
 
 try {
@@ -380,17 +382,7 @@ try {
     }
     const requestUrl = new URL(response.url());
     return /\/module\/jzonepagecheckout\/finalize\/?$/i.test(requestUrl.pathname);
-  }, { timeout: 15000 }).then(async (response) => {
-    const status = response.status();
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      fail('native-payment-submit: final preflight response was not readable JSON before native navigation.');
-    }
-
-    return { status, payload };
-  });
+  }, { timeout: 15000 });
   const validationRequestPromise = page.waitForRequest(
     (request) => isCheckPaymentValidation(request.url()),
     { timeout: 15000 },
@@ -401,32 +393,33 @@ try {
   ).catch(() => null);
 
   await finalButton.click();
-  const preflight = await finalizationRequest;
-  if (preflight.status >= 400) {
-    fail(`native-payment-submit: final preflight failed with HTTP ${preflight.status}.`);
-  }
-  const preflightPayload = preflight.payload;
-  if (!preflightPayload || preflightPayload.success !== true) {
-    const codes = Array.isArray(preflightPayload?.errors)
-      ? preflightPayload.errors.map((error) => error?.code || '').filter(Boolean)
-      : [];
-    fail(`native-payment-submit: final preflight was rejected [${codes.join(', ')}].`);
+  const preflightResponse = await finalizationRequest;
+  if (preflightResponse.status() >= 400) {
+    fail(`native-payment-submit: final preflight failed with HTTP ${preflightResponse.status()}.`);
   }
 
   const validationRequest = await validationRequestPromise;
   if (!validationRequest) {
-    const trace = await safeHandoffTrace();
-    const afterHandoff = await paymentHandoffShape();
+    const trace = safeHandoffTrace();
     fail(
       `native-payment-submit: ps_checkpayment validation request was not observed after successful preflight`
       + ` [handoff=${trace.handoff} blocked=${trace.blocked} ambiguous=${trace.ambiguous} preflight=${trace.preflight}`
-      + ` method=${afterHandoff.method || '<missing>'} marker=${afterHandoff.marker || '<missing>'}`
-      + ` connected=${afterHandoff.connected ? '1' : '0'} same_origin=${afterHandoff.sameOrigin ? '1' : '0'}`
-      + ` action_path=${afterHandoff.actionPath || '<missing>'} final_path=${safePath(page.url())}].`,
+      + ` expected_method=${beforeHandoff.method || '<missing>'} expected_marker=${beforeHandoff.marker || '<missing>'}`
+      + ` expected_action_path=${beforeHandoff.actionPath || '<missing>'} final_path=${safePath(page.url())}].`,
     );
   }
   if (validationRequest.method() !== 'POST') {
     fail(`native-payment-submit: ps_checkpayment validation used unexpected method ${validationRequest.method()}.`);
+  }
+
+  await page.waitForFunction(() => true, null, { timeout: 100 });
+  const handoffTrace = safeHandoffTrace();
+  if (handoffTrace.preflight < 1 || handoffTrace.handoff < 1 || handoffTrace.blocked !== 0 || handoffTrace.ambiguous !== 0) {
+    fail(
+      `native-payment-submit: native payment lifecycle trace is invalid`
+      + ` [handoff=${handoffTrace.handoff} blocked=${handoffTrace.blocked}`
+      + ` ambiguous=${handoffTrace.ambiguous} preflight=${handoffTrace.preflight}].`,
+    );
   }
 
   const validationResponse = await validationResponsePromise;
@@ -434,7 +427,7 @@ try {
   try {
     await page.waitForURL((url) => isOrderConfirmation(url.toString()), { timeout: 30000 });
   } catch {
-    const trace = await safeHandoffTrace();
+    const trace = safeHandoffTrace();
     fail(
       `native-payment-submit: validation request did not reach Core order confirmation`
       + ` [validation_status=${validationStatus || '<missing>'} handoff=${trace.handoff}`
