@@ -8,8 +8,6 @@ use RuntimeException;
 
 final readonly class CheckoutFrontendAssetRegistrar
 {
-    private const CORE_JQUERY_ASSET_ID = 'jzopc-core-jquery';
-
     /** @var list<string> */
     private const JAVASCRIPT_PATHS = [
         'views/js/payment-controller.js',
@@ -41,70 +39,25 @@ final readonly class CheckoutFrontendAssetRegistrar
     }
 
     /**
-     * Core compatibility dependencies that must exist before Core/third-party checkout fragments
-     * execute. Themes declaring core_scripts=true already receive Core's compatibility bundle and
-     * must not get a second jQuery instance. Modern themes such as Hummingbird deliberately omit
-     * that bundle, so the active OPC shell supplies only Core's own resolved jQuery file.
-     *
-     * @return list<string>
-     */
-    public function shellCompatibilityJavascriptUrls(\Context $context): array
-    {
-        $theme = $context->shop->theme ?? null;
-        if (!is_object($theme) || !is_callable([$theme, 'requiresCoreScripts'])) {
-            throw new RuntimeException('PrestaShop theme Core-script capability is unavailable.');
-        }
-
-        if ((bool) $theme->requiresCoreScripts()) {
-            return [];
-        }
-
-        return [$this->coreJqueryPath()];
-    }
-
-    /**
      * Compatibility boundary for the existing media/takeover hooks.
      *
-     * The early media hook still registers Core jQuery through the modern manager when activation is
-     * already known. Legacy checkout takeover can happen after the page JavaScript lists have been
-     * materialized, so that registration alone is not authoritative. The custom shell independently
-     * resolves its compatibility requirement and supplies Core jQuery synchronously only when the
-     * active theme declares that Core scripts are not loaded.
+     * Required OPC JavaScript is intentionally no longer queued through Core's page-level asset
+     * manager: on PrestaShop 9.0/9.1 that queue was finalized before the legacy checkout takeover,
+     * which allowed a custom shell to render without its safety runtime. The shell remains the sole
+     * delivery boundary for those six files.
      *
-     * The six OPC safety scripts remain shell-owned and are never queued through Core's page-level
-     * manager. This avoids both a missing runtime on late takeover and duplicate OPC execution.
+     * Core/themed JavaScript remains owned by PrestaShop. In particular, themes declaring Core
+     * scripts receive the Core compatibility bundle (`themes/core.js`) from FrontController. OPC
+     * must not inject or duplicate that dependency merely to compensate for an incomplete runtime
+     * fixture. The compatibility hook therefore only validates the shell-owned OPC manifest.
      */
     public function register(\Context $context): void
     {
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
-            throw new RuntimeException('PrestaShop FrontController JavaScript registration boundary is unavailable.');
+        if (!is_object($controller)) {
+            throw new RuntimeException('PrestaShop FrontController boundary is unavailable.');
         }
 
-        $controller->registerJavascript(
-            self::CORE_JQUERY_ASSET_ID,
-            $this->coreJqueryPath(),
-            [
-                'position' => 'head',
-                'priority' => 0,
-            ],
-        );
-
-        $this->shellCompatibilityJavascriptUrls($context);
         $this->shellJavascriptUrls();
-    }
-
-    private function coreJqueryPath(): string
-    {
-        if (!class_exists(\Media::class) || !is_callable([\Media::class, 'getJqueryPath'])) {
-            throw new RuntimeException('PrestaShop Core jQuery resolver is unavailable.');
-        }
-
-        $jqueryPath = \Media::getJqueryPath();
-        if (!is_string($jqueryPath) || $jqueryPath === '') {
-            throw new RuntimeException('PrestaShop Core jQuery asset path is unavailable.');
-        }
-
-        return $jqueryPath;
     }
 }
