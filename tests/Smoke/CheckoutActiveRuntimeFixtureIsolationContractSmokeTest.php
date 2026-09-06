@@ -81,6 +81,21 @@ assertActiveRuntimeFixtureIsolation(
         && str_contains($activeFixture, 'StockAvailable::setQuantity('),
     'active runtime fixture must create its physical checkout product through Core product and stock APIs',
 );
+assertActiveRuntimeFixtureIsolation(
+    str_contains($activeFixture, 'new Carrier()')
+        && str_contains($activeFixture, 'Carrier::SHIPPING_METHOD_FREE')
+        && str_contains($activeFixture, '$carrier->addZone(')
+        && str_contains($activeFixture, "'carrier_group'")
+        && str_contains($activeFixture, "'carrier_shop'")
+        && str_contains($activeFixture, "'PS_CARRIER_DEFAULT'"),
+    'fixtures=0 runtime setup must provision a real Core carrier with shop, zone and customer-group associations',
+);
+assertActiveRuntimeFixtureIsolation(
+    !str_contains($activeFixture, 'delivery-option-')
+        && !str_contains($activeFixture, 'id_carrier=')
+        && !str_contains($activeFixture, 'finalizationAction'),
+    'runtime carrier fixture must not bypass Core delivery discovery or inject an OPC carrier selection',
+);
 
 assertActiveRuntimeFixtureIsolation(
     str_contains($module, 'private const INTEGRATION_SHELL_READY = false;')
