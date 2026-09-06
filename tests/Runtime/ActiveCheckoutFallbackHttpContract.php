@@ -180,10 +180,13 @@ $stageStatuses = [];
 try {
     expectActiveHttp(Validate::isLoadedObject($product), 'Runtime checkout product is not loaded.');
 
-    // Seed the browser/cart through the real Core CartController. A normal browser-like user-agent
-    // is intentional: Core refuses to create ghost carts for bot traffic.
+    // Seed the browser/cart through the same real Core CartController AJAX add surface exercised by
+    // the Chromium contracts. A normal browser-like user-agent is intentional: Core refuses to
+    // create ghost carts for bot traffic. Keeping ajax=1 avoids depending on theme/controller HTML
+    // redirect behavior before the contract reaches the authoritative /order assertion.
     $addUrl = $baseUrl . '/cart?' . http_build_query([
         'add' => 1,
+        'ajax' => 1,
         'id_product' => $productId,
         'qty' => 1,
     ], '', '&', PHP_QUERY_RFC3986);
