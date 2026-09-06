@@ -51,15 +51,20 @@ assertTakeoverAssets(
 assertTakeoverAssets(
     str_contains($registrar, 'private const JAVASCRIPT_PATHS = [')
         && str_contains($registrar, 'public function shellJavascriptUrls(): array')
-        && str_contains($registrar, "constant('_MODULE_DIR_')")
-        && !str_contains($registrar, 'registerJavascript('),
-    'shell asset manifest must own the six required OPC URLs without also queuing duplicate OPC scripts through Core',
+        && str_contains($registrar, "constant('_MODULE_DIR_')"),
+    'shell asset manifest must own the six required OPC URLs',
 );
 assertTakeoverAssets(
-    str_contains($registrar, "is_callable([\$controller, 'addJquery'])")
-        && str_contains($registrar, '$controller->addJquery();')
-        && strpos($registrar, '$controller->addJquery();') < strpos($registrar, '$this->shellJavascriptUrls();'),
-    'active OPC compatibility boundary must request PrestaShop Core-owned jQuery before validating the shell runtime manifest',
+    str_contains($registrar, "private const CORE_JQUERY_ASSET_ID = 'jzopc-core-jquery';")
+        && str_contains($registrar, "is_callable([\$controller, 'registerJavascript'])")
+        && str_contains($registrar, "is_callable([\\Media::class, 'getJqueryPath'])")
+        && str_contains($registrar, '$jqueryPath = \\Media::getJqueryPath();')
+        && str_contains($registrar, '$controller->registerJavascript(')
+        && str_contains($registrar, "'position' => 'head'")
+        && str_contains($registrar, "'priority' => 0")
+        && !str_contains($registrar, '$controller->addJquery();')
+        && strpos($registrar, '$controller->registerJavascript(') < strpos($registrar, '$this->shellJavascriptUrls();'),
+    'active OPC compatibility boundary must register Core-resolved jQuery through the modern FrontController asset manager before validating the shell runtime manifest',
 );
 
 foreach ([
@@ -73,6 +78,10 @@ foreach ([
     assertTakeoverAssets(str_contains($registrar, "'views/js/{$asset}'"), "required checkout asset {$asset} must remain in the manifest");
 }
 
+assertTakeoverAssets(
+    substr_count($registrar, '$controller->registerJavascript(') === 1,
+    'Core asset manager registration must be reserved for the jQuery compatibility dependency; OPC safety scripts remain shell-owned',
+);
 assertTakeoverAssets(
     str_contains($renderer, 'private CheckoutFrontendAssetRegistrar $frontendAssets')
         && str_contains($renderer, "'jzopc_javascript_urls' => \$this->frontendAssets->shellJavascriptUrls()"),
@@ -97,4 +106,4 @@ assertTakeoverAssets(
     'asset/takeover hooks must never create Core orders directly',
 );
 
-fwrite(STDOUT, "Checkout shell-owned asset delivery source contract OK.\n");
+fwrite(STDOUT, "Checkout shell-owned asset delivery and Core jQuery registration source contract OK.\n");
