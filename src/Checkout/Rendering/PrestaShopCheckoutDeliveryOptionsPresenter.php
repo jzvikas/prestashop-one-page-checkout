@@ -31,6 +31,17 @@ final class PrestaShopCheckoutDeliveryOptionsPresenter implements CheckoutDelive
         // Native CheckoutDeliveryStep executes this lifecycle hook before rendering carriers.
         \Hook::exec('actionCarrierProcess', ['cart' => $cart]);
 
+        // Core Cart::getDeliveryOptionList() keeps a request-local static cache keyed by cart ID.
+        // A checkout request can prime that cache before a just-persisted address mutation changes
+        // delivery eligibility. Core itself uses flush=true where a fresh delivery-option decision
+        // is required (for example Cart::setDeliveryOption()). Refresh that same Core cache here,
+        // after carrier hooks and before CheckoutSession/DeliveryOptionsFinder presents it. We do
+        // not consume this raw list, select a carrier, or bypass Core presentation semantics.
+        $freshDeliveryOptionList = $cart->getDeliveryOptionList(null, true);
+        if (!is_array($freshDeliveryOptionList)) {
+            throw new \RuntimeException('The Core cart delivery option list is unavailable.');
+        }
+
         $checkoutSession = $this->checkoutSessionProvider->get($context);
         if (!method_exists($checkoutSession, 'getDeliveryOptions')
             || !method_exists($checkoutSession, 'getSelectedDeliveryOption')) {

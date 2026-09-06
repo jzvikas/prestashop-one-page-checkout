@@ -6,6 +6,9 @@ class Cart
 {
     public int $id = 42;
 
+    /** @var list<array{country: mixed, flush: bool}> */
+    public array $deliveryOptionListCalls = [];
+
     public function __construct(private readonly bool $virtual = false)
     {
     }
@@ -13,6 +16,16 @@ class Cart
     public function isVirtualCart(): bool
     {
         return $this->virtual;
+    }
+
+    public function getDeliveryOptionList(mixed $country = null, bool $flush = false): array
+    {
+        $this->deliveryOptionListCalls[] = [
+            'country' => $country,
+            'flush' => $flush,
+        ];
+
+        return ['7,' => [['id_carrier' => 7]]];
     }
 }
 
@@ -85,7 +98,8 @@ $sessionProvider = new class implements CheckoutSessionProviderInterface {
     }
 };
 $presenter = new PrestaShopCheckoutDeliveryOptionsPresenter($sessionProvider);
-$presented = $presenter->present(new Context());
+$context = new Context();
+$presented = $presenter->present($context);
 
 assert($presented['isVirtual'] === false);
 assert(array_keys($presented['deliveryOptions']) === ['7,']);
@@ -94,12 +108,27 @@ assert($presented['selectedDeliveryOption'] === '7,');
 assert($presented['hookDisplayBeforeCarrier'] === '<before-carrier>');
 assert($presented['hookDisplayAfterCarrier'] === '<after-carrier>');
 assert(Hook::$calls === ['actionCarrierProcess', 'displayBeforeCarrier', 'displayAfterCarrier']);
+assert($context->cart->deliveryOptionListCalls === [['country' => null, 'flush' => true]]);
+
+$source = file_get_contents(dirname(__DIR__, 2) . '/src/Checkout/Rendering/PrestaShopCheckoutDeliveryOptionsPresenter.php');
+assert(is_string($source));
+$carrierHookPosition = strpos($source, "\\Hook::exec('actionCarrierProcess'");
+$cacheRefreshPosition = strpos($source, 'getDeliveryOptionList(null, true)');
+$sessionPresentationPosition = strpos($source, '$checkoutSession->getDeliveryOptions()');
+assert(is_int($carrierHookPosition));
+assert(is_int($cacheRefreshPosition));
+assert(is_int($sessionPresentationPosition));
+assert($carrierHookPosition < $cacheRefreshPosition);
+assert($cacheRefreshPosition < $sessionPresentationPosition);
+assert(!str_contains($source, 'setDeliveryOption('));
 
 Hook::$calls = [];
-$virtual = $presenter->present(new Context(true));
+$virtualContext = new Context(true);
+$virtual = $presenter->present($virtualContext);
 assert($virtual['isVirtual'] === true);
 assert($virtual['deliveryOptions'] === []);
 assert($virtual['selectedDeliveryOption'] === null);
 assert(Hook::$calls === []);
+assert($virtualContext->cart->deliveryOptionListCalls === []);
 
 echo "PrestaShopCheckoutDeliveryOptionsPresenterSmokeTest OK\n";
