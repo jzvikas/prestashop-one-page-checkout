@@ -101,8 +101,8 @@ assertActiveFallbackRuntime(
 assertActiveFallbackRuntime(
     str_contains($browser, 'for (const [mode, marker] of failureMarkers)')
         && str_contains($browser, 'fs.writeFileSync(marker, `${mode}\\n`, { flag: \'wx\' })')
-        && str_contains($browser, "await assertNativeFallback(`${mode}-fallback`)")
-        && str_contains($browser, "await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId)"),
+        && str_contains($browser, 'await assertNativeFallback(`${mode}-fallback`)')
+        && str_contains($browser, 'await assertRecoveredSameCart(`${mode}-recovered`, initialState.cartId)'),
     'service/template/assets failures must each prove native Core fallback and same-cart Chromium recovery',
 );
 assertActiveFallbackRuntime(
