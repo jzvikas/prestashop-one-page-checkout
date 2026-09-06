@@ -42,6 +42,11 @@ assertActiveCoreCarrierContract(
     'runtime carrier fixture must preserve Core zone/group/shop/default-carrier associations'
 );
 assertActiveCoreCarrierContract(
+    !str_contains($fixture, '$carrier->delete();')
+        && str_contains($fixture, 'failure paths must remain fail-fast instead of attempting model cleanup'),
+    'standalone runtime fixture must not invoke Carrier::delete() without a booted Symfony kernel and mask the original fixture failure'
+);
+assertActiveCoreCarrierContract(
     str_contains($fixture, '$expectedFamily === \'9.1\'')
         && str_contains($fixture, "Module::getInstanceByName('ps_checkpayment')")
         && str_contains($fixture, "'module_carrier'")
