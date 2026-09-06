@@ -40,6 +40,7 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - `ActiveCoreCarrierAvailabilityContract.php`, its source smoke contract and ADR-0035 to prove the disposable 9.0/9.1 carrier fixture survives Core zone/group/shop/product discovery before any Chromium checkout mutation is trusted.
 - `ActiveCartDeliveryStateContract.php`, its source smoke assertions and ADR-0036 to diagnose the exact browser-created 9.1.5 Core cart after an orderable Chromium failure without mutating carrier/payment/order state.
 - ADR-0037 documenting the fail-closed authoritative-cart refresh boundary after native Core address persistence.
+- ADR-0039 documenting the PrestaShop 9.1 `--fixtures=0` payment/carrier restriction boundary and the fixture-only Core `module_carrier` repair required when the deterministic carrier is created after official `ps_checkpayment` installation.
 
 ### Changed
 
@@ -63,13 +64,15 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The disposable Core carrier fixture now explicitly persists non-module/free/no-range/no-package-limit flags, and installed 9.0/9.1 runtime verifies `Carrier::getCarriersForOrder()` plus `Carrier::getAvailableCarrierList()` before browser delivery selection.
 - The post-browser live-cart diagnostic now lets `Db::getValue()` own scalar limiting and boots the installed Front Kernel before Core delivery-option calculation, removing harness-only duplicate-`LIMIT` and missing-container failures.
 - After a successful native Core address save, dependent OPC sections now render from a freshly loaded Core Cart only after verifying the same cart/customer/shop and committed delivery/invoice address bindings; ambiguous refresh fails closed instead of reusing a potentially pre-mutation in-memory cart.
+- The disposable 9.1 runtime fixture now adds its post-install deterministic carrier reference to the pinned official `ps_checkpayment` Core carrier restriction and the pre-Chromium runtime contract proves that exact association; production OPC payment discovery and payment-module restrictions remain untouched.
 
 ### Verification
 
 - CI run `34024940433` on `ec604e84d71410c57061ba489c634c4215a60a9d` executed successfully through Composer metadata, PHP syntax, JavaScript syntax and the full smoke suite.
 - PrestaShop Runtime run `34024940439` on the same commit executed the 9.1.5 installation, reservation MariaDB/process-concurrency, Core process, isolation, Smarty, fail-closed HTTP, active checkout Chromium, finalization preflight and concurrent-tab preflight gates successfully. Its fully orderable Chromium gate still failed before carrier selection, but the kernel-aware post-browser live-cart diagnostic then passed customer/group/address ownership, country/zone, Core carrier eligibility, physical product and fresh `Cart::getDeliveryOptionList()` assertions. This is executed evidence that the remaining defect boundary is same-request OPC delivery rendering rather than persisted Core cart/carrier eligibility.
-- The authoritative-cart refresh implementation and its source regression contract are committed, but are **not** treated as browser-passing evidence until a subsequent installed 9.1.5 runtime run executes the orderable Chromium gate successfully.
-- Earlier CI/runtime records remain useful historical evidence but do not override the current unverified authoritative-cart refresh milestone.
+- A later installed 9.1.5 runtime on `95260cc839f892df7cc1348da5961b4019021110` executed through real identity/address/carrier preparation and reached payment selection, then failed because Core exposed zero `ps_checkpayment` options. Source review traced this to the runtime-only installation order: `PaymentModule::install()` captured carrier restrictions before the deterministic `--fixtures=0` carrier existed.
+- The payment/carrier fixture association and its source/runtime regression contracts are committed, but are **not** treated as current-HEAD browser-passing evidence until GitHub Actions executes the relevant PrestaShop 9.1.5 runtime gate successfully.
+- Earlier CI/runtime records remain useful historical evidence but do not override the current unverified payment-carrier fixture milestone.
 - Representative real payment completion, carrier diversity, successful Core-order cleanup/TTL recovery, zero-total order completion and full account/address browser flows remain release blockers.
 
 ### Safety
@@ -81,40 +84,10 @@ All notable repository changes are recorded here. Runtime/browser verification s
 - The orderable concurrent-tab contract uses Core-rendered guest/address forms, Core carrier/payment/agreement selection and the real guarded finalization endpoint; it deliberately stops before the pinned official payment module's native form submission, never calls `validateOrder()`, and verifies that only the exact winning attempt can clear the active reservation.
 - The active Core carrier and live-cart delivery probes are CLI-only test infrastructure. They call Core carrier/delivery discovery APIs but do not persist a delivery selection, submit payment, call `validateOrder()` or create a Core order.
 - The authoritative-cart address refresh happens only after native Core address persistence, verifies cart/customer/shop and committed role bindings before replacing `Context::cart`, and does not write a carrier selection or create an order.
+- The runtime payment/carrier association is confined to the disposable 9.1 test shop and only mirrors PrestaShop's normal `PaymentModule` carrier restriction table for a carrier created after module installation; production OPC never edits third-party payment restrictions or fabricates payment options.
 - The 9.1.5 reservation MariaDB contracts use synthetic cart/customer identities only in the module-owned reservation table; the process-concurrency workers call only the production reservation store, never `validateOrder()`, never create a Core `Order`, and never change the production readiness gate.
 - Active reservation ownership is fail-closed at shop/cart level: a mismatched customer cannot clear an unexpired handoff barrier, expired-row cleanup cannot erase a concurrently refreshed barrier, explicit release remains exact customer/attempt scoped, Core-order absence is part of the same database statement that removes the barrier, ambiguous reservation persistence is never reported as success, and ambiguous post-activation payment-handler failure still preserves the reservation.
 - The test-only PHP router rejects traversal-like static paths and only delegates existing GET/HEAD files to the built-in static server; dynamic or missing paths continue through PrestaShop Core. It does not alter production routing or module behavior.
 - No module version bump: reservation ownership/release/expiry/storage hardening, browser policy, fallback containment, authoritative-cart refresh and runtime/browser-test infrastructure introduce no new schema/config/hook migration.
 
 ## 0.4.0
-
-### Added
-
-- Full finalization preflight under the shared CSRF/cart/customer/stale-state/cart-mutex boundary.
-- DB-backed finalization reservation with attempt-scoped release and short-lived recovery semantics.
-- Native ordinary payment-form handoff preserving jQuery submit handlers, `requestSubmit()` and a final raw-submit compatibility fallback.
-- Binary/self-submitting payment preflight and original module control/form replay.
-- Core-owned zero-total `free_order` handoff.
-- Successful-order lifecycle cleanup for module-owned selection and finalization-reservation state.
-- Upgrade schema for finalization reservation storage.
-
-## 0.3.0
-
-### Added
-
-- Version-specific checkout process adapters for PrestaShop 9.0/9.1 and 9.2+.
-- `actionFrontControllerSetMedia` registration and upgrade hook lifecycle.
-- Trusted checkout shell/bootstrap and frontend asset registration infrastructure.
-
-## 0.2.0
-
-### Added
-
-- Server-persisted canonical payment/agreement checkout selections in `jzopc_checkout_selection`.
-- Upgrade schema for existing installations.
-
-## 0.1.0
-
-### Added
-
-- Initial production-oriented PrestaShop 9 module skeleton, version capability detection, server-authoritative state model and CI/smoke-test foundation.
