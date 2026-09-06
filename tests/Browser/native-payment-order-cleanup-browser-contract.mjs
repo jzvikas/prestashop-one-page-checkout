@@ -380,7 +380,17 @@ try {
     }
     const requestUrl = new URL(response.url());
     return /\/module\/jzonepagecheckout\/finalize\/?$/i.test(requestUrl.pathname);
-  }, { timeout: 15000 });
+  }, { timeout: 15000 }).then(async (response) => {
+    const status = response.status();
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      fail('native-payment-submit: final preflight response was not readable JSON before native navigation.');
+    }
+
+    return { status, payload };
+  });
   const validationRequestPromise = page.waitForRequest(
     (request) => isCheckPaymentValidation(request.url()),
     { timeout: 15000 },
@@ -391,11 +401,11 @@ try {
   ).catch(() => null);
 
   await finalButton.click();
-  const preflightResponse = await finalizationRequest;
-  if (preflightResponse.status() >= 400) {
-    fail(`native-payment-submit: final preflight failed with HTTP ${preflightResponse.status()}.`);
+  const preflight = await finalizationRequest;
+  if (preflight.status >= 400) {
+    fail(`native-payment-submit: final preflight failed with HTTP ${preflight.status}.`);
   }
-  const preflightPayload = await preflightResponse.json();
+  const preflightPayload = preflight.payload;
   if (!preflightPayload || preflightPayload.success !== true) {
     const codes = Array.isArray(preflightPayload?.errors)
       ? preflightPayload.errors.map((error) => error?.code || '').filter(Boolean)
