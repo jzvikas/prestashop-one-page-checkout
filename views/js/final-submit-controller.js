@@ -318,12 +318,15 @@
         // Once a module-owned submit lifecycle begins, its handler may start remote payment/order work
         // before returning or throwing. From that point the browser cannot prove release is safe.
         // Keep the reservation until Core order cleanup or bounded TTL recovery resolves ambiguity.
-        if (typeof window.jQuery === 'function') {
-          window.jQuery(form).trigger('submit');
-          return;
-        }
+        // Prefer the browser-native submit lifecycle: jQuery handlers registered on the form still
+        // observe the native submit event, while jQuery synthetic trigger semantics cannot suppress
+        // a valid Core form's default navigation before native payment ownership begins.
         if (typeof form.requestSubmit === 'function') {
           form.requestSubmit();
+          return;
+        }
+        if (typeof window.jQuery === 'function') {
+          window.jQuery(form).trigger('submit');
           return;
         }
 
