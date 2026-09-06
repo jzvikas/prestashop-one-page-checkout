@@ -132,9 +132,20 @@ assertActiveHttpFallbackRuntime(
     'browser cart fixture must use the real Core CartController AJAX add contract with one cookie session and non-bot user agent',
 );
 assertActiveHttpFallbackRuntime(
+    str_contains($http, 'function activeCheckoutResponseDiagnostics(array $response): string')
+        && str_contains($http, "parse_url(\$effectiveUrl, PHP_URL_PATH)")
+        && str_contains($http, "'status=%d path=%s content_type=%s bytes=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d'")
+        && str_contains($http, "str_contains(\$body, 'data-jzopc-checkout')")
+        && str_contains($http, "str_contains(\$body, 'id=\"checkout-personal-information-step\"')")
+        && !str_contains($http, "fwrite(STDERR, \$response['body'])")
+        && !str_contains($http, "implode(\"\\n\", \$session->cookies())"),
+    'fallback diagnostics must expose only structural response state and must not log response bodies or cookie values',
+);
+assertActiveHttpFallbackRuntime(
     str_contains($http, "str_contains(\$response['body'], 'data-jzopc-checkout')")
-        && str_contains($http, "str_contains(\$response['body'], 'id=\"checkout-personal-information-step\"')"),
-    'HTTP contract must distinguish healthy OPC takeover from an actual Core native checkout step',
+        && str_contains($http, "str_contains(\$response['body'], 'id=\"checkout-personal-information-step\"')")
+        && str_contains($http, 'activeCheckoutResponseDiagnostics($response)'),
+    'HTTP contract must distinguish healthy OPC takeover from Core native checkout and emit safe diagnostics on structural mismatch',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($http, '$schema->uninstall()')
