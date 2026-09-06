@@ -59,7 +59,7 @@ assertActiveCoreCarrierContract(
 assertActiveCoreCarrierContract(
     str_contains($contract, '$expectedFamily === \'9.1\'')
         && str_contains($contract, "Module::getInstanceByName('ps_checkpayment')")
-        && str_contains($contract, "_DB_PREFIX_ . 'module_carrier'")
+        && str_contains($contract, "_DB_PREFIX_ . 'module_carrier`'")
         && str_contains($contract, '$paymentCarrierAssociation !== 1'),
     '9.1 carrier contract must prove the official payment fixture is allowed for the deterministic carrier before Chromium starts'
 );
