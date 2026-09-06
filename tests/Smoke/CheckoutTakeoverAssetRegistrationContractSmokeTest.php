@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 $module = file_get_contents($root . '/jzonepagecheckout.php');
+$registrar = file_get_contents($root . '/src/Integration/CheckoutFrontendAssetRegistrar.php');
+$renderer = file_get_contents($root . '/src/Integration/CheckoutShellRenderer.php');
+$template = file_get_contents($root . '/views/templates/front/checkout-shell.tpl');
 
 function assertTakeoverAssets(bool $condition, string $message): void
 {
@@ -13,21 +16,17 @@ function assertTakeoverAssets(bool $condition, string $message): void
     }
 }
 
-assertTakeoverAssets(is_string($module) && $module !== '', 'module source must be readable');
+foreach ([$module, $registrar, $renderer, $template] as $source) {
+    assertTakeoverAssets(is_string($source) && $source !== '', 'checkout asset contract source must be readable');
+}
 
 $providerStart = strpos($module, 'public function hookActionCheckoutBuildProcess');
 $legacyStart = strpos($module, 'public function hookActionCheckoutRender');
 $mediaStart = strpos($module, 'public function hookActionFrontControllerSetMedia');
 $validateStart = strpos($module, 'public function hookActionValidateOrderAfter');
 
-assertTakeoverAssets($providerStart !== false, 'provider takeover hook must exist');
-assertTakeoverAssets($legacyStart !== false, 'legacy takeover hook must exist');
-assertTakeoverAssets($mediaStart !== false, 'early FrontController media hook must remain registered');
-assertTakeoverAssets($validateStart !== false, 'order lifecycle hook boundary must remain present');
-assertTakeoverAssets(
-    $providerStart < $legacyStart && $legacyStart < $mediaStart && $mediaStart < $validateStart,
-    'expected checkout integration hook ordering changed unexpectedly',
-);
+assertTakeoverAssets($providerStart !== false && $legacyStart !== false && $mediaStart !== false && $validateStart !== false, 'checkout integration hook boundaries must exist');
+assertTakeoverAssets($providerStart < $legacyStart && $legacyStart < $mediaStart && $mediaStart < $validateStart, 'checkout integration hook ordering changed unexpectedly');
 
 $provider = substr($module, $providerStart, $legacyStart - $providerStart);
 $legacy = substr($module, $legacyStart, $mediaStart - $legacyStart);
@@ -39,36 +38,46 @@ foreach ([$provider, $legacy, $media] as $source) {
 
 assertTakeoverAssets(
     str_contains($provider, 'CheckoutFrontendAssetRegistrar::class')
-        && str_contains($provider, "'provider_assets_service'")
-        && str_contains($provider, '$registrar->register($this->context);'),
-    'provider takeover must require and invoke the frontend asset registrar fail closed',
-);
-assertTakeoverAssets(
-    strpos($provider, '$registrar->register($this->context);')
-        < strpos($provider, '$builder = $this->get(\\Jzvikas\\OnePageCheckout\\Integration\\CheckoutProcessBuilder::class);'),
-    'provider assets must be registered before shell preparation/provider exposure',
+        && str_contains($provider, '$registrar->register($this->context);')
+        && strpos($provider, '$registrar->register($this->context);') < strpos($provider, '$builder = $this->get('),
+    'provider takeover must validate the required asset manifest before shell preparation',
 );
 assertTakeoverAssets(
     str_contains($legacy, 'CheckoutFrontendAssetRegistrar::class')
-        && str_contains($legacy, "'legacy_assets_service'")
-        && str_contains($legacy, '$registrar->register($this->context);'),
-    'legacy takeover must require and invoke the frontend asset registrar fail closed',
+        && str_contains($legacy, '$registrar->register($this->context);')
+        && strpos($legacy, '$registrar->register($this->context);') < strpos($legacy, '$adapter = $this->get('),
+    'legacy takeover must validate the required asset manifest before replacing Core checkout',
 );
 assertTakeoverAssets(
-    strpos($legacy, '$registrar->register($this->context);')
-        < strpos($legacy, '$adapter = $this->get(\\Jzvikas\\OnePageCheckout\\Integration\\LegacyCheckoutRenderAdapter::class);'),
-    'legacy assets must be registered before the Core checkout process is replaced',
+    str_contains($registrar, 'private const JAVASCRIPT_PATHS = [')
+        && str_contains($registrar, 'public function shellJavascriptUrls(): array')
+        && str_contains($registrar, "constant('_MODULE_DIR_')")
+        && !str_contains($registrar, 'registerJavascript('),
+    'shell asset manifest must own the six required URLs without also queuing duplicate Core scripts',
+);
+
+foreach ([
+    'payment-controller.js',
+    'checkout-mutation-client.js',
+    'final-submit-controller.js',
+    'ordinary-payment-submit-guard.js',
+    'binary-payment-controller.js',
+    'payment-handoff-ambiguity-guard.js',
+] as $asset) {
+    assertTakeoverAssets(str_contains($registrar, "'views/js/{$asset}'"), "required checkout asset {$asset} must remain in the manifest");
+}
+
+assertTakeoverAssets(
+    str_contains($renderer, 'private CheckoutFrontendAssetRegistrar $frontendAssets')
+        && str_contains($renderer, "'jzopc_javascript_urls' => \$this->frontendAssets->shellJavascriptUrls()"),
+    'checkout shell renderer must bind the validated asset manifest into the shell render',
 );
 assertTakeoverAssets(
-    str_contains($media, "(string) (\$controller->php_self ?? '') !== 'order'")
-        && !str_contains($media, 'instanceof OrderController'),
-    'early media hook must recognize the Core order page without depending on a legacy OrderController alias',
-);
-assertTakeoverAssets(
-    str_contains($media, 'CheckoutFrontendAssetRegistrar::class')
-        && str_contains($media, '$registrar->register($this->context);')
-        && str_contains($media, "'assets_register'"),
-    'early actionFrontControllerSetMedia registration must remain as the first asset-registration opportunity',
+    str_contains($template, '{foreach $jzopc_javascript_urls as $jzopc_javascript_url}')
+        && str_contains($template, 'data-jzopc-runtime-asset')
+        && str_contains($template, 'src="{$jzopc_javascript_url|escape:')
+        && str_contains($template, 'defer'),
+    'custom shell must emit escaped same-origin deferred script tags for every required runtime asset',
 );
 assertTakeoverAssets(
     str_contains($module, 'private const INTEGRATION_SHELL_READY = false;')
@@ -82,4 +91,4 @@ assertTakeoverAssets(
     'asset/takeover hooks must never create Core orders directly',
 );
 
-fwrite(STDOUT, "Checkout takeover asset registration source contract OK.\n");
+fwrite(STDOUT, "Checkout shell-owned asset delivery source contract OK.\n");
