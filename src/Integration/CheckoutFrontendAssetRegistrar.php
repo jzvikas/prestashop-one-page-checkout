@@ -8,6 +8,8 @@ use RuntimeException;
 
 final readonly class CheckoutFrontendAssetRegistrar
 {
+    private const CORE_JQUERY_ASSET_ID = 'jzopc-core-jquery';
+
     /** @var list<string> */
     private const JAVASCRIPT_PATHS = [
         'views/js/payment-controller.js',
@@ -47,20 +49,37 @@ final readonly class CheckoutFrontendAssetRegistrar
      * delivery boundary for those six files.
      *
      * The checkout still renders Core/third-party identity, carrier and payment hooks/forms. Some
-     * legacy integrations legitimately depend on PrestaShop's Core-owned jQuery compatibility
-     * asset, while Hummingbird itself does not expose a global jQuery. Requesting Core jQuery from
-     * the authoritative FrontController during actionFrontControllerSetMedia preserves those forms
-     * without bundling, vendoring or impersonating jQuery inside the OPC module. Repeated calls at
-     * later takeover boundaries are idempotent in Core's asset collection.
+     * integrations legitimately depend on PrestaShop's Core-owned jQuery compatibility asset, while
+     * Hummingbird itself does not expose a global jQuery. PrestaShop 9's deprecated addJquery()
+     * helper only appends to the legacy js_files array, which Hummingbird does not render through its
+     * modern asset pipeline. Register the Core-resolved jQuery path through FrontController's modern
+     * JavascriptManager instead. A stable asset ID keeps repeated media/provider/legacy calls
+     * idempotent without vendoring or impersonating jQuery inside the OPC module.
      */
     public function register(\Context $context): void
     {
         $controller = $context->controller ?? null;
-        if (!is_object($controller) || !is_callable([$controller, 'addJquery'])) {
-            throw new RuntimeException('PrestaShop FrontController jQuery compatibility boundary is unavailable.');
+        if (!is_object($controller) || !is_callable([$controller, 'registerJavascript'])) {
+            throw new RuntimeException('PrestaShop FrontController JavaScript registration boundary is unavailable.');
+        }
+        if (!class_exists(\Media::class) || !is_callable([\Media::class, 'getJqueryPath'])) {
+            throw new RuntimeException('PrestaShop Core jQuery resolver is unavailable.');
         }
 
-        $controller->addJquery();
+        $jqueryPath = \Media::getJqueryPath();
+        if (!is_string($jqueryPath) || $jqueryPath === '') {
+            throw new RuntimeException('PrestaShop Core jQuery asset path is unavailable.');
+        }
+
+        $controller->registerJavascript(
+            self::CORE_JQUERY_ASSET_ID,
+            $jqueryPath,
+            [
+                'position' => 'head',
+                'priority' => 0,
+            ],
+        );
+
         $this->shellJavascriptUrls();
     }
 }
