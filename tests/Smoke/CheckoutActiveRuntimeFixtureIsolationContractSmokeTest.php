@@ -62,18 +62,18 @@ assertActiveRuntimeFixtureIsolation(
     'production asset registrar must expose the exact shell-manifest boundary instrumented by the runtime fixture',
 );
 assertActiveRuntimeFixtureIsolation(
-    str_contains($assetRegistrar, '$this->shellJavascriptUrls = [];')
-        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
+    str_contains($assetRegistrar, '$this->shellJavascriptUrls();')
         && !str_contains($assetRegistrar, '$controller->addJquery();')
-        && !str_contains($assetRegistrar, '\\Media::getJqueryPath()'),
-    'production asset registrar must own only the OPC shell manifest while Core/theme compatibility assets remain Core-owned',
+        && !str_contains($assetRegistrar, '\\Media::getJqueryPath()')
+        && !str_contains($assetRegistrar, '$controller->registerJavascript('),
+    'production asset registrar must only validate the shell-owned OPC manifest while Core/theme compatibility assets remain Core-owned',
 );
 assertActiveRuntimeFixtureIsolation(
     str_contains($instrumenter, "'path' => 'src/Integration/CheckoutFrontendAssetRegistrar.php'")
         && str_contains($instrumenter, "'marker' => '.jzopc-runtime-failure-assets'")
-        && str_contains($instrumenter, '$this->shellJavascriptUrls = [];')
+        && str_contains($instrumenter, '$controller = $context->controller ?? null;')
         && str_contains($instrumenter, 'Injected active checkout asset manifest validation failure.'),
-    'runtime failure instrumenter must stay aligned with the production shell-manifest validation boundary',
+    'runtime failure instrumenter must stay aligned with the production registrar boundary',
 );
 
 assertActiveRuntimeFixtureIsolation(
