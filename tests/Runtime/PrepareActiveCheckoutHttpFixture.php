@@ -98,6 +98,10 @@ $country = new Country($countryId);
 if (!Validate::isLoadedObject($country) || (int) $country->id_zone <= 0) {
     $fail('Default runtime country does not provide a valid Core delivery zone.');
 }
+$activeZones = Zone::getZones(true);
+if (!is_array($activeZones) || $activeZones === []) {
+    $fail('No active Core delivery zone exists for runtime carrier setup.');
+}
 
 $carrier = new Carrier();
 $carrier->name = 'JZ OPC Runtime Carrier';
@@ -121,9 +125,19 @@ if ($carrier->delay === [] || !$carrier->add() || (int) $carrier->id <= 0) {
     $fail('Unable to create the runtime carrier through PrestaShop Carrier.');
 }
 
-if (!$carrier->addZone((int) $country->id_zone)) {
+foreach ($activeZones as $zoneRow) {
+    $zoneId = (int) ($zoneRow['id_zone'] ?? 0);
+    if ($zoneId <= 0) {
+        continue;
+    }
+    if (!$carrier->addZone($zoneId)) {
+        $carrier->delete();
+        $fail(sprintf('Unable to associate the runtime carrier with Core delivery zone %d.', $zoneId));
+    }
+}
+if (!Carrier::checkCarrierZone((int) $carrier->id, (int) $country->id_zone)) {
     $carrier->delete();
-    $fail('Unable to associate the runtime carrier with the default country delivery zone.');
+    $fail('Runtime carrier is unavailable in the default Core delivery zone after association.');
 }
 
 $db = Db::getInstance();
