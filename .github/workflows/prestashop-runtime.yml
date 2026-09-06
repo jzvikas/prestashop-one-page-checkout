@@ -131,6 +131,13 @@ jobs:
             "${{ matrix.family }}" \
             "${{ matrix.native_opc }}"
 
+      - name: Execute PrestaShop 9.1 finalization reservation MariaDB contract
+        if: matrix.family == '9.1'
+        run: |
+          php tests/Runtime/FinalizationReservationMariaDbContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}"
+
       - name: Execute Core process adapter contract
         run: |
           php tests/Runtime/CoreProcessAdapterContract.php \
