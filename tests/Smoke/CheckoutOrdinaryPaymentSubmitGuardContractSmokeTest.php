@@ -64,7 +64,7 @@ assertOrdinaryPaymentSubmitGuardContract(
 assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, 'Promise.resolve().then(() => {')
         && str_contains($guard, 'this.authorizedForm === form && this.authorizedPaymentOptionId === paymentOptionId'),
-    'handoff authorization must also expire after the current synchronous stack when jQuery emits no native submit event',
+    'handoff authorization must also expire after the current synchronous stack when no native submit event is observed',
 );
 assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, "this.root.addEventListener('jzopc:section:updated', this.onCheckoutStateChanged)"),
@@ -73,6 +73,12 @@ assertOrdinaryPaymentSubmitGuardContract(
 assertOrdinaryPaymentSubmitGuardContract(
     str_contains($guard, "this.root.addEventListener('change', this.onCheckoutStateChanged)"),
     'payment option changes must revoke stale ordinary-form authorization',
+);
+$requestSubmitPosition = strpos($finalSubmit, "if (typeof form.requestSubmit === 'function')");
+$jqueryPosition = strpos($finalSubmit, "if (typeof window.jQuery === 'function')");
+assertOrdinaryPaymentSubmitGuardContract(
+    $requestSubmitPosition !== false && $jqueryPosition !== false && $requestSubmitPosition < $jqueryPosition,
+    'ordinary handoff must prefer the browser-native submit lifecycle before the legacy jQuery fallback',
 );
 assertOrdinaryPaymentSubmitGuardContract(
     str_contains($finalSubmit, 'paymentForm.contains(control)'),
