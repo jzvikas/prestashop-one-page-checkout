@@ -9,44 +9,49 @@ if ($source === false) {
 }
 
 $required = [
-    "page.waitForResponse((response) => {",
-    "}).then(async (response) => {",
-    "payload = await response.json();",
-    "return { status, payload };",
-    "const preflight = await finalizationRequest;",
-    "const preflightPayload = preflight.payload;",
+    "await page.exposeFunction('jzopcRuntimeTraceEvent'",
+    "void window.jzopcRuntimeTraceEvent('preflight');",
+    "void window.jzopcRuntimeTraceEvent('handoff');",
+    "const preflightResponse = await finalizationRequest;",
+    "if (preflightResponse.status() >= 400)",
+    "(request) => isCheckPaymentValidation(request.url())",
+    "handoffTrace.preflight < 1",
+    "handoffTrace.handoff < 1",
+    "handoffTrace.blocked !== 0",
+    "handoffTrace.ambiguous !== 0",
+    "await page.waitForURL((url) => isOrderConfirmation(url.toString())",
+    "JZOPC_NATIVE_ORDER_ID=",
 ];
 
 foreach ($required as $needle) {
     if (!str_contains($source, $needle)) {
-        fwrite(STDERR, "FAIL: native payment contract must capture finalization JSON before native navigation: {$needle}\n");
+        fwrite(STDERR, "FAIL: native payment contract must preserve navigation-safe lifecycle/order gates: {$needle}\n");
         exit(1);
     }
 }
 
-if (str_contains($source, 'const preflightResponse = await finalizationRequest;')
-    || str_contains($source, 'await preflightResponse.json();')) {
-    fwrite(STDERR, "FAIL: native payment contract must not defer finalization body reads until after handoff navigation can begin.\n");
-    exit(1);
+$forbiddenBodyReads = [
+    'await preflightResponse.json();',
+    'await preflightResponse.body();',
+    'await preflightResponse.text();',
+];
+foreach ($forbiddenBodyReads as $needle) {
+    if (str_contains($source, $needle)) {
+        fwrite(STDERR, "FAIL: native payment runtime must not race native navigation by reading the finalization body in Playwright: {$needle}\n");
+        exit(1);
+    }
 }
 
-if (!str_contains($source, "(request) => isCheckPaymentValidation(request.url())")
-    || !str_contains($source, "await page.waitForURL((url) => isOrderConfirmation(url.toString())")
-    || !str_contains($source, 'JZOPC_NATIVE_ORDER_ID=')) {
-    fwrite(STDERR, "FAIL: preflight capture hardening must preserve payment validation and Core order-confirmation gates.\n");
-    exit(1);
-}
-
-$forbidden = [
+$forbiddenOwnership = [
     'validateOrder(',
     'INSERT INTO ps_orders',
     'INSERT INTO `ps_orders`',
 ];
-foreach ($forbidden as $needle) {
+foreach ($forbiddenOwnership as $needle) {
     if (str_contains($source, $needle)) {
         fwrite(STDERR, "FAIL: native payment browser contract must not create orders directly: {$needle}\n");
         exit(1);
     }
 }
 
-fwrite(STDOUT, "Native payment preflight capture smoke contract passed.\n");
+fwrite(STDOUT, "Navigation-safe native payment lifecycle trace smoke contract passed.\n");
