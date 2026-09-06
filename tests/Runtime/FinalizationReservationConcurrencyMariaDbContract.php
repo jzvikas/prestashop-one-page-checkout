@@ -49,9 +49,9 @@ if ($dbHost === '') {
 $dbParams = [
     'driver' => 'pdo_mysql',
     'host' => $dbHost,
-    'dbname' => defined('_DB_NAME_') ? (string) constant('_DB_NAME_) : '',
-    'user' => defined('_DB_USER_') ? (string) constant('_DB_USER_) : '',
-    'password' => defined('_DB_PASSWD_') ? (string) constant('_DB_PASSWD_) : '',
+    'dbname' => defined('_DB_NAME_') ? (string) constant('_DB_NAME_') : '',
+    'user' => defined('_DB_USER_') ? (string) constant('_DB_USER_') : '',
+    'password' => defined('_DB_PASSWD_') ? (string) constant('_DB_PASSWD_') : '',
     'charset' => 'utf8mb4',
 ];
 if ($dbPort > 0) {
