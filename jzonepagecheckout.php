@@ -178,6 +178,19 @@ final class JzOnePageCheckout extends Module
                 return null;
             }
 
+            $registrar = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class);
+            if (!$registrar instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar) {
+                $this->failCheckoutIntegration(
+                    'provider_assets_service',
+                    new UnexpectedValueException('Checkout frontend asset registrar service is unavailable.')
+                );
+
+                return null;
+            }
+            // setMedia can run before the checkout activation state is final. Register again at the
+            // actual provider takeover boundary; PrestaShop keys assets by ID, so this is idempotent.
+            $registrar->register($this->context);
+
             $builder = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder::class);
             if (!$builder instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder) {
                 $this->failCheckoutIntegration(
@@ -211,6 +224,20 @@ final class JzOnePageCheckout extends Module
                 return;
             }
 
+            $registrar = $this->get(\Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar::class);
+            if (!$registrar instanceof \Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar) {
+                $this->failCheckoutIntegration(
+                    'legacy_assets_service',
+                    new UnexpectedValueException('Checkout frontend asset registrar service is unavailable.')
+                );
+
+                return;
+            }
+            // Core's legacy actionCheckoutRender hook is the last trustworthy boundary before this
+            // module replaces the already-built process. Re-register the keyed assets here so a
+            // too-early setMedia activation decision can never produce an OPC shell without JS.
+            $registrar->register($this->context);
+
             $adapter = $this->get(\Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter::class);
             if (!$adapter instanceof \Jzvikas\OnePageCheckout\Integration\LegacyCheckoutRenderAdapter) {
                 $this->failCheckoutIntegration(
@@ -238,9 +265,9 @@ final class JzOnePageCheckout extends Module
                 );
             }
         } catch (Throwable $exception) {
-            // Core built its native process before actionCheckoutRender. The adapter assigns a
-            // replacement only after eager shell preparation succeeds, so an exception here leaves
-            // the original Core process untouched.
+            // Core built its native process before actionCheckoutRender. Asset registration and
+            // adapter replacement both happen before the replacement is assigned, so any exception
+            // here leaves the original Core process untouched.
             $this->failCheckoutIntegration('legacy_prepare', $exception);
         }
     }
