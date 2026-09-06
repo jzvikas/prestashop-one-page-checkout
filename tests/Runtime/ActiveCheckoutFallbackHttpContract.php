@@ -74,7 +74,6 @@ final class ActiveCheckoutHttpSession
 
         $this->handle = $handle;
         curl_setopt_array($this->handle, [
-            CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 8,
             CURLOPT_CONNECTTIMEOUT => 5,
@@ -92,24 +91,38 @@ final class ActiveCheckoutHttpSession
     }
 
     /**
-     * @return array{status:int,body:string,effective_url:string,content_type:string}
+     * @return array{status:int,body:string,effective_url:string,content_type:string,transfer_bytes:int,content_length:int}
      */
     public function request(string $url): array
     {
-        if (!curl_setopt($this->handle, CURLOPT_URL, $url)) {
-            throw new RuntimeException('Unable to configure runtime HTTP request URL.');
+        $body = '';
+        $writeCallback = static function ($handle, string $chunk) use (&$body): int {
+            $body .= $chunk;
+
+            return strlen($chunk);
+        };
+
+        if (!curl_setopt($this->handle, CURLOPT_URL, $url)
+            || !curl_setopt($this->handle, CURLOPT_HTTPGET, true)
+            || !curl_setopt($this->handle, CURLOPT_WRITEFUNCTION, $writeCallback)) {
+            throw new RuntimeException('Unable to configure runtime HTTP request.');
         }
 
-        $body = curl_exec($this->handle);
-        if (!is_string($body)) {
+        $executed = curl_exec($this->handle);
+        if ($executed !== true) {
             throw new RuntimeException('HTTP request failed: ' . curl_error($this->handle));
         }
+
+        $transferBytes = (int) round((float) curl_getinfo($this->handle, CURLINFO_SIZE_DOWNLOAD));
+        $contentLength = (int) round((float) curl_getinfo($this->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD));
 
         return [
             'status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE),
             'body' => $body,
             'effective_url' => (string) curl_getinfo($this->handle, CURLINFO_EFFECTIVE_URL),
             'content_type' => (string) curl_getinfo($this->handle, CURLINFO_CONTENT_TYPE),
+            'transfer_bytes' => $transferBytes,
+            'content_length' => $contentLength,
         ];
     }
 
@@ -155,13 +168,15 @@ function activeCheckoutResponseDiagnostics(array $response): string
     }
 
     return sprintf(
-        'status=%d path=%s content_type=%s bytes=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d',
+        'status=%d path=%s content_type=%s captured_bytes=%d transfer_bytes=%d content_length=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d',
         isset($response['status']) ? (int) $response['status'] : 0,
         $effectivePath !== '' ? $effectivePath : '[unknown]',
         isset($response['content_type']) && is_string($response['content_type']) && $response['content_type'] !== ''
             ? $response['content_type']
             : '[unknown]',
         strlen($body),
+        isset($response['transfer_bytes']) ? (int) $response['transfer_bytes'] : -1,
+        isset($response['content_length']) ? (int) $response['content_length'] : -1,
         str_contains($body, 'data-jzopc-checkout') ? 1 : 0,
         str_contains($body, 'id="checkout-personal-information-step"') ? 1 : 0,
         str_contains($body, 'id="cart"') || str_contains($body, 'cart-overview') ? 1 : 0,
