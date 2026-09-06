@@ -138,6 +138,37 @@ function expectActiveHttp(bool $condition, string $message): void
     }
 }
 
+/**
+ * Produce only structural response diagnostics. Do not expose response bodies, cookies, tokens,
+ * form values or customer data in CI logs.
+ */
+function activeCheckoutResponseDiagnostics(array $response): string
+{
+    $body = isset($response['body']) && is_string($response['body']) ? $response['body'] : '';
+    $effectiveUrl = isset($response['effective_url']) && is_string($response['effective_url'])
+        ? $response['effective_url']
+        : '';
+    $effectivePath = '';
+    if ($effectiveUrl !== '') {
+        $parsedPath = parse_url($effectiveUrl, PHP_URL_PATH);
+        $effectivePath = is_string($parsedPath) ? $parsedPath : '';
+    }
+
+    return sprintf(
+        'status=%d path=%s content_type=%s bytes=%d opc=%d core_checkout=%d cart_page=%d empty_cart=%d',
+        isset($response['status']) ? (int) $response['status'] : 0,
+        $effectivePath !== '' ? $effectivePath : '[unknown]',
+        isset($response['content_type']) && is_string($response['content_type']) && $response['content_type'] !== ''
+            ? $response['content_type']
+            : '[unknown]',
+        strlen($body),
+        str_contains($body, 'data-jzopc-checkout') ? 1 : 0,
+        str_contains($body, 'id="checkout-personal-information-step"') ? 1 : 0,
+        str_contains($body, 'id="cart"') || str_contains($body, 'cart-overview') ? 1 : 0,
+        str_contains($body, 'cart-is-empty') || str_contains($body, 'Your cart is empty') ? 1 : 0,
+    );
+}
+
 function expectHealthyOpc(array $response, string $stage): void
 {
     expectActiveHttp(
@@ -146,7 +177,11 @@ function expectHealthyOpc(array $response, string $stage): void
     );
     expectActiveHttp(
         str_contains($response['body'], 'data-jzopc-checkout'),
-        sprintf('%s healthy checkout did not render the active OPC root.', $stage),
+        sprintf(
+            '%s healthy checkout did not render the active OPC root; %s.',
+            $stage,
+            activeCheckoutResponseDiagnostics($response),
+        ),
     );
     expectActiveHttp(
         str_contains($response['body'], 'data-jzopc-finalization-url='),
@@ -170,7 +205,11 @@ function expectNativeFallback(array $response, string $stage): void
     );
     expectActiveHttp(
         str_contains($response['body'], 'id="checkout-personal-information-step"'),
-        sprintf('%s fallback did not render Core personal-information checkout step.', $stage),
+        sprintf(
+            '%s fallback did not render Core personal-information checkout step; %s.',
+            $stage,
+            activeCheckoutResponseDiagnostics($response),
+        ),
     );
 }
 
