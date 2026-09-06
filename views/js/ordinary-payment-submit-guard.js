@@ -5,6 +5,7 @@
   const PAYMENT_OPTION_SELECTOR = '[data-jzopc-section="payment"] input[name="payment-option"]';
   const PAYMENT_FORM_PREFIX = 'pay-with-';
   const PAYMENT_FORM_SUFFIX = '-form';
+  const ACTION_FORM_ATTRIBUTE = 'data-jzopc-payment-action-form';
   const instances = new WeakMap();
 
   class JzOpcOrdinaryPaymentSubmitGuard {
@@ -54,6 +55,18 @@
         // Authorization is deliberately one observable submit only. A payment handler that keeps
         // the page alive cannot turn the same reservation into an unlimited direct-submit window.
         this.clearAuthorization();
+
+        // When Core presents PaymentOption::setAction() without module-owned form markup, OPC has
+        // created only the thin action form visible in payment.tpl. Its whole payment contract is
+        // the form action + successful controls; there are no module-owned form submit handlers to
+        // replay. The observable requestSubmit event above consumes the reservation authorization,
+        // then the platform-native submit crosses directly into that Core-presented payment action.
+        // Module-supplied option.form markup never has this marker and keeps its full submit lifecycle.
+        if (form.getAttribute(ACTION_FORM_ATTRIBUTE) === '1') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          HTMLFormElement.prototype.submit.call(form);
+        }
         return;
       }
 
