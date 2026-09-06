@@ -108,11 +108,17 @@ $carrier->name = 'JZ OPC Runtime Carrier';
 $carrier->active = true;
 $carrier->deleted = false;
 $carrier->is_free = true;
+$carrier->is_module = false;
+$carrier->external_module_name = null;
 $carrier->shipping_handling = false;
 $carrier->range_behavior = false;
 $carrier->shipping_external = false;
 $carrier->need_range = false;
 $carrier->shipping_method = Carrier::SHIPPING_METHOD_FREE;
+$carrier->max_width = 0;
+$carrier->max_height = 0;
+$carrier->max_depth = 0;
+$carrier->max_weight = 0.0;
 $carrier->grade = 0;
 $carrier->delay = [];
 foreach ($languages as $language) {

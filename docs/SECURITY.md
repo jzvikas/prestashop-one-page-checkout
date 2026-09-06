@@ -94,6 +94,8 @@ A real carrier change clears payment/agreement authority. Virtual carts reject c
 
 Finalization revalidates carrier eligibility again immediately before payment handoff.
 
+The disposable installed-runtime shop uses a Core `Carrier` fixture because PrestaShop is installed with `--fixtures=0`. That fixture explicitly persists non-module/free/no-range/no-package-limit semantics and is associated with active zones, customer groups and the concrete runtime shop. Before Chromium is allowed to interpret carrier absence as an OPC address/cart problem, `ActiveCoreCarrierAvailabilityContract.php` independently requires Core `Carrier::getCarriersForOrder()` and `Carrier::getAvailableCarrierList()` to retain that exact carrier for the configured guest group/default country zone and physical fixture product. The probe is CLI-only test infrastructure and never writes a delivery selection.
+
 ## 8. Payment tampering and native handoff
 
 Payment selection is parsed as bounded identifiers and checked against a fresh Core `PaymentOptionsFinder::present()` result. Module key, option ID and presented module name must match exactly before a canonical selection can be persisted.
@@ -173,7 +175,7 @@ The longer default TTL deliberately prefers bounded temporary retry blocking ove
 
 A PrestaShop 9.1.5 fully orderable same-session two-tab Chromium gate is committed. It prepares guest identity, a Core address, a Core carrier, the pinned official `ps_checkpayment` option and current legal agreements through normal browser mutations, then requires exactly one `begin` attempt to acquire the reservation and the competing attempt to receive `finalization_in_progress`. It also requires exact winning replay to remain idempotent, a foreign/losing release to leave `data-jzopc-finalization-reserved="1"`, and the exact winning release to restore `reserved="0"`. The payment form is deliberately never submitted, so this gate verifies the reservation boundary before native payment activation rather than order creation.
 
-Recent Actions execution is available again. Runtime run `34015527664` proved the 9.1.5 installed/MariaDB gates before failing at the earlier active-shell asset-delivery gate; therefore downstream orderable browser/payment assertions in that run were skipped and are not counted as passing. Native payment submission, customer-binding transition under an already-active browser reservation, slow/abandoned payment recovery, thrown/partial third-party handlers, Core-order cleanup and TTL recovery remain mandatory production verification.
+Actions execution is currently available. Runtime run `34021181704` on commit `5d33e8b553197b3ec719052ae6ac30804f918455` executed all earlier 9.1.5 MariaDB/session/active-browser/preflight gates successfully, then reached the fully orderable two-tab contract and failed before payment selection because no Core delivery option was rendered. That failure is not reservation-contention evidence. ADR-0035 therefore adds a pre-browser Core carrier-discovery gate so the next executed run can distinguish a rejected carrier fixture from an address/cart transition problem without weakening the browser requirement. Native payment submission, customer-binding transition under an already-active browser reservation, slow/abandoned payment recovery, thrown/partial third-party handlers, Core-order cleanup and TTL recovery remain mandatory production verification.
 
 ## 12. Successful-order and abandoned-state cleanup
 
@@ -236,12 +238,12 @@ The internal readiness constant remains private production authority; the BO pag
 | Auth-driven cart replacement | Old-cart continuation blocked; full reload establishes replacement cart | Execute `PS_CART_FOLLOWING` browser matrix |
 | Password handling | Core persister/hashing owns passwords | Verify password-policy failures and module-added fields |
 | Address IDOR | Ownership checked for saved/edit targets | Execute foreign-address browser/runtime tests |
-| Forged carrier | Fresh Core option validation + Core persistence + final recheck | Representative/no-carrier browser matrix |
+| Forged carrier | Fresh Core option validation + Core persistence + final recheck; active runtime now independently gates Core fixture discovery before Chromium | Execute new carrier-discovery gate, then representative/no-carrier browser matrix |
 | Forged payment | Fresh Core selection validation + final recheck | Representative redirect/embedded/binary modules |
 | Direct ordinary payment-form submit | Capture-phase exact-form barrier; one-shot authorization only after reserved handoff | Browser-test visible submit, Enter key, jQuery/native handlers and embedded/tokenization modules |
 | Forged/missing agreements | Exact fresh Core condition-set validation + final recheck | Real TOS/module condition browser matrix |
 | Monetary tampering | Server-only totals/orderability inputs | Live cart/promotion/tax scenarios |
 | Stale AJAX | Server state guard + cart mutex + browser sequence/abort | Rapid-change browser matrix |
-| Missing checkout safety runtime | Shell-owned six-file manifest; unresolved manifest fails before takeover; native fallback receives no OPC runtime | Execute 9.0/9.1 Chromium and require all six asset responses + initialized lifecycle |
-| Concurrent final submission | Cart-level DB reservation; mismatched customer cannot erase active barrier; exact attempt release + atomic Core-order predicate + bounded 15-minute TTL; orderable same-session two-tab gate committed for one-winner/one-blocked + exact replay/release | Execute the committed gate; then verify customer transitions, slow payment, Core cleanup and TTL recovery |
+| Missing checkout safety runtime | Shell-owned six-file manifest; unresolved manifest fails before takeover; native fallback receives no OPC runtime | Keep 9.0/9.1 Chromium asset/lifecycle gates green |
+| Concurrent final submission | Cart-level DB reservation; mismatched customer cannot erase active barrier; exact attempt release + atomic Core-order predicate + bounded 15-minute TTL; orderable same-session two-tab gate reaches carrier preparation in executed 9.1.5 runtime | Resolve Core carrier/address state and execute one-winner/one-blocked contention; then verify customer transitions, slow payment, Core cleanup and TTL recovery |
 | Payment/order handoff | Native ordinary/binary/free-order paths + direct ordinary submit barrier + post-activation fail-closed reservation preservation | Real third-party module browser verification, especially embedded forms, thrown/partial handlers and TTL/Core cleanup recovery |

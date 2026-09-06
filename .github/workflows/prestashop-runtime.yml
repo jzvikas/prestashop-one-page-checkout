@@ -254,6 +254,14 @@ jobs:
           fi
           echo "JZOPC_RUNTIME_PRODUCT_ID=$product_id" >> "$GITHUB_ENV"
 
+      - name: Execute active Core carrier availability contract
+        if: matrix.native_opc == '0'
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCoreCarrierAvailabilityContract.php \
+            /tmp/prestashop \
+            "${{ matrix.family }}" \
+            "$JZOPC_RUNTIME_PRODUCT_ID"
+
       - name: Install active browser contract dependencies
         if: matrix.native_opc == '0'
         working-directory: tests/Browser
