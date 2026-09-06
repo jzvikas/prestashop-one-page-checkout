@@ -124,11 +124,12 @@ assertActiveHttpFallbackRuntime(
 assertActiveHttpFallbackRuntime(
     str_contains($http, "'/cart?' . http_build_query(")
         && str_contains($http, "'add' => 1")
+        && str_contains($http, "'ajax' => 1")
         && str_contains($http, "'id_product' => \$productId")
         && str_contains($http, 'CURLOPT_COOKIEJAR')
         && str_contains($http, 'CURLOPT_COOKIEFILE')
         && str_contains($http, 'CURLOPT_USERAGENT'),
-    'browser cart fixture must be created through the real Core CartController with one cookie session and non-bot user agent',
+    'browser cart fixture must use the real Core CartController AJAX add contract with one cookie session and non-bot user agent',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($http, "str_contains(\$response['body'], 'data-jzopc-checkout')")
