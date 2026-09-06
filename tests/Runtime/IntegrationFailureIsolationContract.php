@@ -10,6 +10,7 @@ use Jzvikas\OnePageCheckout\Checkout\PrestaShopCheckoutStateFactory;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutSectionRendererRegistry;
 use Jzvikas\OnePageCheckout\Checkout\Rendering\CheckoutTemplateRendererInterface;
 use Jzvikas\OnePageCheckout\Integration\CheckoutBrowserBootstrapFactory;
+use Jzvikas\OnePageCheckout\Integration\CheckoutFrontendAssetRegistrar;
 use Jzvikas\OnePageCheckout\Integration\CheckoutProcessBuilder;
 use Jzvikas\OnePageCheckout\Integration\CheckoutShellRenderer;
 use Jzvikas\OnePageCheckout\Integration\CheckoutShellStep;
@@ -156,6 +157,7 @@ $shellRenderer = new CheckoutShellRenderer(
     ),
     new CheckoutSectionRendererRegistry([]),
     new UnreachableTemplateRenderer(),
+    new CheckoutFrontendAssetRegistrar(),
 );
 $failingBuilder = new CheckoutProcessBuilder($shellRenderer);
 
