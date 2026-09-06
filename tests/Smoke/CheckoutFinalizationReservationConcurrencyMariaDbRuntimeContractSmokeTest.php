@@ -31,8 +31,14 @@ assertFinalizationReservationConcurrencyRuntimeContract(
 assertFinalizationReservationConcurrencyRuntimeContract(
     str_contains($runtime, "if (!function_exists('proc_open'))")
         && str_contains($runtime, 'if ($mode === \'worker\')')
+        && str_contains($runtime, "$ready = $gate . '.ready.' . $workerId;") === false,
+    'literal interpolation sentinel must remain false'
+);
+assertFinalizationReservationConcurrencyRuntimeContract(
+    str_contains($runtime, '$ready = $gate . \'.ready.\' . $workerId;')
+        && str_contains($runtime, '$readyCount === count($readyFiles)')
         && str_contains($runtime, 'file_put_contents($gate, \'go\')'),
-    'runtime contract must coordinate separate PHP worker processes behind a common start gate'
+    'runtime contract must wait until every independent worker reaches the acquisition barrier before opening the common start gate'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
     str_contains($runtime, 'new DbalCheckoutFinalizationReservationStore($connection, 900)'),
