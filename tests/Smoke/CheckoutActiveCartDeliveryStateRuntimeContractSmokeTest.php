@@ -36,6 +36,14 @@ assertLiveCartDeliveryStateContract(
     'Db::getValue() must own scalar-query limiting so the diagnostic cannot emit a duplicate LIMIT clause'
 );
 assertLiveCartDeliveryStateContract(
+    str_contains($contract, "require_once $appKernelPath;")
+        && str_contains($contract, "require_once $frontKernelPath;")
+        && str_contains($contract, "new FrontKernel('prod', false)")
+        && str_contains($contract, '$kernel->boot()')
+        && str_contains($contract, '$context->container = $kernel->getContainer();'),
+    'runtime diagnostic must boot the Core front kernel before exercising delivery-option calculation that requires Symfony services'
+);
+assertLiveCartDeliveryStateContract(
     str_contains($contract, 'Customer::getGroupsStatic($customerId)')
         && str_contains($contract, 'Carrier::getCarriersForOrder(')
         && str_contains($contract, 'Carrier::getAvailableCarrierList(')
