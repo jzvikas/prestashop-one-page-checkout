@@ -43,3 +43,14 @@
     </div>
   </div>
 </div>
+
+{* The custom shell is the authoritative asset boundary. These external same-origin scripts are
+   emitted only when OPC takeover actually rendered, so native/Core fallback cannot receive the
+   checkout runtime while the custom shell cannot exist without its safety controllers. *}
+{foreach $jzopc_javascript_urls as $jzopc_javascript_url}
+  <script
+    src="{$jzopc_javascript_url|escape:'htmlall':'UTF-8'}"
+    data-jzopc-runtime-asset
+    defer
+  ></script>
+{/foreach}
