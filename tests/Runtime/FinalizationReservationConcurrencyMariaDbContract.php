@@ -69,24 +69,17 @@ $connectionFactory = static function () use ($dbParams): Connection {
 };
 
 if ($mode === 'worker') {
-    $cartId = (int) ($argv[4] ?? 0);
-    $shopId = (int) ($argv[5] ?? 0);
-    $customerId = (int) ($argv[6] ?? 0);
-    $state = (string) ($argv[7] ?? '');
-    $payment = (string) ($argv[8] ?? '');
-    $attempt = (string) ($argv[9] ?? '');
-    $gate = (string) ($argv[10] ?? '');
+    $workerId = (int) ($argv[4] ?? -1);
+    $cartId = (int) ($argv[5] ?? 0);
+    $shopId = (int) ($argv[6] ?? 0);
+    $customerId = (int) ($argv[7] ?? 0);
+    $state = (string) ($argv[8] ?? '');
+    $payment = (string) ($argv[9] ?? '');
+    $attempt = (string) ($argv[10] ?? '');
+    $gate = (string) ($argv[11] ?? '');
 
-    if ($cartId <= 0 || $shopId <= 0 || $customerId <= 0 || $state === '' || $payment === '' || $attempt === '' || $gate === '') {
+    if ($workerId < 0 || $cartId <= 0 || $shopId <= 0 || $customerId <= 0 || $state === '' || $payment === '' || $attempt === '' || $gate === '') {
         $fail('Worker arguments are invalid.');
-    }
-
-    $deadline = microtime(true) + 10.0;
-    while (!is_file($gate)) {
-        if (microtime(true) >= $deadline) {
-            $fail('Worker start gate timed out.');
-        }
-        usleep(1000);
     }
 
     $connection = $connectionFactory();
@@ -97,13 +90,27 @@ if ($mode === 'worker') {
     $cart->id_customer = $customerId;
     $context->cart = $cart;
     $store = new DbalCheckoutFinalizationReservationStore($connection, 900);
+    $ready = $gate . '.ready.' . $workerId;
 
     try {
+        if (file_put_contents($ready, 'ready') === false) {
+            $fail('Worker could not publish readiness.');
+        }
+
+        $deadline = microtime(true) + 10.0;
+        while (!is_file($gate)) {
+            if (microtime(true) >= $deadline) {
+                $fail('Worker start gate timed out.');
+            }
+            usleep(1000);
+        }
+
         $store->acquire($context, $state, $payment, $attempt);
         fwrite(STDOUT, "ACQUIRED\n");
     } catch (CheckoutFinalizationReservationAlreadyActive) {
         fwrite(STDOUT, "BLOCKED\n");
     } finally {
+        @unlink($ready);
         $connection->close();
     }
 
@@ -143,15 +150,18 @@ $cleanup = static function () use ($connection, $table, $shopId, $cartId): void 
 $runRace = static function (array $workers, string $label) use ($shopRoot, $expectedFamily, $fail): array {
     $gate = sys_get_temp_dir() . '/jzopc-reservation-race-' . bin2hex(random_bytes(8));
     $processes = [];
+    $readyFiles = [];
 
     try {
-        foreach ($workers as $worker) {
+        foreach ($workers as $workerId => $worker) {
+            $readyFiles[] = $gate . '.ready.' . $workerId;
             $command = [
                 PHP_BINARY,
                 __FILE__,
                 $shopRoot,
                 $expectedFamily,
                 'worker',
+                (string) $workerId,
                 (string) $worker['cart'],
                 (string) $worker['shop'],
                 (string) $worker['customer'],
@@ -167,6 +177,18 @@ $runRace = static function (array $workers, string $label) use ($shopRoot, $expe
             }
             $processes[] = [$process, $pipes];
         }
+
+        $readyDeadline = microtime(true) + 15.0;
+        do {
+            $readyCount = count(array_filter($readyFiles, static fn (string $path): bool => is_file($path)));
+            if ($readyCount === count($readyFiles)) {
+                break;
+            }
+            if (microtime(true) >= $readyDeadline) {
+                $fail(sprintf('%s: only %d/%d workers reached the acquisition barrier.', $label, $readyCount, count($readyFiles)));
+            }
+            usleep(1000);
+        } while (true);
 
         if (file_put_contents($gate, 'go') === false) {
             $fail($label . ': unable to open start gate.');
@@ -188,6 +210,9 @@ $runRace = static function (array $workers, string $label) use ($shopRoot, $expe
         return $results;
     } finally {
         @unlink($gate);
+        foreach ($readyFiles as $readyFile) {
+            @unlink($readyFile);
+        }
         foreach ($processes as [$process, $pipes]) {
             if (is_resource($process)) {
                 proc_terminate($process);
