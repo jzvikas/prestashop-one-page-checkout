@@ -30,8 +30,8 @@ assertFinalizationReservationConcurrencyRuntimeContract(
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
     str_contains($runtime, "if (!function_exists('proc_open'))")
-        && str_contains($runtime, "if ($mode === 'worker')")
-        && str_contains($runtime, "file_put_contents($gate, 'go')"),
+        && str_contains($runtime, 'if ($mode === \'worker\')')
+        && str_contains($runtime, 'file_put_contents($gate, \'go\')'),
     'runtime contract must coordinate separate PHP worker processes behind a common start gate'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
@@ -39,11 +39,11 @@ assertFinalizationReservationConcurrencyRuntimeContract(
     'runtime workers must exercise the production DBAL reservation store with the production default TTL'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
-    str_contains($runtime, "$assert($results === ['ACQUIRED', 'BLOCKED'], 'Exactly one of two simultaneous distinct attempts must acquire the cart barrier.');"),
+    str_contains($runtime, '$assert($results === [\'ACQUIRED\', \'BLOCKED\'], \'Exactly one of two simultaneous distinct attempts must acquire the cart barrier.\');'),
     'runtime contract must prove exactly one distinct simultaneous attempt acquires the cart barrier'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
-    str_contains($runtime, "$assert($results === ['ACQUIRED', 'ACQUIRED'], 'Simultaneous identical attempts must both resolve idempotently.');"),
+    str_contains($runtime, '$assert($results === [\'ACQUIRED\', \'ACQUIRED\'], \'Simultaneous identical attempts must both resolve idempotently.\');'),
     'runtime contract must prove simultaneous identical replay resolves idempotently'
 );
 assertFinalizationReservationConcurrencyRuntimeContract(
