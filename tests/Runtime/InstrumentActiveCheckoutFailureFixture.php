@@ -106,16 +106,18 @@ $applyPatch([
     'anchor' => <<<'PHP'
     public function register(\Context $context): void
     {
-        $controller = $context->controller ?? null;
+        unset($context);
+        $this->shellJavascriptUrls();
 PHP,
     'replacement' => <<<'PHP'
     public function register(\Context $context): void
     {
         if (is_file(dirname(__DIR__, 2) . '/.jzopc-runtime-failure-assets')) {
-            throw new RuntimeException('Injected active checkout asset registration failure.');
+            throw new RuntimeException('Injected active checkout asset manifest validation failure.');
         }
 
-        $controller = $context->controller ?? null;
+        unset($context);
+        $this->shellJavascriptUrls();
 PHP,
 ]);
 
