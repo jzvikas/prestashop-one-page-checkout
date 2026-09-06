@@ -77,8 +77,14 @@ foreach ([
 assertActiveHttpFallbackRuntime(
     str_contains($instrumenter, "throw new \\RuntimeException('Injected active checkout shell service failure.')")
         && str_contains($instrumenter, "__jzopc_runtime_missing_template__.tpl")
-        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset manifest validation failure.')"),
-    'temporary fixture must inject service, real Smarty-template and shell asset-manifest validation failures at their production boundaries',
+        && str_contains($instrumenter, "throw new RuntimeException('Injected active checkout asset compatibility validation failure.')"),
+    'temporary fixture must inject service, real Smarty-template and asset-compatibility failures at their production boundaries',
+);
+assertActiveHttpFallbackRuntime(
+    str_contains($assetRegistrar, "is_callable([\$controller, 'addJquery'])")
+        && str_contains($assetRegistrar, '$controller->addJquery();')
+        && str_contains($assetRegistrar, '$this->shellJavascriptUrls();'),
+    'active checkout asset boundary must require Core-owned jQuery compatibility and the shell runtime manifest',
 );
 assertActiveHttpFallbackRuntime(
     str_contains($setup, "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture')")
