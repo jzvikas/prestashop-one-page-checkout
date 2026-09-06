@@ -2,7 +2,7 @@
 
 ## Status
 
-Provisional; shell-owned delivery is implemented and source-contracted, but the new runtime delta still requires executed Chromium proof on PrestaShop 9.0/9.1.
+Provisional; shell-owned delivery is implemented and source-contracted, while executed Chromium proof is still required on the latest PrestaShop 9.0/9.1 runtime HEAD before this boundary can be treated as verified.
 
 ## Context
 
@@ -17,11 +17,15 @@ The second run is important evidence: installation, installed contracts, sequent
 
 Therefore page-level Core asset registration cannot be the safety boundary for a checkout process that is itself selected later in the request lifecycle.
 
+After moving delivery into the shell, executed PrestaShop Runtime run `34016579028` on commit `f201126f913bcd7cc5c573bba828c441c596943e` proved the next layer of the contract. The 9.1.5 browser received all six expected `<script>` URLs from the OPC shell, but `payment-controller.js` returned HTTP 404 and no mutation lifecycle initialized. Inspection of the runtime harness showed that the PHP development server was started with `/tmp/prestashop/index.php` as an unconditional router, so even an existing `/modules/jzonepagecheckout/views/js/*.js` request was sent through the PrestaShop Front Office controller and converted to an application 404 instead of being served as a static file. The same run had already passed installation, sequential and process-concurrent MariaDB reservation contracts, Core process adapter, integration failure isolation, Smarty shell, session, fail-closed HTTP and active fixture preparation before reaching this browser failure.
+
+That 404 is a runtime-harness transport defect, not evidence that the production module URL is wrong. A normal web server serves an existing module asset directly and sends dynamic checkout routes to PrestaShop. The runtime server now mirrors that split through `tests/Runtime/prestashop-http-router.php`: safe GET/HEAD requests for existing files are returned to PHP's built-in static server, while dynamic, missing or traversal-like requests continue through the real PrestaShop `index.php` entry point. This test router does not alter production module code or browser assertions.
+
 ## Decision
 
 The rendered custom checkout shell is now the authoritative delivery boundary for the six required external JavaScript files.
 
-`CheckoutFrontendAssetRegistrar` owns a single manifest of required asset paths and derives their URLs from PrestaShop's `_MODULE_DIR_`. `CheckoutShellRenderer` resolves that manifest before rendering the shell and passes it to `checkout-shell.tpl`. The template emits escaped, same-origin, deferred `<script>` elements only after the OPC root has been rendered.
+`CheckoutFrontendAssetRegistrar` owns a single manifest of required asset paths and derives their URLs from PrestaShop's module path. `CheckoutShellRenderer` resolves that manifest before rendering the shell and passes it to `checkout-shell.tpl`. The template emits escaped, same-origin, deferred `<script>` elements only after the OPC root has been rendered.
 
 This has three safety properties:
 
@@ -35,19 +39,21 @@ No payment form ownership, carrier mechanics, mutation authority, reservation se
 
 ## Verification
 
-`tests/Smoke/CheckoutTakeoverAssetRegistrationContractSmokeTest.php` now locks all of the following:
+`tests/Smoke/CheckoutTakeoverAssetRegistrationContractSmokeTest.php` locks all of the following:
 
 - the manifest contains all six required runtime files;
-- the manifest resolves from `_MODULE_DIR_`;
+- the manifest resolves from the module path;
 - the compatibility `register()` boundary does not call `registerJavascript()`;
 - `CheckoutShellRenderer` binds the manifest into the shell;
 - `checkout-shell.tpl` emits escaped deferred runtime asset tags;
 - provider/legacy takeover still validates the manifest before exposing the custom process;
 - production readiness remains closed and no takeover hook calls `validateOrder()`.
 
-`tests/Browser/active-checkout-browser-contract.mjs` remains the authoritative runtime proof: it requires successful network responses for all six assets, a defined mutation client and the `jzopc:checkout:initialized` lifecycle event.
+`tests/Browser/active-checkout-browser-contract.mjs` remains the authoritative runtime proof: it requires successful network responses for all six assets, a defined mutation client and the `jzopc:checkout:initialized` lifecycle event. The browser gate was deliberately not weakened after the harness-level 404.
 
-This decision is not runtime-verified until a new PrestaShop 9.0/9.1 Chromium run passes that existing browser gate. A source-only pass is insufficient.
+`tests/Runtime/prestashop-http-router.php` exists only to make the CI PHP development server preserve normal static-vs-dynamic web-server semantics. It refuses static traversal-like paths, serves only existing GET/HEAD files through the built-in server, and routes every other request through PrestaShop Core.
+
+This decision is not runtime-verified until a new PrestaShop 9.0/9.1 Chromium run passes the existing browser gate on the latest HEAD. A source-only pass or the earlier shell-tag proof is insufficient.
 
 ## Invariants
 
