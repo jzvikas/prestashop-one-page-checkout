@@ -5,10 +5,15 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 $workflow = file_get_contents($root . '/.github/workflows/prestashop-runtime.yml');
 $runtimeContract = file_get_contents($root . '/tests/Runtime/FailClosedHttpContract.php');
+$router = file_get_contents($root . '/tests/Runtime/prestashop-http-router.php');
 $module = file_get_contents($root . '/jzonepagecheckout.php');
 $mutationController = file_get_contents($root . '/controllers/front/AbstractJzOpcMutationFrontController.php');
 
-if (!is_string($workflow) || !is_string($runtimeContract) || !is_string($module) || !is_string($mutationController)) {
+if (!is_string($workflow)
+    || !is_string($runtimeContract)
+    || !is_string($router)
+    || !is_string($module)
+    || !is_string($mutationController)) {
     throw new RuntimeException('Unable to read fail-closed HTTP contract sources.');
 }
 
@@ -18,7 +23,8 @@ $requiredWorkflowFragments = [
     "ps_ref: '9.2.0-beta.1'",
     '--domain=localhost:8080',
     'Start fail-closed Front Office HTTP server',
-    'php -S 127.0.0.1:8080 -t /tmp/prestashop /tmp/prestashop/index.php',
+    'JZOPC_PRESTASHOP_ROOT: /tmp/prestashop',
+    'tests/Runtime/prestashop-http-router.php',
     'curl --fail --silent --show-error http://localhost:8080/',
     'Execute fail-closed Front Office HTTP contract',
     'php tests/Runtime/FailClosedHttpContract.php http://localhost:8080',
@@ -32,6 +38,10 @@ foreach ($requiredWorkflowFragments as $fragment) {
 
 if (str_contains($workflow, '--domain=localhost \\')) {
     throw new RuntimeException('Runtime shop domain must include the loopback HTTP port used by the browser/server contracts.');
+}
+
+if (!str_contains($router, "require \$root . '/index.php';")) {
+    throw new RuntimeException('Static-aware runtime router must retain the real PrestaShop Front Office entry point for dynamic requests.');
 }
 
 $requiredContractFragments = [
