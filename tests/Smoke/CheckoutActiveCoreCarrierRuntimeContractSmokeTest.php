@@ -35,6 +35,12 @@ assertActiveCoreCarrierContract(
     'runtime carrier fixture must explicitly persist deterministic non-module/free/no-range/no-limit carrier semantics'
 );
 assertActiveCoreCarrierContract(
+    str_contains($fixture, '$carrier = new Carrier((int) $carrier->id, $languageId);')
+        && str_contains($fixture, 'Validate::isLoadedObject($carrier)')
+        && str_contains($fixture, '(int) $carrier->id_reference <= 0'),
+    'runtime carrier fixture must reload the Core model after Carrier::add() before trusting the SQL-persisted id_reference'
+);
+assertActiveCoreCarrierContract(
     str_contains($fixture, '$carrier->addZone($zoneId)')
         && str_contains($fixture, "'carrier_group'")
         && str_contains($fixture, "'carrier_shop'")
