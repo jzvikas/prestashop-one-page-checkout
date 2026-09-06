@@ -275,7 +275,10 @@ final class JzOnePageCheckout extends Module
     public function hookActionFrontControllerSetMedia(): void
     {
         $controller = $this->context->controller ?? null;
-        if (!$controller instanceof OrderController) {
+        // Core's concrete checkout controller is defined as OrderControllerCore and may be exposed
+        // through a legacy alias/override class. Identify the authoritative order controller by its
+        // stable FrontController page identity instead of requiring one alias class name.
+        if (!is_object($controller) || (string) ($controller->php_self ?? '') !== 'order') {
             return;
         }
 
