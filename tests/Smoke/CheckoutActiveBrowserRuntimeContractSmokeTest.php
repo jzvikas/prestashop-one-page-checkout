@@ -56,8 +56,9 @@ assertActiveBrowserRuntime(
 assertActiveBrowserRuntime(
     str_contains($browser, "new URL('/cart', baseUrl)")
         && str_contains($browser, "cartUrl.searchParams.set('add', '1')")
+        && str_contains($browser, "cartUrl.searchParams.set('ajax', '1')")
         && str_contains($browser, "cartUrl.searchParams.set('id_product', String(productId))"),
-    'browser cart must be created through the real Core CartController route',
+    'browser cart must be created through the real Core CartController Ajax route without rendering an unrelated native theme page',
 );
 assertActiveBrowserRuntime(
     str_contains($mutationClient, "this.dispatch('jzopc:checkout:initialized'")
@@ -131,7 +132,7 @@ assertActiveBrowserRuntime(
 assertActiveBrowserRuntime(
     str_contains($browser, "page.on('pageerror'")
         && str_contains($browser, 'browser JavaScript error:'),
-    'browser runtime must fail on real page JavaScript exceptions',
+    'browser runtime must fail on real page JavaScript exceptions once it enters the OPC checkout/fallback page lifecycle',
 );
 assertActiveBrowserRuntime(
     !str_contains($browser, 'finalizationAction')
