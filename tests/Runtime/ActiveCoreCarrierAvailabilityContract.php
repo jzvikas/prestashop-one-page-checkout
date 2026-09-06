@@ -92,6 +92,26 @@ if ($groupAssociation !== 1) {
     $fail('Runtime Core carrier is not available to the configured guest customer group.');
 }
 
+if ($expectedFamily === '9.1') {
+    $checkPayment = Module::getInstanceByName('ps_checkpayment');
+    if (!$checkPayment instanceof PaymentModule || !Module::isEnabled('ps_checkpayment') || (int) $checkPayment->id <= 0) {
+        $fail('PrestaShop 9.1 ps_checkpayment runtime fixture is not installed and enabled.');
+    }
+    $carrierReference = (int) $carrier->id_reference;
+    if ($carrierReference <= 0) {
+        $fail('Runtime carrier does not expose a positive carrier reference.');
+    }
+    $paymentCarrierAssociation = (int) $db->getValue(
+        'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'module_carrier`'
+        . ' WHERE `id_module` = ' . (int) $checkPayment->id
+        . ' AND `id_shop` = ' . $shopId
+        . ' AND `id_reference` = ' . $carrierReference
+    );
+    if ($paymentCarrierAssociation !== 1) {
+        $fail('ps_checkpayment is not associated with the deterministic Core runtime carrier restriction.');
+    }
+}
+
 $probeCart = new Cart();
 $probeCart->id_shop = $shopId;
 $probeCart->id_shop_group = $shopGroupId;
