@@ -345,6 +345,20 @@ function safeHandoffTrace() {
   return { ...nativePaymentTrace };
 }
 
+async function waitForSafeHandoffTrace(timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+
+  do {
+    const trace = safeHandoffTrace();
+    if (trace.preflight >= 1 && trace.handoff >= 1) {
+      return trace;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } while (Date.now() < deadline);
+
+  return safeHandoffTrace();
+}
+
 try {
   const cartUrl = new URL('/cart', baseUrl);
   cartUrl.searchParams.set('add', '1');
@@ -412,8 +426,7 @@ try {
     fail(`native-payment-submit: ps_checkpayment validation used unexpected method ${validationRequest.method()}.`);
   }
 
-  await page.waitForFunction(() => true, null, { timeout: 100 });
-  const handoffTrace = safeHandoffTrace();
+  const handoffTrace = await waitForSafeHandoffTrace();
   if (handoffTrace.preflight < 1 || handoffTrace.handoff < 1 || handoffTrace.blocked !== 0 || handoffTrace.ambiguous !== 0) {
     fail(
       `native-payment-submit: native payment lifecycle trace is invalid`
