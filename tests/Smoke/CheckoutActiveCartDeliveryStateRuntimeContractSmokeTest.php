@@ -30,6 +30,12 @@ assertLiveCartDeliveryStateContract(
     'runtime diagnostic must verify persisted Core customer and address bindings on the browser-created cart'
 );
 assertLiveCartDeliveryStateContract(
+    str_contains($contract, '$db->getValue(')
+        && str_contains($contract, "ORDER BY c.`id_cart` DESC'")
+        && !str_contains($contract, "ORDER BY c.`id_cart` DESC LIMIT 1'"),
+    'Db::getValue() must own scalar-query limiting so the diagnostic cannot emit a duplicate LIMIT clause'
+);
+assertLiveCartDeliveryStateContract(
     str_contains($contract, 'Customer::getGroupsStatic($customerId)')
         && str_contains($contract, 'Carrier::getCarriersForOrder(')
         && str_contains($contract, 'Carrier::getAvailableCarrierList(')
