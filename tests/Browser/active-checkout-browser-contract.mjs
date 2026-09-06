@@ -105,6 +105,28 @@ async function navigate(url, stage) {
   return response;
 }
 
+async function bootstrapDiagnostics() {
+  return page.locator('[data-jzopc-checkout]').evaluate((root) => ({
+    readyState: document.readyState,
+    mutationClientType: typeof window.JzOpcMutationClient,
+    lifecycle: Array.isArray(window.__jzopcLifecycle) ? window.__jzopcLifecycle.slice() : null,
+    bootstrap: {
+      cartId: root.getAttribute('data-jzopc-cart-id') || '',
+      stateVersion: root.getAttribute('data-jzopc-state-version') || '',
+      csrfToken: root.getAttribute('data-jzopc-csrf-token') || '',
+      identityUrl: root.getAttribute('data-jzopc-identity-url') || '',
+      addressUrl: root.getAttribute('data-jzopc-address-url') || '',
+      addressSaveUrl: root.getAttribute('data-jzopc-address-save-url') || '',
+      carrierUrl: root.getAttribute('data-jzopc-carrier-url') || '',
+      paymentUrl: root.getAttribute('data-jzopc-payment-url') || '',
+      agreementsUrl: root.getAttribute('data-jzopc-agreements-url') || '',
+    },
+    scriptSources: Array.from(document.scripts)
+      .map((script) => script.src || '')
+      .filter((source) => source.includes('/modules/jzonepagecheckout/views/js/')),
+  }));
+}
+
 async function assertHealthyCheckout(stage, requireAssetNetwork = false) {
   await page.locator('[data-jzopc-checkout]').waitFor({ state: 'attached', timeout: 10000 });
 
@@ -113,10 +135,26 @@ async function assertHealthyCheckout(stage, requireAssetNetwork = false) {
     fail(`${stage}: expected exactly one OPC root, found ${rootCount}.`);
   }
 
-  await page.waitForFunction(() => (
-    Array.isArray(window.__jzopcLifecycle)
-    && window.__jzopcLifecycle.some((event) => event && event.type === 'initialized')
-  ), null, { timeout: 10000 });
+  if (requireAssetNetwork) {
+    await page.waitForTimeout(250);
+    for (const asset of requiredAssets) {
+      const status = assetResponses.get(asset);
+      if (!Number.isInteger(status) || status < 200 || status >= 400) {
+        const diagnostics = await bootstrapDiagnostics();
+        fail(`${stage}: required browser asset ${asset} did not load successfully (status=${String(status)}); diagnostics=${JSON.stringify(diagnostics)}.`);
+      }
+    }
+  }
+
+  try {
+    await page.waitForFunction(() => (
+      Array.isArray(window.__jzopcLifecycle)
+      && window.__jzopcLifecycle.some((event) => event && event.type === 'initialized')
+    ), null, { timeout: 10000 });
+  } catch (error) {
+    const diagnostics = await bootstrapDiagnostics();
+    fail(`${stage}: checkout initialized lifecycle was not observed; diagnostics=${JSON.stringify(diagnostics)}; waitError=${error instanceof Error ? error.message : String(error)}.`);
+  }
 
   const state = await page.locator('[data-jzopc-checkout]').evaluate((root) => {
     const endpointAttributes = [
@@ -165,15 +203,6 @@ async function assertHealthyCheckout(stage, requireAssetNetwork = false) {
     }
     if (!resolved.pathname.includes('/module/jzonepagecheckout/')) {
       fail(`${stage}: ${attribute} does not target the OPC module route.`);
-    }
-  }
-
-  if (requireAssetNetwork) {
-    for (const asset of requiredAssets) {
-      const status = assetResponses.get(asset);
-      if (!Number.isInteger(status) || status < 200 || status >= 400) {
-        fail(`${stage}: required browser asset ${asset} did not load successfully (status=${String(status)}).`);
-      }
     }
   }
 
