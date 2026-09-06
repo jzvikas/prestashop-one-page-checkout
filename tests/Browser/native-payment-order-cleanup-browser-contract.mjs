@@ -263,6 +263,86 @@ function isOrderConfirmation(urlString) {
     || url.searchParams.get('controller') === 'order-confirmation';
 }
 
+function safePath(urlString) {
+  try {
+    return new URL(urlString).pathname || '/';
+  } catch {
+    return '<invalid>';
+  }
+}
+
+function isCheckPaymentValidation(urlString) {
+  const url = new URL(urlString);
+  return /\/module\/ps_checkpayment\/validation\/?$/i.test(url.pathname)
+    || (
+      url.searchParams.get('fc') === 'module'
+      && url.searchParams.get('module') === 'ps_checkpayment'
+      && url.searchParams.get('controller') === 'validation'
+    );
+}
+
+async function paymentHandoffShape() {
+  const selected = page.locator('[data-jzopc-section="payment"] input[name="payment-option"]:checked');
+  const optionId = await selected.getAttribute('id');
+  if (!optionId) {
+    return { optionId: '', method: '', actionPath: '', sameOrigin: false, marker: '', connected: false };
+  }
+
+  const form = page.locator(`#pay-with-${optionId}-form form`);
+  if (await form.count() !== 1) {
+    return { optionId, method: '', actionPath: '', sameOrigin: false, marker: '', connected: false };
+  }
+
+  return form.evaluate((node) => {
+    let action = null;
+    try {
+      action = new URL(node.action, window.location.href);
+    } catch {
+      action = null;
+    }
+
+    return {
+      optionId,
+      method: String(node.method || '').toUpperCase(),
+      actionPath: action ? action.pathname : '<invalid>',
+      sameOrigin: action ? action.origin === window.location.origin : false,
+      marker: node.getAttribute('data-jzopc-payment-action-form') || '',
+      connected: node.isConnected,
+    };
+  }, optionId);
+}
+
+async function installSafeHandoffTrace() {
+  await page.locator('[data-jzopc-checkout]').evaluate((root) => {
+    const trace = {
+      handoff: 0,
+      blocked: 0,
+      ambiguous: 0,
+      preflight: 0,
+    };
+    window.__jzopcNativePaymentTrace = trace;
+    root.addEventListener('jzopc:checkout:payment-handoff', () => { trace.handoff += 1; });
+    root.addEventListener('jzopc:checkout:payment-submit-blocked', () => { trace.blocked += 1; });
+    root.addEventListener('jzopc:checkout:payment-handoff-ambiguous', () => { trace.ambiguous += 1; });
+    root.addEventListener('jzopc:checkout:final-preflight-completed', () => { trace.preflight += 1; });
+  });
+}
+
+async function safeHandoffTrace() {
+  return page.evaluate(() => {
+    const trace = window.__jzopcNativePaymentTrace;
+    if (!trace || typeof trace !== 'object') {
+      return { handoff: 0, blocked: 0, ambiguous: 0, preflight: 0 };
+    }
+    return {
+      handoff: Number(trace.handoff) || 0,
+      blocked: Number(trace.blocked) || 0,
+      ambiguous: Number(trace.ambiguous) || 0,
+      preflight: Number(trace.preflight) || 0,
+    };
+  });
+}
+
 try {
   const cartUrl = new URL('/cart', baseUrl);
   cartUrl.searchParams.set('add', '1');
@@ -284,6 +364,16 @@ try {
     fail('native-payment-submit: final submit button is disabled before handoff.');
   }
 
+  const beforeHandoff = await paymentHandoffShape();
+  if (beforeHandoff.method !== 'POST' || beforeHandoff.marker !== '1' || !beforeHandoff.connected || !beforeHandoff.actionPath) {
+    fail(
+      `native-payment-submit: invalid action-only form shape [method=${beforeHandoff.method || '<missing>'}`
+      + ` marker=${beforeHandoff.marker || '<missing>'} connected=${beforeHandoff.connected ? '1' : '0'}`
+      + ` same_origin=${beforeHandoff.sameOrigin ? '1' : '0'} action_path=${beforeHandoff.actionPath || '<missing>'}].`,
+    );
+  }
+  await installSafeHandoffTrace();
+
   const finalizationRequest = page.waitForResponse((response) => {
     if (response.request().method() !== 'POST') {
       return false;
@@ -291,7 +381,14 @@ try {
     const requestUrl = new URL(response.url());
     return /\/module\/jzonepagecheckout\/finalize\/?$/i.test(requestUrl.pathname);
   }, { timeout: 15000 });
-  const confirmation = page.waitForURL((url) => isOrderConfirmation(url.toString()), { timeout: 30000 });
+  const validationRequestPromise = page.waitForRequest(
+    (request) => isCheckPaymentValidation(request.url()),
+    { timeout: 15000 },
+  ).catch(() => null);
+  const validationResponsePromise = page.waitForResponse(
+    (response) => isCheckPaymentValidation(response.url()),
+    { timeout: 15000 },
+  ).catch(() => null);
 
   await finalButton.click();
   const preflightResponse = await finalizationRequest;
@@ -306,7 +403,36 @@ try {
     fail(`native-payment-submit: final preflight was rejected [${codes.join(', ')}].`);
   }
 
-  await confirmation;
+  const validationRequest = await validationRequestPromise;
+  if (!validationRequest) {
+    const trace = await safeHandoffTrace();
+    const afterHandoff = await paymentHandoffShape();
+    fail(
+      `native-payment-submit: ps_checkpayment validation request was not observed after successful preflight`
+      + ` [handoff=${trace.handoff} blocked=${trace.blocked} ambiguous=${trace.ambiguous} preflight=${trace.preflight}`
+      + ` method=${afterHandoff.method || '<missing>'} marker=${afterHandoff.marker || '<missing>'}`
+      + ` connected=${afterHandoff.connected ? '1' : '0'} same_origin=${afterHandoff.sameOrigin ? '1' : '0'}`
+      + ` action_path=${afterHandoff.actionPath || '<missing>'} final_path=${safePath(page.url())}].`,
+    );
+  }
+  if (validationRequest.method() !== 'POST') {
+    fail(`native-payment-submit: ps_checkpayment validation used unexpected method ${validationRequest.method()}.`);
+  }
+
+  const validationResponse = await validationResponsePromise;
+  const validationStatus = validationResponse ? validationResponse.status() : 0;
+  try {
+    await page.waitForURL((url) => isOrderConfirmation(url.toString()), { timeout: 30000 });
+  } catch {
+    const trace = await safeHandoffTrace();
+    fail(
+      `native-payment-submit: validation request did not reach Core order confirmation`
+      + ` [validation_status=${validationStatus || '<missing>'} handoff=${trace.handoff}`
+      + ` blocked=${trace.blocked} ambiguous=${trace.ambiguous} preflight=${trace.preflight}`
+      + ` final_path=${safePath(page.url())}].`,
+    );
+  }
+
   const confirmedUrl = new URL(page.url());
   const cartId = confirmedUrl.searchParams.get('id_cart') || '';
   const orderId = confirmedUrl.searchParams.get('id_order') || '';
