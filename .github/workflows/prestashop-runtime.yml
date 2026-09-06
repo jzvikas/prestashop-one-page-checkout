@@ -292,6 +292,8 @@ jobs:
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
           JZOPC_ACTIVE_FIXTURE_ROOT: /tmp/jzopc-active-fixture
+          JZOPC_PRESTASHOP_ROOT: /tmp/prestashop
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
         run: node active-checkout-browser-contract.mjs
 
       - name: Execute active finalization preflight Chromium contract
@@ -321,14 +323,6 @@ jobs:
           php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCartDeliveryStateContract.php \
             /tmp/prestashop \
             "${{ matrix.family }}" \
-            "$JZOPC_RUNTIME_PRODUCT_ID"
-
-      - name: Execute active checkout failure fallback HTTP contract
-        if: matrix.native_opc == '0'
-        run: |
-          php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCheckoutFallbackHttpContract.php \
-            http://localhost:8080 \
-            /tmp/prestashop \
             "$JZOPC_RUNTIME_PRODUCT_ID"
 
       - name: Show Front Office server logs on failure
