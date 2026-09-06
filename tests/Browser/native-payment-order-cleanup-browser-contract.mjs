@@ -293,7 +293,7 @@ async function paymentHandoffShape() {
     return { optionId, method: '', actionPath: '', sameOrigin: false, marker: '', connected: false };
   }
 
-  return form.evaluate((node) => {
+  return form.evaluate((node, evaluatedOptionId) => {
     let action = null;
     try {
       action = new URL(node.action, window.location.href);
@@ -302,7 +302,7 @@ async function paymentHandoffShape() {
     }
 
     return {
-      optionId,
+      optionId: evaluatedOptionId,
       method: String(node.method || '').toUpperCase(),
       actionPath: action ? action.pathname : '<invalid>',
       sameOrigin: action ? action.origin === window.location.origin : false,
