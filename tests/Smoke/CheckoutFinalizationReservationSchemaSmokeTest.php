@@ -29,10 +29,25 @@ assertFinalizationReservationContract(str_contains($schema, '`expires_at` BIGINT
 
 assertFinalizationReservationContract(str_contains($store, 'UNIX_TIMESTAMP()'), 'reservation expiry must use database time');
 assertFinalizationReservationContract(str_contains($store, 'CheckoutFinalizationReservationAlreadyActive'), 'concurrent reservation must fail closed');
-assertFinalizationReservationContract(str_contains($store, 'id_customer <> ?'), 'stale customer reservation must not remain authoritative');
+assertFinalizationReservationContract(
+    str_contains($store, "(int) (\$existing['id_customer'] ?? -1) === \$customerId")
+        && !str_contains($store, 'id_customer <> ?'),
+    'an active reservation must remain a cart-level barrier across customer-binding changes',
+);
 assertFinalizationReservationContract(str_contains($store, 'INSERT INTO `%s`'), 'reservation acquisition must be a database write');
 assertFinalizationReservationContract(!str_contains($store, 'ON DUPLICATE KEY UPDATE'), 'active reservation must never be silently overwritten');
-assertFinalizationReservationContract(str_contains($store, 'DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ?'), 'reservation cleanup must remain cart-scoped');
+assertFinalizationReservationContract(
+    str_contains($store, 'AND reservation.id_customer = ? AND reservation.attempt_id = ?'),
+    'explicit release must remain exact customer/attempt scoped',
+);
+assertFinalizationReservationContract(
+    str_contains($store, 'AND NOT EXISTS (SELECT 1 FROM `%2$s` orders WHERE orders.id_cart = ?)'),
+    'explicit release must atomically preserve the barrier when Core already has an order',
+);
+assertFinalizationReservationContract(
+    str_contains($store, "DELETE FROM `%s` WHERE id_shop = ? AND id_cart = ? AND expires_at <= UNIX_TIMESTAMP()"),
+    'expired-row cleanup must recheck database-time expiry before deleting a cart barrier',
+);
 
 assertFinalizationReservationContract(
     str_contains($services, 'CheckoutFinalizationReservationStoreInterface:'),
