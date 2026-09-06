@@ -28,6 +28,7 @@ final readonly class CheckoutShellRenderer
         private CheckoutBrowserBootstrapFactory $bootstrapFactory,
         private CheckoutSectionRendererRegistry $sectionRendererRegistry,
         private CheckoutTemplateRendererInterface $templateRenderer,
+        private CheckoutFrontendAssetRegistrar $frontendAssets,
     ) {
     }
 
@@ -48,6 +49,7 @@ final readonly class CheckoutShellRenderer
                 'jzopc_bootstrap' => $bootstrap->toTemplateVariables(),
                 'jzopc_sections' => $sections,
                 'jzopc_finalization_reserved' => $this->finalizationReservationStore->isActive($context),
+                'jzopc_javascript_urls' => $this->frontendAssets->shellJavascriptUrls(),
             ],
         );
     }
