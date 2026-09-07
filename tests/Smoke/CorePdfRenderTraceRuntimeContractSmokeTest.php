@@ -15,6 +15,15 @@ $required = [
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
     '$argv[1] !== \'/tmp/prestashop\'',
     "'/classes/pdf/PDF.php'",
+    '$renderStartNeedle = "    public function render(\\$display = true)\\n    {"',
+    '$renderEndNeedle = "    public function getTemplateObject(\\$object)\\n    {"',
+    'substr_count($source, $renderStartNeedle) !== 1',
+    'substr_count($source, $renderEndNeedle) !== 1',
+    '$renderSource = substr($source, $renderStart, $renderEnd - $renderStart);',
+    'substr_count($renderSource, $needle) !== 1',
+    '$instrumentedRender = $renderSource;',
+    'substr_count($instrumentedRender, $needle) !== 1',
+    '$updated = substr($source, 0, $renderStart) . $instrumentedRender . substr($source, $renderEnd);',
     "'phase=set_font_begin'",
     "'phase=set_font_end'",
     "'phase=template_object_begin'",
@@ -31,13 +40,17 @@ $required = [
     "'phase=footer_end'",
     "'phase=renderer_output_begin'",
     "'phase=renderer_output_end'",
-    'substr_count($source, $needle) !== 1',
 ];
 foreach ($required as $needle) {
     if (!str_contains($instrumenter, $needle)) {
         fwrite(STDERR, "Core PDF trace is missing required fail-closed contract: {$needle}\n");
         exit(1);
     }
+}
+
+if (str_contains($instrumenter, 'substr_count($source, $needle) !== 1')) {
+    fwrite(STDERR, "Core PDF trace must not require render semantics to be globally unique across PDF.php.\n");
+    exit(1);
 }
 
 foreach ([
