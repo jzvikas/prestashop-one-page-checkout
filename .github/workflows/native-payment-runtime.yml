@@ -278,6 +278,14 @@ jobs:
             "$JZOPC_FREE_ORDER_CART_ID" \
             "$JZOPC_FREE_ORDER_ID"
 
+      - name: Diagnose Core free-order state on failure
+        if: failure()
+        env:
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
+          JZOPC_PRESTASHOP_ROOT: /tmp/prestashop
+          JZOPC_RUNTIME_FREE_PRODUCT_ID: ${{ env.JZOPC_RUNTIME_FREE_PRODUCT_ID }}
+        run: php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCoreFreeOrderFailureDiagnostic.php
+
       - name: Remove ephemeral browser session state
         if: always()
         run: rm -f /tmp/jzopc-ambiguous-browser-state.json

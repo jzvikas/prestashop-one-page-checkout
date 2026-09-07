@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-$path = __DIR__ . '/../Runtime/ActiveCoreFreeOrderFailureDiagnostic.php';
+$root = dirname(__DIR__, 2);
+$path = $root . '/tests/Runtime/ActiveCoreFreeOrderFailureDiagnostic.php';
 $source = file_get_contents($path);
+$workflow = file_get_contents($root . '/.github/workflows/native-payment-runtime.yml');
 
-if (!is_string($source) || $source === '') {
-    fwrite(STDERR, "Missing free-order failure diagnostic source.\n");
+if (!is_string($source) || $source === '' || !is_string($workflow) || $workflow === '') {
+    fwrite(STDERR, "Missing free-order failure diagnostic source or runtime workflow.\n");
     exit(1);
 }
 
@@ -25,6 +27,21 @@ $required = [
 foreach ($required as $needle) {
     if (!str_contains($source, $needle)) {
         fwrite(STDERR, "Free-order diagnostic is missing required contract: {$needle}\n");
+        exit(1);
+    }
+}
+
+$requiredWorkflow = [
+    'Diagnose Core free-order state on failure',
+    'if: failure()',
+    'ActiveCoreFreeOrderFailureDiagnostic.php',
+    'JZOPC_PRESTASHOP_ROOT: /tmp/prestashop',
+    "JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'",
+    'JZOPC_RUNTIME_FREE_PRODUCT_ID:',
+];
+foreach ($requiredWorkflow as $needle) {
+    if (!str_contains($workflow, $needle)) {
+        fwrite(STDERR, "Free-order failure diagnostic is not locked into runtime failure handling: {$needle}\n");
         exit(1);
     }
 }
