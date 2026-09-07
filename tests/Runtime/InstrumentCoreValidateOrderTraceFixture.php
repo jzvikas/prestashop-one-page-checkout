@@ -144,6 +144,15 @@ $requiredOrderHistorySemantics = [
     'if (!parent::add($autodate)) {',
     "\$order->current_state = \$this->id_order_state;\n        \$order->update();",
     "Hook::exec('actionOrderHistoryAddAfter', ['order_history' => \$this], null, false, true, false, \$order->id_shop);",
+    '$invoice = $order->getInvoicesCollection();',
+    "Hook::exec('actionPDFInvoiceRender', ['order_invoice_list' => \$invoice]);",
+    '$pdf = new PDF($invoice, PDF::TEMPLATE_INVOICE, $context->smarty);',
+    "\$file_attachement['invoice']['content'] = \$pdf->render(false);",
+    "\$file_attachement['invoice']['name'] = \$pdf->getFilename();",
+    '$pdf = new PDF($invoice, PDF::TEMPLATE_DELIVERY_SLIP, $context->smarty);',
+    "\$file_attachement['delivery']['content'] = \$pdf->render(false);",
+    "\$file_attachement['delivery']['name'] = \$pdf->getFilename();",
+    "\$context->language = \$currentLanguage;\n                    \$context->getTranslator()->setLocale(\$currentLanguage->locale);",
 ];
 foreach ($requiredOrderHistorySemantics as $needle) {
     if (substr_count($orderHistorySource, $needle) !== 1) {
@@ -165,6 +174,24 @@ $orderHistoryReplacements = [
         "            error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_begin');\n            ShopUrl::cacheMainDomainForShop(\$order->id_shop);\n\n            \$topic = \$result['osname'];",
     "            if (Validate::isLoadedObject(\$order)) {\n                // Attach invoice and / or delivery-slip if they exists and status is set to attach them" =>
         "            error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_end');\n            if (Validate::isLoadedObject(\$order)) {\n                // Attach invoice and / or delivery-slip if they exists and status is set to attach them\n                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_begin');",
+    "                    \$invoice = \$order->getInvoicesCollection();" =>
+        "                    error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_collection_begin');\n                    \$invoice = \$order->getInvoicesCollection();\n                    error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_collection_end');",
+    "                        Hook::exec('actionPDFInvoiceRender', ['order_invoice_list' => \$invoice]);" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_hook_begin');\n                        Hook::exec('actionPDFInvoiceRender', ['order_invoice_list' => \$invoice]);\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_hook_end');",
+    "                        \$pdf = new PDF(\$invoice, PDF::TEMPLATE_INVOICE, \$context->smarty);" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_pdf_construct_begin');\n                        \$pdf = new PDF(\$invoice, PDF::TEMPLATE_INVOICE, \$context->smarty);\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_pdf_construct_end');",
+    "                        \$file_attachement['invoice']['content'] = \$pdf->render(false);" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_pdf_render_begin');\n                        \$file_attachement['invoice']['content'] = \$pdf->render(false);\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_pdf_render_end');",
+    "                        \$file_attachement['invoice']['name'] = \$pdf->getFilename();" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_filename_begin');\n                        \$file_attachement['invoice']['name'] = \$pdf->getFilename();\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_invoice_filename_end');",
+    "                        \$pdf = new PDF(\$invoice, PDF::TEMPLATE_DELIVERY_SLIP, \$context->smarty);" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_pdf_construct_begin');\n                        \$pdf = new PDF(\$invoice, PDF::TEMPLATE_DELIVERY_SLIP, \$context->smarty);\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_pdf_construct_end');",
+    "                        \$file_attachement['delivery']['content'] = \$pdf->render(false);" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_pdf_render_begin');\n                        \$file_attachement['delivery']['content'] = \$pdf->render(false);\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_pdf_render_end');",
+    "                        \$file_attachement['delivery']['name'] = \$pdf->getFilename();" =>
+        "                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_filename_begin');\n                        \$file_attachement['delivery']['name'] = \$pdf->getFilename();\n                        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_delivery_filename_end');",
+    "                    \$context->language = \$currentLanguage;\n                    \$context->getTranslator()->setLocale(\$currentLanguage->locale);" =>
+        "                    error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_language_restore_begin');\n                    \$context->language = \$currentLanguage;\n                    \$context->getTranslator()->setLocale(\$currentLanguage->locale);\n                    error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_language_restore_end');",
     "                if (!Mail::Send(" =>
         "                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_end');\n                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=status_mail_begin');\n                if (!Mail::Send(",
     "                )) {\n                    return false;\n                }\n            }\n\n            ShopUrl::resetMainDomainCache();" =>
@@ -202,6 +229,24 @@ foreach ([
     'phase=email_prepare_begin',
     'phase=email_prepare_end',
     'phase=attachment_prepare_begin',
+    'phase=attachment_invoice_collection_begin',
+    'phase=attachment_invoice_collection_end',
+    'phase=attachment_invoice_hook_begin',
+    'phase=attachment_invoice_hook_end',
+    'phase=attachment_invoice_pdf_construct_begin',
+    'phase=attachment_invoice_pdf_construct_end',
+    'phase=attachment_invoice_pdf_render_begin',
+    'phase=attachment_invoice_pdf_render_end',
+    'phase=attachment_invoice_filename_begin',
+    'phase=attachment_invoice_filename_end',
+    'phase=attachment_delivery_pdf_construct_begin',
+    'phase=attachment_delivery_pdf_construct_end',
+    'phase=attachment_delivery_pdf_render_begin',
+    'phase=attachment_delivery_pdf_render_end',
+    'phase=attachment_delivery_filename_begin',
+    'phase=attachment_delivery_filename_end',
+    'phase=attachment_language_restore_begin',
+    'phase=attachment_language_restore_end',
     'phase=attachment_prepare_end',
     'phase=status_mail_begin',
     'phase=status_mail_end',
