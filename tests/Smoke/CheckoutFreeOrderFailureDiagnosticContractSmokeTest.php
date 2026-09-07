@@ -20,6 +20,7 @@ $required = [
     "Order::getIdByCartId(\$cartId)",
     "jzopc_checkout_finalization",
     "jzopc_checkout_selection",
+    "selected_payment_option",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_FREE_ORDER",
 ];
@@ -58,6 +59,7 @@ foreach ($requiredWorkflow as $needle) {
 }
 
 $forbidden = [
+    'payment_option_key',
     'validateOrder(',
     'PaymentFree',
     'INSERT INTO',
