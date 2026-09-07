@@ -79,7 +79,7 @@ printf("JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_FREE_ORDER=%d\n", str_starts_with(
  * If the browser timed out after Core created the order, summarize other database
  * sessions without emitting SQL text, connection identifiers, users, hosts or
  * arbitrary server state strings. This distinguishes an OPC transient-state
- * DELETE waiting on a database lock from a stall before cleanup is attempted.
+ * write waiting on a database lock from a stall before cleanup is attempted.
  */
 try {
     $escapedPrefix = bqSQL($prefix);
@@ -87,8 +87,8 @@ try {
         'SELECT'
         . ' SUM(CASE WHEN `COMMAND` <> \'Sleep\' THEN 1 ELSE 0 END) AS `active_count`,'
         . ' SUM(CASE WHEN LOWER(COALESCE(`STATE`, \'\')) LIKE \'%lock%\' THEN 1 ELSE 0 END) AS `lock_wait_count`,'
-        . ' SUM(CASE WHEN LOWER(COALESCE(`INFO`, \'\')) LIKE \'delete from `' . $escapedPrefix . 'jzopc\\_checkout\\_finalization`%\' THEN 1 ELSE 0 END) AS `finalization_delete_count`,'
-        . ' SUM(CASE WHEN LOWER(COALESCE(`INFO`, \'\')) LIKE \'delete from `' . $escapedPrefix . 'jzopc\\_checkout\\_selection`%\' THEN 1 ELSE 0 END) AS `selection_delete_count`'
+        . ' SUM(CASE WHEN LOWER(COALESCE(`INFO`, \'\')) LIKE CONCAT(\'delete\', \' from `' . $escapedPrefix . 'jzopc\\_checkout\\_finalization`%\') THEN 1 ELSE 0 END) AS `finalization_delete_count`,'
+        . ' SUM(CASE WHEN LOWER(COALESCE(`INFO`, \'\')) LIKE CONCAT(\'delete\', \' from `' . $escapedPrefix . 'jzopc\\_checkout\\_selection`%\') THEN 1 ELSE 0 END) AS `selection_delete_count`'
         . ' FROM `information_schema`.`PROCESSLIST`'
         . ' WHERE `DB` = DATABASE() AND `ID` <> CONNECTION_ID()'
     );
