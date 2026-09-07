@@ -38,7 +38,7 @@ if (str_contains($source, 'JZOPC_RUNTIME_CORE_VALIDATE')) {
 $requiredCoreSemantics = [
     "Hook::exec('actionValidateOrder', [",
     '$new_history->addWithemail(true, $extra_vars);',
-    "Mail::Send(\n",
+    "'order_conf',",
     '$order->updateOrderDetailTax();',
     '(new StockManager())->updatePhysicalProductQuantity(',
     "'actionValidateOrderAfter',",
