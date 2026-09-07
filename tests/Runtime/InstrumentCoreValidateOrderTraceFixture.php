@@ -121,4 +121,106 @@ if (file_put_contents($coreFile, $updated) === false) {
     exit(3);
 }
 
-fwrite(STDOUT, "Disposable PrestaShop validateOrder trace instrumentation installed.\n");
+$orderHistoryFile = $coreRoot . '/classes/order/OrderHistory.php';
+$orderHistorySource = is_file($orderHistoryFile) ? file_get_contents($orderHistoryFile) : false;
+if (!is_string($orderHistorySource) || $orderHistorySource === '') {
+    fwrite(STDERR, "PrestaShop OrderHistory.php is unavailable.\n");
+    exit(3);
+}
+if (str_contains($orderHistorySource, 'JZOPC_RUNTIME_CORE_HISTORY')) {
+    fwrite(STDERR, "PrestaShop OrderHistory fixture is already instrumented.\n");
+    exit(3);
+}
+
+$requiredOrderHistorySemantics = [
+    'public function addWithemail($autodate = true, $template_vars = false, ?Context $context = null)',
+    'if (!$this->add($autodate)) {',
+    'Order::cleanHistoryCache();',
+    'if (!$this->sendEmail($order, $template_vars)) {',
+    'public function sendEmail($order, $template_vars = false)',
+    '$result = Db::getInstance()->getRow(',
+    'if (!Mail::Send(',
+    'public function add($autodate = true, $null_values = false)',
+    'if (!parent::add($autodate)) {',
+    '$order->update();',
+    "Hook::exec('actionOrderHistoryAddAfter', ['order_history' => \$this], null, false, true, false, \$order->id_shop);",
+];
+foreach ($requiredOrderHistorySemantics as $needle) {
+    if (substr_count($orderHistorySource, $needle) !== 1) {
+        fwrite(STDERR, "Unexpected PrestaShop 9.1.5 OrderHistory source boundary.\n");
+        exit(3);
+    }
+}
+
+$orderHistoryReplacements = [
+    "        if (!\$this->add(\$autodate)) {\n            return false;\n        }\n        Order::cleanHistoryCache();" =>
+        "        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=add_begin');\n        if (!\$this->add(\$autodate)) {\n            return false;\n        }\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=add_end');\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=cache_clean_begin');\n        Order::cleanHistoryCache();\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=cache_clean_end');",
+    "        if (!\$this->sendEmail(\$order, \$template_vars)) {\n            return false;\n        }" =>
+        "        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=send_email_begin');\n        if (!\$this->sendEmail(\$order, \$template_vars)) {\n            return false;\n        }\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=send_email_end');",
+    "        \$result = Db::getInstance()->getRow('" =>
+        "        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_lookup_begin');\n        \$result = Db::getInstance()->getRow('",
+    "            WHERE oh.`id_order_history` = ' . (int) \$this->id . ' AND os.`send_email` = 1');\n        if (isset(\$result['template'])" =>
+        "            WHERE oh.`id_order_history` = ' . (int) \$this->id . ' AND os.`send_email` = 1');\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_lookup_end');\n        if (isset(\$result['template'])",
+    "            ShopUrl::cacheMainDomainForShop(\$order->id_shop);\n\n            \$topic = \$result['osname'];" =>
+        "            error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_begin');\n            ShopUrl::cacheMainDomainForShop(\$order->id_shop);\n\n            \$topic = \$result['osname'];",
+    "            if (Validate::isLoadedObject(\$order)) {\n                // Attach invoice and / or delivery-slip if they exists and status is set to attach them" =>
+        "            error_log('JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_end');\n            if (Validate::isLoadedObject(\$order)) {\n                // Attach invoice and / or delivery-slip if they exists and status is set to attach them\n                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_begin');",
+    "                if (!Mail::Send(" =>
+        "                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_end');\n                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=status_mail_begin');\n                if (!Mail::Send(",
+    "                )) {\n                    return false;\n                }\n            }\n\n            ShopUrl::resetMainDomainCache();" =>
+        "                )) {\n                    return false;\n                }\n                error_log('JZOPC_RUNTIME_CORE_HISTORY phase=status_mail_end');\n            }\n\n            ShopUrl::resetMainDomainCache();",
+    "        if (!parent::add(\$autodate)) {\n            return false;\n        }" =>
+        "        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=history_row_persist_begin');\n        if (!parent::add(\$autodate)) {\n            return false;\n        }\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=history_row_persist_end');",
+    "        \$order->current_state = \$this->id_order_state;\n        \$order->update();" =>
+        "        \$order->current_state = \$this->id_order_state;\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=order_state_update_begin');\n        \$order->update();\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=order_state_update_end');",
+    "        Hook::exec('actionOrderHistoryAddAfter', ['order_history' => \$this], null, false, true, false, \$order->id_shop);" =>
+        "        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=history_hook_begin');\n        Hook::exec('actionOrderHistoryAddAfter', ['order_history' => \$this], null, false, true, false, \$order->id_shop);\n        error_log('JZOPC_RUNTIME_CORE_HISTORY phase=history_hook_end');",
+];
+
+$orderHistoryUpdated = $orderHistorySource;
+foreach ($orderHistoryReplacements as $needle => $replacement) {
+    if (substr_count($orderHistoryUpdated, $needle) !== 1) {
+        fwrite(STDERR, "PrestaShop OrderHistory trace expected a unique source boundary.\n");
+        exit(3);
+    }
+    $orderHistoryUpdated = str_replace($needle, $replacement, $orderHistoryUpdated, $count);
+    if ($count !== 1) {
+        fwrite(STDERR, "Unable to instrument PrestaShop OrderHistory boundary.\n");
+        exit(3);
+    }
+}
+
+foreach ([
+    'phase=add_begin',
+    'phase=add_end',
+    'phase=cache_clean_begin',
+    'phase=cache_clean_end',
+    'phase=send_email_begin',
+    'phase=send_email_end',
+    'phase=email_lookup_begin',
+    'phase=email_lookup_end',
+    'phase=email_prepare_begin',
+    'phase=email_prepare_end',
+    'phase=attachment_prepare_begin',
+    'phase=attachment_prepare_end',
+    'phase=status_mail_begin',
+    'phase=status_mail_end',
+    'phase=history_row_persist_begin',
+    'phase=history_row_persist_end',
+    'phase=order_state_update_begin',
+    'phase=order_state_update_end',
+    'phase=history_hook_begin',
+    'phase=history_hook_end',
+] as $marker) {
+    if (!str_contains($orderHistoryUpdated, 'JZOPC_RUNTIME_CORE_HISTORY ' . $marker)) {
+        fwrite(STDERR, "PrestaShop OrderHistory trace is incomplete.\n");
+        exit(3);
+    }
+}
+
+if (file_put_contents($orderHistoryFile, $orderHistoryUpdated) === false) {
+    fwrite(STDERR, "Unable to write disposable PrestaShop OrderHistory trace fixture.\n");
+    exit(3);
+}
+
+fwrite(STDOUT, "Disposable PrestaShop validateOrder and OrderHistory trace instrumentation installed.\n");
