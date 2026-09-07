@@ -133,6 +133,19 @@ jobs:
           fi
           echo "JZOPC_RUNTIME_PRODUCT_ID=$product_id" >> "$GITHUB_ENV"
 
+      - name: Prepare zero-total Core product fixture
+        env:
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
+        run: |
+          fixture_output="$(php /tmp/jzopc-active-fixture/tests/Runtime/PrepareFreeOrderProduct.php /tmp/prestashop 9.1)"
+          printf '%s\n' "$fixture_output"
+          product_id="$(printf '%s\n' "$fixture_output" | tail -n 1)"
+          if ! [[ "$product_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Free-order fixture did not return a valid Core product ID." >&2
+            exit 1
+          fi
+          echo "JZOPC_RUNTIME_FREE_PRODUCT_ID=$product_id" >> "$GITHUB_ENV"
+
       - name: Verify Core carrier fixture
         run: php /tmp/jzopc-active-fixture/tests/Runtime/ActiveCoreCarrierAvailabilityContract.php /tmp/prestashop 9.1 "$JZOPC_RUNTIME_PRODUCT_ID"
 
@@ -237,6 +250,33 @@ jobs:
             9.1 \
             "$JZOPC_NATIVE_ORDER_CART_ID" \
             "$JZOPC_NATIVE_ORDER_ID"
+
+      - name: Execute Core free-order completion Chromium contract
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+          JZOPC_RUNTIME_FREE_PRODUCT_ID: ${{ env.JZOPC_RUNTIME_FREE_PRODUCT_ID }}
+        run: |
+          output="$(node free-order-core-completion-browser-contract.mjs)"
+          printf '%s\n' "$output"
+          cart_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_FREE_ORDER_CART_ID=//p' | tail -n 1)"
+          order_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_FREE_ORDER_ID=//p' | tail -n 1)"
+          if ! [[ "$cart_id" =~ ^[1-9][0-9]*$ && "$order_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Free-order browser contract did not return valid Core cart/order IDs." >&2
+            exit 1
+          fi
+          echo "JZOPC_FREE_ORDER_CART_ID=$cart_id" >> "$GITHUB_ENV"
+          echo "JZOPC_FREE_ORDER_ID=$order_id" >> "$GITHUB_ENV"
+
+      - name: Verify Core free-order ownership and OPC cleanup
+        env:
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/FreeOrderCompletionContract.php \
+            /tmp/prestashop \
+            9.1 \
+            "$JZOPC_FREE_ORDER_CART_ID" \
+            "$JZOPC_FREE_ORDER_ID"
 
       - name: Remove ephemeral browser session state
         if: always()

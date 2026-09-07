@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted as a source/smoke contract. Browser/runtime verification is still required before this milestone is release-verified.
+Implemented with source/smoke coverage and a required PrestaShop 9.1.5 Chromium/runtime gate. Runtime execution is pending; this milestone is not release-verified until that exact-head gate succeeds.
 
 ## Context
 
-PrestaShop 9.1.5 does not ask a payment module to create a zero-total order. `PaymentOptionsFinder::findFree()` exposes a synthetic `free_order` payment option whose action targets Core `order-confirmation?free_order=1`. `OrderConfirmationController::checkFreeOrder()` performs duplicate detection and, only after rechecking the Core cart/customer/address/total state, creates the order through Core `PaymentFree::validateOrder()`.
+PrestaShop 9.1.5 does not ask a merchant payment module to create a zero-total order. `PaymentOptionsFinder::findFree()` exposes a synthetic `free_order` payment option whose action targets Core `order-confirmation?free_order=1`. `OrderConfirmationController::checkFreeOrder()` performs duplicate detection and, only after rechecking the Core cart/customer/address/total state, creates the order through Core `PaymentFree::validateOrder()`.
 
 The OPC payment presenter already delegated zero-total discovery to `PaymentOptionsFinder::present(true)`, but the final-submit path depended on a persisted merchant payment selection. A fresh zero-total checkout therefore had a correctness gap: Core could present its synthetic option while OPC finalization still rejected the checkout as having no selected payment method.
 
@@ -30,9 +30,16 @@ Zero-total carts continue through the same OPC finalization safety boundary and 
 - A hook that makes the synthetic free-order presentation ambiguous causes finalization to fail closed.
 - The existing reservation still prevents concurrent OPC finalization attempts before Core receives the free-order request.
 - No order, payment credential, CSRF token, address PII or customer payload is added to OPC persistence.
+- Runtime fixture code is restricted to `/tmp/prestashop`, requires `JZOPC_RUNTIME_ACTIVE_FIXTURE=1`, and requires the installed module to resolve into `/tmp/jzopc-active-fixture*`.
 
 ## Verification
 
-A dedicated smoke contract locks the Core finder use, exact single-option requirement, preflight reuse, reservation-backed handoff and prohibition on OPC-owned order creation. The next runtime gate must execute an actual zero-total PrestaShop 9.1.x browser checkout through `order-confirmation?free_order=1`, prove exactly one Core-created order for the cart, verify duplicate/reload safety, and verify `actionValidateOrderAfter` cleanup.
+`CheckoutFreeOrderCoreHandoffContractSmokeTest.php` locks the Core finder use, exact single-option requirement, preflight reuse, reservation-backed handoff and prohibition on OPC-owned order creation.
+
+The Native Payment Runtime now also contains a PrestaShop 9.1.5 zero-total gate. It creates a separate zero-price Core product only in the disposable runtime shop, then Chromium must complete guest identity, Core address/carrier state and agreements through normal OPC mutations. The browser requires one server-selected `free_order` option, a same-origin Core `order-confirmation?free_order=1` POST action, successful OPC finalization reservation, normal payment-handoff lifecycle, Core confirmation with `id_module=-1`, and stable cart/order identity after confirmation reload.
+
+A separate read-only completion probe then requires a loadable Core order with module `free_order`, zero paid totals, exactly one order for the cart, matching `Order::getIdByCartId()`, and zero remaining rows in both OPC finalization and selection tables. Neither fixture nor probe calls `PaymentFree`, `validateOrder()` or inserts an order.
+
+Until that exact-head browser/runtime execution succeeds, the gate is wired but not green and zero-total completion remains a release blocker.
 
 `INTEGRATION_SHELL_READY` remains `false` until this and the remaining representative payment/runtime gates are genuinely executed.

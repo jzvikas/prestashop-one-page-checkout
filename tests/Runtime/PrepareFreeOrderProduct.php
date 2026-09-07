@@ -10,6 +10,9 @@ $fail = static function (string $message): never {
     exit(1);
 };
 
+if (getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1') {
+    $fail('Free-order runtime fixture requires the explicit active-fixture environment guard.');
+}
 if ($shopRoot !== '/tmp/prestashop' || !is_file($shopRoot . '/config/config.inc.php')) {
     $fail('Free-order fixture only runs against /tmp/prestashop.');
 }
