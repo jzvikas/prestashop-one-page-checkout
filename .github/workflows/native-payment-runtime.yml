@@ -157,6 +157,27 @@ jobs:
           cat /tmp/jzopc-native-payment-http.log
           exit 1
 
+      - name: Execute ambiguous native payment handoff Chromium contract
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+        run: |
+          output="$(node native-payment-ambiguous-handoff-browser-contract.mjs)"
+          printf '%s\n' "$output"
+          cart_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_AMBIGUOUS_CART_ID=//p' | tail -n 1)"
+          if ! [[ "$cart_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Ambiguous-handoff browser contract did not return a valid Core cart ID." >&2
+            exit 1
+          fi
+          echo "JZOPC_AMBIGUOUS_CART_ID=$cart_id" >> "$GITHUB_ENV"
+
+      - name: Verify ambiguous handoff preserved reservation
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/AmbiguousPaymentReservationContract.php \
+            /tmp/prestashop \
+            9.1 \
+            "$JZOPC_AMBIGUOUS_CART_ID"
+
       - name: Execute native payment order completion Chromium contract
         working-directory: tests/Browser
         env:
