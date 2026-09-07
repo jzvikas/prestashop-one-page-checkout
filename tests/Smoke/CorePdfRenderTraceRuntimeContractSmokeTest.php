@@ -28,7 +28,7 @@ $required = [
     "'start' => \"    public function Header()\\n    {\"",
     "'start' => \"    public function Footer()\\n    {\"",
     "'start' => \"    public function writePage()\\n    {\"",
-    "'end' => \"    protected function getRandomSeed(\\$seed = '')\\n    {\"",
+    '\'end\' => "    protected function getRandomSeed(\\$seed = \'\')\\n    {"',
     'substr_count($instrumentedGenerator, $startNeedle) !== 1',
     'substr_count($instrumentedGenerator, $endNeedle) !== 1',
     '$methodSource = substr($instrumentedGenerator, $methodStart, $methodEnd - $methodStart);',
@@ -65,7 +65,7 @@ $required = [
     "'phase=add_page_end'",
     "'phase=content_html_begin'",
     "'phase=content_html_end'",
-    "file_put_contents(\$generatorFile, \$instrumentedGenerator)",
+    'file_put_contents($generatorFile, $instrumentedGenerator)',
 ];
 foreach ($required as $needle) {
     if (!str_contains($instrumenter, $needle)) {
