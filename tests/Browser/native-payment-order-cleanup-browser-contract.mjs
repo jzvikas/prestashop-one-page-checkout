@@ -345,6 +345,20 @@ function safeHandoffTrace() {
   return { ...nativePaymentTrace };
 }
 
+async function waitForBlockedTrace(timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+
+  do {
+    const trace = safeHandoffTrace();
+    if (trace.blocked >= 1) {
+      return trace;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } while (Date.now() < deadline);
+
+  return safeHandoffTrace();
+}
+
 async function waitForSafeHandoffTrace(timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
 
@@ -390,6 +404,36 @@ try {
   }
   await installSafeHandoffTrace();
 
+  const beforeDirectSubmitPath = safePath(page.url());
+  const directValidationRequestPromise = page.waitForRequest(
+    (request) => isCheckPaymentValidation(request.url()),
+    { timeout: 500 },
+  ).catch(() => null);
+  await page.locator(`#pay-with-${beforeHandoff.optionId}-form form`).evaluate((node) => {
+    node.requestSubmit();
+  });
+  const directValidationRequest = await directValidationRequestPromise;
+  if (directValidationRequest !== null) {
+    fail('native-payment-submit: direct payment form requestSubmit escaped before finalization reservation.');
+  }
+  const preReservationTrace = await waitForBlockedTrace();
+  if (
+    preReservationTrace.blocked < 1
+    || preReservationTrace.preflight !== 0
+    || preReservationTrace.handoff !== 0
+    || preReservationTrace.ambiguous !== 0
+  ) {
+    fail(
+      `native-payment-submit: pre-reservation direct submit barrier trace is invalid`
+      + ` [handoff=${preReservationTrace.handoff} blocked=${preReservationTrace.blocked}`
+      + ` ambiguous=${preReservationTrace.ambiguous} preflight=${preReservationTrace.preflight}].`,
+    );
+  }
+  if (safePath(page.url()) !== beforeDirectSubmitPath) {
+    fail('native-payment-submit: blocked direct submit changed checkout navigation.');
+  }
+  const preReservationBlocked = preReservationTrace.blocked;
+
   const finalizationRequest = page.waitForResponse((response) => {
     if (response.request().method() !== 'POST') {
       return false;
@@ -427,11 +471,17 @@ try {
   }
 
   const handoffTrace = await waitForSafeHandoffTrace();
-  if (handoffTrace.preflight < 1 || handoffTrace.handoff < 1 || handoffTrace.blocked !== 0 || handoffTrace.ambiguous !== 0) {
+  if (
+    handoffTrace.preflight < 1
+    || handoffTrace.handoff < 1
+    || handoffTrace.blocked !== preReservationBlocked
+    || handoffTrace.ambiguous !== 0
+  ) {
     fail(
       `native-payment-submit: native payment lifecycle trace is invalid`
       + ` [handoff=${handoffTrace.handoff} blocked=${handoffTrace.blocked}`
-      + ` ambiguous=${handoffTrace.ambiguous} preflight=${handoffTrace.preflight}].`,
+      + ` ambiguous=${handoffTrace.ambiguous} preflight=${handoffTrace.preflight}`
+      + ` pre_reservation_blocked=${preReservationBlocked}].`,
     );
   }
 
