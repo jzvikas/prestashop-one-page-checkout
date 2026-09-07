@@ -47,6 +47,15 @@ if (!Validate::isLoadedObject($cart)) {
     exit(2);
 }
 
+/*
+ * Cart::getOrderTotal() reaches Product::getPriceStatic(), whose front-office
+ * pricing path expects the active cart in Context when no employee is present.
+ * This CLI-only diagnostic therefore mirrors that minimum Core context binding
+ * before asking Core for the authoritative total. It does not mutate the cart.
+ */
+$context = Context::getContext();
+$context->cart = $cart;
+
 $orderCount = (int) $db->getValue(
     'SELECT COUNT(*) FROM `' . bqSQL($prefix) . 'orders` WHERE `id_cart` = ' . (int) $cartId
 );
