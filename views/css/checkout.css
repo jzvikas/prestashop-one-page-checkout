@@ -1,0 +1,312 @@
+.jzopc-checkout {
+  --jzopc-surface: var(--bs-body-bg, #fff);
+  --jzopc-surface-muted: var(--bs-tertiary-bg, #f6f6f6);
+  --jzopc-text: var(--bs-body-color, #232323);
+  --jzopc-border: var(--bs-border-color, #d6d6d6);
+  --jzopc-primary: var(--bs-primary, #2fb5d2);
+  --jzopc-danger: var(--bs-danger, #c92a2a);
+  --jzopc-radius: 0.5rem;
+  --jzopc-space: 1rem;
+  color: var(--jzopc-text);
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin-inline: auto;
+  max-width: 90rem;
+  width: 100%;
+}
+
+.jzopc-checkout *,
+.jzopc-checkout *::before,
+.jzopc-checkout *::after {
+  box-sizing: border-box;
+}
+
+.jzopc-checkout__main,
+.jzopc-checkout__rail {
+  min-width: 0;
+}
+
+.jzopc-checkout__main {
+  display: grid;
+  gap: 1rem;
+}
+
+.jzopc-checkout__rail {
+  display: grid;
+  gap: 1rem;
+}
+
+.jzopc-checkout [data-jzopc-section],
+.jzopc-finalization {
+  background: var(--jzopc-surface);
+  border: 1px solid var(--jzopc-border);
+  border-radius: var(--jzopc-radius);
+  padding: clamp(1rem, 2vw, 1.5rem);
+  scroll-margin-top: 1rem;
+}
+
+.jzopc-checkout [data-jzopc-section] > :first-child,
+.jzopc-finalization > :first-child {
+  margin-top: 0;
+}
+
+.jzopc-checkout [data-jzopc-section] > :last-child,
+.jzopc-finalization > :last-child {
+  margin-bottom: 0;
+}
+
+.jzopc-checkout h2 {
+  font-size: clamp(1.15rem, 1rem + 0.5vw, 1.5rem);
+  line-height: 1.25;
+  margin-bottom: 1rem;
+}
+
+.jzopc-checkout h3 {
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.jzopc-checkout fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.jzopc-checkout legend {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.jzopc-addresses__group,
+.jzopc-delivery__options,
+.jzopc-payment__options,
+.jzopc-agreements__list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.jzopc-addresses__saved,
+.jzopc-delivery__option,
+.jzopc-payment__option,
+.jzopc-agreements__item {
+  border: 1px solid var(--jzopc-border);
+  border-radius: calc(var(--jzopc-radius) * 0.8);
+}
+
+.jzopc-addresses__saved:has(input:checked),
+.jzopc-delivery__option:has(input:checked),
+.jzopc-payment__option:has(input:checked),
+.jzopc-agreements__item:has(input:checked) {
+  border-color: var(--jzopc-primary);
+  box-shadow: 0 0 0 1px var(--jzopc-primary);
+}
+
+.jzopc-addresses__option,
+.jzopc-delivery__option,
+.jzopc-payment__option label,
+.jzopc-agreements__item {
+  cursor: pointer;
+}
+
+.jzopc-addresses__option,
+.jzopc-delivery__option,
+.jzopc-payment__option label {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  width: 100%;
+}
+
+.jzopc-addresses__option input,
+.jzopc-delivery__option input,
+.jzopc-payment__option input,
+.jzopc-agreements__checkbox {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
+.jzopc-addresses__alias,
+.jzopc-delivery__name,
+.jzopc-summary__total {
+  font-weight: 700;
+}
+
+.jzopc-addresses__address {
+  font-style: normal;
+  margin: 0.35rem 0 0;
+}
+
+.jzopc-addresses__edit,
+.jzopc-addresses__actions button,
+.jzopc-addresses__editor button,
+.jzopc-finalization__submit {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.jzopc-addresses__edit {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0.5rem 0.9rem 0.9rem;
+  text-decoration: underline;
+}
+
+.jzopc-addresses__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.jzopc-addresses__invoice-mode {
+  margin-block: 1rem;
+}
+
+.jzopc-addresses__editor,
+.jzopc-payment__additional,
+.jzopc-payment__form,
+.jzopc-delivery__extra,
+.jzopc-delivery__hook,
+.jzopc-payment__hook {
+  margin-top: 0.75rem;
+}
+
+.jzopc-delivery__details {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.jzopc-delivery__price {
+  font-weight: 600;
+}
+
+.jzopc-payment__option-wrap + .jzopc-payment__option-wrap {
+  margin-top: 0.75rem;
+}
+
+.jzopc-payment__option img {
+  height: auto;
+  margin-inline-start: auto;
+  max-height: 2.5rem;
+  max-width: 7rem;
+  object-fit: contain;
+}
+
+.jzopc-agreements__item {
+  align-items: flex-start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.9rem;
+}
+
+.jzopc-agreements__label {
+  min-width: 0;
+}
+
+.jzopc-agreements__label p:last-child {
+  margin-bottom: 0;
+}
+
+.jzopc-summary__lines {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.jzopc-summary__line,
+.jzopc-summary__total {
+  align-items: baseline;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.jzopc-summary__line dd {
+  margin: 0;
+  text-align: end;
+}
+
+.jzopc-summary__total {
+  border-top: 1px solid var(--jzopc-border);
+  font-size: 1.1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.jzopc-finalization__status:not(:empty) {
+  border-inline-start: 0.25rem solid var(--jzopc-danger);
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.jzopc-finalization__submit {
+  background: var(--jzopc-primary);
+  border: 1px solid var(--jzopc-primary);
+  border-radius: calc(var(--jzopc-radius) * 0.8);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.75rem 1rem;
+  width: 100%;
+}
+
+.jzopc-finalization__submit:disabled,
+.jzopc-checkout[aria-busy="true"] .jzopc-finalization__submit {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.jzopc-checkout :where(button, input, select, textarea, a):focus-visible {
+  outline: 3px solid var(--jzopc-primary);
+  outline-offset: 2px;
+}
+
+.jzopc-checkout [hidden] {
+  display: none !important;
+}
+
+@media (min-width: 62rem) {
+  .jzopc-checkout {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.85fr);
+  }
+
+  .jzopc-checkout__rail {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+@media (max-width: 38rem) {
+  .jzopc-checkout [data-jzopc-section],
+  .jzopc-finalization {
+    border-inline: 0;
+    border-radius: 0;
+    padding-inline: 0.9rem;
+  }
+
+  .jzopc-addresses__actions {
+    display: grid;
+  }
+
+  .jzopc-addresses__actions button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jzopc-checkout *,
+  .jzopc-checkout *::before,
+  .jzopc-checkout *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

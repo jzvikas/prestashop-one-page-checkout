@@ -49,6 +49,7 @@ final readonly class CheckoutShellRenderer
                 'jzopc_bootstrap' => $bootstrap->toTemplateVariables(),
                 'jzopc_sections' => $sections,
                 'jzopc_finalization_reserved' => $this->finalizationReservationStore->isActive($context),
+                'jzopc_stylesheet_urls' => $this->frontendAssets->shellStylesheetUrls(),
                 'jzopc_javascript_urls' => $this->frontendAssets->shellJavascriptUrls(),
             ],
         );

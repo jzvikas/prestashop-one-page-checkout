@@ -35,8 +35,14 @@ foreach ([
 }
 assertShellContract(str_contains($shell, 'data-jzopc-finalization-reserved="{if $jzopc_finalization_reserved}1{else}0{/if}"'), 'server-derived reservation state is required');
 assertShellContract(str_contains($shell, 'data-jzopc-final-submit'), 'module-owned final order action is required');
+assertShellContract(str_contains($shell, 'id="jzopc-final-status"'), 'accessible final status target is required');
 assertShellContract(str_contains($shell, 'data-jzopc-final-status'), 'accessible final status region is required');
+assertShellContract(str_contains($shell, 'aria-describedby="jzopc-final-status"'), 'final submit must be associated with its live status region');
 assertShellContract(str_contains($shell, '{$jzopc_section_html nofilter}'), 'trusted section HTML boundary is required');
+assertShellContract(str_contains($shell, '{$jzopc_sections.summary nofilter}'), 'summary must remain a trusted rendered section in the checkout rail');
+assertShellContract(str_contains($shell, '{foreach $jzopc_stylesheet_urls as $jzopc_stylesheet_url}'), 'custom shell must own required OPC stylesheet delivery');
+assertShellContract(str_contains($shell, 'data-jzopc-style-asset'), 'OPC stylesheet must be explicitly identifiable');
+assertShellContract(str_contains($shell, 'href="{$jzopc_stylesheet_url|escape:'), 'stylesheet asset URLs must remain escaped');
 assertShellContract(str_contains($shell, '{foreach $jzopc_javascript_urls as $jzopc_javascript_url}'), 'custom shell must own required OPC runtime delivery');
 assertShellContract(str_contains($shell, 'data-jzopc-runtime-asset'), 'OPC runtime scripts must be explicitly identifiable');
 assertShellContract(str_contains($shell, 'src="{$jzopc_javascript_url|escape:'), 'runtime asset URLs must remain escaped');
@@ -45,6 +51,7 @@ assertShellContract(!str_contains($shell, 'data-jzopc-core-compatibility-asset')
 assertShellContract(is_string($renderer) && str_contains($renderer, 'CheckoutServerSelectionsStoreInterface'), 'renderer must load canonical server selections');
 assertShellContract(str_contains($renderer, 'CheckoutFinalizationReservationStoreInterface $finalizationReservationStore'), 'renderer must load finalization reservation state from server persistence');
 assertShellContract(str_contains($renderer, "'jzopc_finalization_reserved' => $" . "this->finalizationReservationStore->isActive($" . "context)"), 'renderer must derive reservation marker at render time');
+assertShellContract(str_contains($renderer, "'jzopc_stylesheet_urls' => $" . "this->frontendAssets->shellStylesheetUrls()"), 'renderer must bind shell-owned OPC stylesheet assets');
 assertShellContract(
     str_contains($renderer, "'jzopc_javascript_urls' => $" . "this->frontendAssets->shellJavascriptUrls()")
         && !str_contains($renderer, 'jzopc_compatibility_javascript_urls'),
@@ -62,14 +69,17 @@ foreach (['identity', 'addressselection', 'addresssave', 'carrierselection', 'pa
 assertShellContract(str_contains($factory, 'stateVersioner->version'), 'bootstrap must derive authoritative state version');
 assertShellContract(str_contains($factory, 'stateFactory->create'), 'bootstrap must derive state from Core context');
 
-assertShellContract(is_string($assets) && str_contains($assets, 'shellJavascriptUrls'), 'asset service must expose the shell-owned runtime manifest');
+assertShellContract(is_string($assets) && str_contains($assets, 'shellStylesheetUrls'), 'asset service must expose the shell-owned stylesheet manifest');
+assertShellContract(str_contains($assets, "'views/css/checkout.css'"), 'shell stylesheet manifest must retain checkout.css');
+assertShellContract(str_contains($assets, 'shellJavascriptUrls'), 'asset service must expose the shell-owned runtime manifest');
 assertShellContract(str_contains($assets, "constant('_MODULE_DIR_')"), 'runtime URLs must derive from PrestaShop module base URI');
 assertShellContract(
     !str_contains($assets, 'addJquery(')
         && !str_contains($assets, 'registerJavascript(')
+        && !str_contains($assets, 'registerStylesheet(')
         && !str_contains($assets, 'getJqueryPath(')
         && !str_contains($assets, 'shellCompatibilityJavascriptUrls'),
-    'OPC asset service must not duplicate Core/theme compatibility JavaScript',
+    'OPC asset service must not duplicate Core/theme compatibility assets',
 );
 foreach ([
     'payment-controller.js',

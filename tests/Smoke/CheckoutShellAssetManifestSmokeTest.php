@@ -18,7 +18,14 @@ function assertShellAssetManifest(bool $condition, string $message): void
     }
 }
 
-$urls = (new CheckoutFrontendAssetRegistrar())->shellJavascriptUrls();
+$assets = new CheckoutFrontendAssetRegistrar();
+$stylesheets = $assets->shellStylesheetUrls();
+$expectedStylesheets = [
+    '/shop/modules/jzonepagecheckout/views/css/checkout.css',
+];
+assertShellAssetManifest($stylesheets === $expectedStylesheets, 'shell stylesheet manifest must preserve exact PrestaShop base URI');
+
+$urls = $assets->shellJavascriptUrls();
 $expected = [
     '/shop/modules/jzonepagecheckout/views/js/payment-controller.js',
     '/shop/modules/jzonepagecheckout/views/js/checkout-mutation-client.js',
@@ -29,11 +36,12 @@ $expected = [
 ];
 
 assertShellAssetManifest($urls === $expected, 'shell runtime manifest must preserve exact order and PrestaShop base URI');
-assertShellAssetManifest(count(array_unique($urls)) === count($urls), 'shell runtime manifest must not contain duplicate asset URLs');
+$allAssets = array_merge($stylesheets, $urls);
+assertShellAssetManifest(count(array_unique($allAssets)) === count($allAssets), 'shell asset manifests must not contain duplicate asset URLs');
 
-foreach ($urls as $url) {
-    assertShellAssetManifest(str_starts_with($url, '/shop/modules/jzonepagecheckout/views/js/'), 'runtime asset URL escaped the module-owned path');
-    assertShellAssetManifest(!str_contains($url, '..'), 'runtime asset URL must not contain path traversal segments');
+foreach ($allAssets as $url) {
+    assertShellAssetManifest(str_starts_with($url, '/shop/modules/jzonepagecheckout/views/'), 'shell asset URL escaped the module-owned path');
+    assertShellAssetManifest(!str_contains($url, '..'), 'shell asset URL must not contain path traversal segments');
 }
 
 fwrite(STDOUT, "Checkout shell asset manifest smoke test passed.\n");
