@@ -5,7 +5,7 @@ declare(strict_types=1);
 $root = rtrim((string) getenv('JZOPC_PRESTASHOP_ROOT'), DIRECTORY_SEPARATOR);
 if ($root === '' || !is_file($root . '/index.php')) {
     http_response_code(500);
-    fwrite(STDERR, "JZOPC_PRESTASHOP_ROOT must point to the installed PrestaShop root.\n");
+    error_log('JZOPC_PRESTASHOP_ROOT must point to the installed PrestaShop root.');
 
     return true;
 }
@@ -40,8 +40,8 @@ register_shutdown_function(static function () use ($method, $diagnosticPath): vo
     if (!is_int($status) || $status < 100 || $status > 599) {
         $status = 0;
     }
-    fwrite(STDERR, sprintf(
-        "JZOPC_RUNTIME_HTTP method=%s path=%s status=%d\n",
+    error_log(sprintf(
+        'JZOPC_RUNTIME_HTTP method=%s path=%s status=%d',
         preg_replace('/[^A-Z]/', '', $method) ?: 'UNKNOWN',
         $diagnosticPath,
         $status
