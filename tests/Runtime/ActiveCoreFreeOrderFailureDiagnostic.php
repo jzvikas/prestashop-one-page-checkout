@@ -55,10 +55,10 @@ $reservationCount = (int) $db->getValue(
     'SELECT COUNT(*) FROM `' . bqSQL($prefix) . 'jzopc_checkout_finalization` WHERE `id_cart` = ' . (int) $cartId
 );
 $selection = $db->getRow(
-    'SELECT `payment_option_key` FROM `' . bqSQL($prefix) . 'jzopc_checkout_selection` WHERE `id_cart` = ' . (int) $cartId
+    'SELECT `selected_payment_option` FROM `' . bqSQL($prefix) . 'jzopc_checkout_selection` WHERE `id_cart` = ' . (int) $cartId
 );
 $selectionCount = is_array($selection) ? 1 : 0;
-$paymentState = is_array($selection) ? (string) ($selection['payment_option_key'] ?? '') : '';
+$paymentState = is_array($selection) ? (string) ($selection['selected_payment_option'] ?? '') : '';
 $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
 
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_CART_ID=%d\n", $cartId);
