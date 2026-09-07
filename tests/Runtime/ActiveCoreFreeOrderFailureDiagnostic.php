@@ -47,15 +47,6 @@ if (!Validate::isLoadedObject($cart)) {
     exit(2);
 }
 
-/*
- * Cart::getOrderTotal() reaches Product::getPriceStatic(), whose front-office
- * pricing path expects the active cart in Context when no employee is present.
- * This CLI-only diagnostic therefore mirrors that minimum Core context binding
- * before asking Core for the authoritative total. It does not mutate the cart.
- */
-$context = Context::getContext();
-$context->cart = $cart;
-
 $orderCount = (int) $db->getValue(
     'SELECT COUNT(*) FROM `' . bqSQL($prefix) . 'orders` WHERE `id_cart` = ' . (int) $cartId
 );
@@ -68,10 +59,13 @@ $selection = $db->getRow(
 );
 $selectionCount = is_array($selection) ? 1 : 0;
 $paymentState = is_array($selection) ? (string) ($selection['selected_payment_option'] ?? '') : '';
-$total = (float) $cart->getOrderTotal(true, Cart::BOTH);
 
+/*
+ * Emit the order/reservation evidence before optional Core pricing. A failure in
+ * CLI context hydration must never hide whether Core already persisted an order
+ * or whether the OPC handoff reservation is still protecting this cart.
+ */
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_CART_ID=%d\n", $cartId);
-printf("JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_ZERO=%d\n", abs($total) < 0.000001 ? 1 : 0);
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_CUSTOMER_BOUND=%d\n", (int) $cart->id_customer > 0 ? 1 : 0);
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_DELIVERY_ADDRESS=%d\n", (int) $cart->id_address_delivery > 0 ? 1 : 0);
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_INVOICE_ADDRESS=%d\n", (int) $cart->id_address_invoice > 0 ? 1 : 0);
@@ -80,3 +74,25 @@ printf("JZOPC_FREE_ORDER_DIAGNOSTIC_ORDER_ID_PRESENT=%d\n", $orderId > 0 ? 1 : 0
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT=%d\n", $reservationCount);
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_COUNT=%d\n", $selectionCount);
 printf("JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_FREE_ORDER=%d\n", str_starts_with($paymentState, 'free_order:') ? 1 : 0);
+
+/*
+ * Cart::getOrderTotal() reaches Core pricing helpers that expect both the active
+ * cart and currency in Context. Hydrate only those already server-owned objects
+ * for this read-only diagnostic. Pricing remains supplemental evidence.
+ */
+$context = Context::getContext();
+$context->cart = $cart;
+$currency = new Currency((int) $cart->id_currency);
+if (!Validate::isLoadedObject($currency)) {
+    echo "JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_AVAILABLE=0\n";
+    exit(0);
+}
+$context->currency = $currency;
+
+try {
+    $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
+    echo "JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_AVAILABLE=1\n";
+    printf("JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_ZERO=%d\n", abs($total) < 0.000001 ? 1 : 0);
+} catch (Throwable) {
+    echo "JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_AVAILABLE=0\n";
+}

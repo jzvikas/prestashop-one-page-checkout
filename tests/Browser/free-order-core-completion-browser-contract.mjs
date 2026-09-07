@@ -237,11 +237,12 @@ try {
       sameOrigin: action.origin === window.location.origin,
       path: action.pathname,
       freeOrder: action.searchParams.get('free_order') || '',
+      cartId: action.searchParams.get('id_cart') || '',
       method: String(node.method || '').toUpperCase(),
     };
   });
-  if (!formShape.sameOrigin || formShape.freeOrder !== '1' || formShape.method !== 'POST') {
-    fail(`free-order: invalid Core action form [method=${formShape.method} path=${formShape.path} free_order=${formShape.freeOrder}].`);
+  if (!formShape.sameOrigin || formShape.freeOrder !== '1' || formShape.cartId !== initial.cartId || formShape.method !== 'POST') {
+    fail(`free-order: invalid Core action form [method=${formShape.method} path=${formShape.path} free_order=${formShape.freeOrder} cart_bound=${formShape.cartId === initial.cartId ? '1' : '0'}].`);
   }
 
   await page.locator('[data-jzopc-checkout]').evaluate((root) => {

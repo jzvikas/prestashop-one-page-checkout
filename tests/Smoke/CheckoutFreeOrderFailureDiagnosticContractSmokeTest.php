@@ -19,12 +19,17 @@ $required = [
     "JZOPC_RUNTIME_FREE_PRODUCT_ID",
     "Context::getContext()",
     "\$context->cart = \$cart",
+    "new Currency((int) \$cart->id_currency)",
+    "\$context->currency = \$currency",
     "Order::getIdByCartId(\$cartId)",
     "jzopc_checkout_finalization",
     "jzopc_checkout_selection",
     "selected_payment_option",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_ORDER_COUNT",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_FREE_ORDER",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_AVAILABLE",
+    "catch (Throwable)",
 ];
 
 foreach ($required as $needle) {
@@ -35,9 +40,18 @@ foreach ($required as $needle) {
 }
 
 $contextBinding = strpos($source, '$context->cart = $cart');
+$currencyBinding = strpos($source, '$context->currency = $currency');
+$orderEvidence = strpos($source, 'JZOPC_FREE_ORDER_DIAGNOSTIC_ORDER_COUNT');
+$reservationEvidence = strpos($source, 'JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT');
 $totalRead = strpos($source, '$cart->getOrderTotal(true, Cart::BOTH)');
-if ($contextBinding === false || $totalRead === false || $contextBinding >= $totalRead) {
-    fwrite(STDERR, "Free-order diagnostic must bind the loaded Core cart into Context before calculating the Core total.\n");
+if ($contextBinding === false || $currencyBinding === false || $totalRead === false
+    || $contextBinding >= $totalRead || $currencyBinding >= $totalRead) {
+    fwrite(STDERR, "Free-order diagnostic must bind the loaded Core cart and currency before calculating the Core total.\n");
+    exit(1);
+}
+if ($orderEvidence === false || $reservationEvidence === false
+    || $orderEvidence >= $totalRead || $reservationEvidence >= $totalRead) {
+    fwrite(STDERR, "Free-order diagnostic must emit order/reservation evidence before optional Core pricing.\n");
     exit(1);
 }
 
