@@ -35,6 +35,26 @@ if (str_contains($source, 'JZOPC_RUNTIME_CORE_PDF')) {
     exit(3);
 }
 
+$renderStartNeedle = "    public function render(\$display = true)\n    {";
+$renderEndNeedle = "    public function getTemplateObject(\$object)\n    {";
+if (substr_count($source, $renderStartNeedle) !== 1 || substr_count($source, $renderEndNeedle) !== 1) {
+    fwrite(STDERR, "Unexpected PrestaShop 9.1.5 PDF render method boundary.\n");
+    exit(3);
+}
+
+$renderStart = strpos($source, $renderStartNeedle);
+$renderEnd = strpos($source, $renderEndNeedle, is_int($renderStart) ? $renderStart + strlen($renderStartNeedle) : 0);
+if (!is_int($renderStart) || !is_int($renderEnd) || $renderEnd <= $renderStart) {
+    fwrite(STDERR, "Unable to isolate PrestaShop 9.1.5 PDF render method.\n");
+    exit(3);
+}
+
+$renderSource = substr($source, $renderStart, $renderEnd - $renderStart);
+if ($renderSource === '') {
+    fwrite(STDERR, "PrestaShop 9.1.5 PDF render method is empty.\n");
+    exit(3);
+}
+
 $requiredSemantics = [
     '$this->pdf_renderer->setFontForLang(Context::getContext()->language->iso_code);',
     '$template = $this->getTemplateObject($object);',
@@ -47,7 +67,7 @@ $requiredSemantics = [
     'return $this->pdf_renderer->render($this->getFilename(), $display);',
 ];
 foreach ($requiredSemantics as $needle) {
-    if (substr_count($source, $needle) !== 1) {
+    if (substr_count($renderSource, $needle) !== 1) {
         fwrite(STDERR, "Unexpected PrestaShop 9.1.5 PDF render source boundary.\n");
         exit(3);
     }
@@ -76,18 +96,20 @@ $replacements = [
         "            error_log('JZOPC_RUNTIME_CORE_PDF phase=renderer_output_begin');\n            \$result = \$this->pdf_renderer->render(\$this->getFilename(), \$display);\n            error_log('JZOPC_RUNTIME_CORE_PDF phase=renderer_output_end');\n\n            return \$result;",
 ];
 
-$updated = $source;
+$instrumentedRender = $renderSource;
 foreach ($replacements as $needle => $replacement) {
-    if (substr_count($updated, $needle) !== 1) {
-        fwrite(STDERR, "PrestaShop PDF trace expected a unique source boundary.\n");
+    if (substr_count($instrumentedRender, $needle) !== 1) {
+        fwrite(STDERR, "PrestaShop PDF trace expected a unique render-method boundary.\n");
         exit(3);
     }
-    $updated = str_replace($needle, $replacement, $updated, $count);
+    $instrumentedRender = str_replace($needle, $replacement, $instrumentedRender, $count);
     if ($count !== 1) {
         fwrite(STDERR, "Unable to instrument PrestaShop PDF render boundary.\n");
         exit(3);
     }
 }
+
+$updated = substr($source, 0, $renderStart) . $instrumentedRender . substr($source, $renderEnd);
 
 foreach ([
     'phase=set_font_begin',
