@@ -142,7 +142,7 @@ $requiredOrderHistorySemantics = [
     'if (!Mail::Send(',
     'public function add($autodate = true, $null_values = false)',
     'if (!parent::add($autodate)) {',
-    '$order->update();',
+    "$order->current_state = $this->id_order_state;\n        $order->update();",
     "Hook::exec('actionOrderHistoryAddAfter', ['order_history' => \$this], null, false, true, false, \$order->id_shop);",
 ];
 foreach ($requiredOrderHistorySemantics as $needle) {
