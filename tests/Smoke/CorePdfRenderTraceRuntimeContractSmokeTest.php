@@ -15,6 +15,7 @@ $required = [
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
     '$argv[1] !== \'/tmp/prestashop\'',
     "'/classes/pdf/PDF.php'",
+    "'/classes/pdf/PDFGenerator.php'",
     '$renderStartNeedle = "    public function render(\\$display = true)\\n    {"',
     '$renderEndNeedle = "    public function getTemplateObject(\\$object)\\n    {"',
     'substr_count($source, $renderStartNeedle) !== 1',
@@ -24,6 +25,14 @@ $required = [
     '$instrumentedRender = $renderSource;',
     'substr_count($instrumentedRender, $needle) !== 1',
     '$updated = substr($source, 0, $renderStart) . $instrumentedRender . substr($source, $renderEnd);',
+    "'start' => \"    public function Header()\\n    {\"",
+    "'start' => \"    public function Footer()\\n    {\"",
+    "'start' => \"    public function writePage()\\n    {\"",
+    "'end' => \"    protected function getRandomSeed(\\$seed = '')\\n    {\"",
+    'substr_count($instrumentedGenerator, $startNeedle) !== 1',
+    'substr_count($instrumentedGenerator, $endNeedle) !== 1',
+    '$methodSource = substr($instrumentedGenerator, $methodStart, $methodEnd - $methodStart);',
+    'substr_count($methodSource, $needle) !== 1',
     "'phase=set_font_begin'",
     "'phase=set_font_end'",
     "'phase=template_object_begin'",
@@ -40,6 +49,23 @@ $required = [
     "'phase=footer_end'",
     "'phase=renderer_output_begin'",
     "'phase=renderer_output_end'",
+    "'phase=header_html_begin'",
+    "'phase=header_html_end'",
+    "'phase=footer_html_begin'",
+    "'phase=footer_html_end'",
+    "'phase=pagination_html_begin'",
+    "'phase=pagination_html_end'",
+    "'phase=header_margin_begin'",
+    "'phase=header_margin_end'",
+    "'phase=footer_margin_begin'",
+    "'phase=footer_margin_end'",
+    "'phase=body_margins_begin'",
+    "'phase=body_margins_end'",
+    "'phase=add_page_begin'",
+    "'phase=add_page_end'",
+    "'phase=content_html_begin'",
+    "'phase=content_html_end'",
+    "file_put_contents(\$generatorFile, \$instrumentedGenerator)",
 ];
 foreach ($required as $needle) {
     if (!str_contains($instrumenter, $needle)) {
@@ -53,6 +79,11 @@ if (str_contains($instrumenter, 'substr_count($source, $needle) !== 1')) {
     exit(1);
 }
 
+if (str_contains($instrumenter, 'substr_count($generatorSource, $needle) !== 1')) {
+    fwrite(STDERR, "Core PDFGenerator trace must use method-scoped semantic boundaries.\n");
+    exit(1);
+}
+
 foreach ([
     'validateOrder(',
     'PaymentFree',
@@ -63,6 +94,8 @@ foreach ([
     'secure_key',
     'csrf',
     'customer_email',
+    '$_POST',
+    '$_GET',
 ] as $forbidden) {
     if (str_contains($instrumenter, $forbidden)) {
         fwrite(STDERR, "Core PDF trace contains forbidden behavior/data surface: {$forbidden}\n");
@@ -80,4 +113,4 @@ if (!str_contains($builder, $wire)) {
     exit(1);
 }
 
-fwrite(STDOUT, "Core PDF render trace runtime contract smoke test passed.\n");
+fwrite(STDOUT, "Core PDF render/writePage trace runtime contract smoke test passed.\n");
