@@ -72,8 +72,14 @@ final readonly class CheckoutFinalizationMutation
                     return CheckoutMutationOutcome::success($currentSelections, []);
                 }
 
+                // Zero-total carts have no merchant payment choice. Core itself presents one synthetic
+                // `free_order` option which ultimately reaches OrderConfirmationController::checkFreeOrder()
+                // and PaymentFree. Normalize only that exact fresh Core-presented shape so preflight and
+                // reservation logic remain identical to paid orders without this module creating an order.
+                $finalizationSelections = $this->withCoreFreeOrderSelection($context, $currentSelections);
+
                 try {
-                    $this->preflightService->validate($context, $currentSelections);
+                    $this->preflightService->validate($context, $finalizationSelections);
                 } catch (CheckoutFinalizationPreflightException $exception) {
                     return CheckoutMutationOutcome::failure(
                         $currentSelections,
@@ -86,7 +92,7 @@ final readonly class CheckoutFinalizationMutation
                     );
                 }
 
-                $paymentSelection = $currentSelections->selectedPaymentOption;
+                $paymentSelection = $finalizationSelections->selectedPaymentOption;
                 if (!is_string($paymentSelection) || $paymentSelection === '') {
                     return CheckoutMutationOutcome::failure(
                         $currentSelections,
@@ -116,8 +122,49 @@ final readonly class CheckoutFinalizationMutation
                     return $this->reservationUnavailable($currentSelections, $translate);
                 }
 
-                return CheckoutMutationOutcome::success($currentSelections, []);
+                return CheckoutMutationOutcome::success($finalizationSelections, []);
             },
+        );
+    }
+
+    private function withCoreFreeOrderSelection(
+        \Context $context,
+        CheckoutServerSelections $currentSelections,
+    ): CheckoutServerSelections {
+        $cart = $context->cart ?? null;
+        if (!$cart instanceof \Cart
+            || (int) ($cart->id ?? 0) <= 0
+            || 0.0 !== (float) $cart->getOrderTotal(true, \Cart::BOTH)) {
+            return $currentSelections;
+        }
+
+        if (!class_exists(\PaymentOptionsFinder::class)) {
+            return $currentSelections;
+        }
+
+        try {
+            $presented = (new \PaymentOptionsFinder())->present(true);
+        } catch (\Throwable) {
+            return $currentSelections;
+        }
+
+        $moduleOptions = is_array($presented) ? ($presented['free_order'] ?? null) : null;
+        if (!is_array($moduleOptions) || count($moduleOptions) !== 1) {
+            return $currentSelections;
+        }
+
+        $option = $moduleOptions[0] ?? null;
+        if (!is_array($option)
+            || !isset($option['id'])
+            || !is_string($option['id'])
+            || $option['id'] === ''
+            || (($option['module_name'] ?? null) !== 'free_order')) {
+            return $currentSelections;
+        }
+
+        return new CheckoutServerSelections(
+            'free_order:' . $option['id'],
+            $currentSelections->approvedAgreementKeys,
         );
     }
 

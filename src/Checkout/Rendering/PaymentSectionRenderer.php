@@ -29,6 +29,7 @@ final readonly class PaymentSectionRenderer implements CheckoutStateAwareSection
     {
         $variables = $this->paymentOptionsPresenter->present($context);
         $paymentOptions = $variables['paymentOptions'] ?? [];
+        $freeOrderStateKey = $this->freeOrderStateKey($variables, $paymentOptions);
 
         foreach ($paymentOptions as $moduleName => &$moduleOptions) {
             if (!is_string($moduleName) || !is_array($moduleOptions)) {
@@ -39,8 +40,10 @@ final readonly class PaymentSectionRenderer implements CheckoutStateAwareSection
                     continue;
                 }
                 $stateKey = $moduleName . ':' . $option['id'];
-                $option['jzopc_selected'] = $selections->selectedPaymentOption !== null
-                    && hash_equals($selections->selectedPaymentOption, $stateKey);
+                $option['jzopc_selected'] = $freeOrderStateKey !== null
+                    ? hash_equals($freeOrderStateKey, $stateKey)
+                    : ($selections->selectedPaymentOption !== null
+                        && hash_equals($selections->selectedPaymentOption, $stateKey));
             }
             unset($option);
         }
@@ -49,5 +52,36 @@ final readonly class PaymentSectionRenderer implements CheckoutStateAwareSection
         $variables['paymentOptions'] = $paymentOptions;
 
         return $this->templateRenderer->render($context, 'sections/payment.tpl', $variables);
+    }
+
+    /**
+     * Core presents exactly one synthetic `free_order` option for a zero-total cart. We only
+     * preselect it when that shape is unambiguous; finalization independently re-resolves and
+     * validates the same Core option before acquiring the reservation.
+     *
+     * @param array<string,mixed> $variables
+     * @param array<mixed> $paymentOptions
+     */
+    private function freeOrderStateKey(array $variables, array $paymentOptions): ?string
+    {
+        if (($variables['isFree'] ?? null) !== true) {
+            return null;
+        }
+
+        $moduleOptions = $paymentOptions['free_order'] ?? null;
+        if (!is_array($moduleOptions) || count($moduleOptions) !== 1) {
+            return null;
+        }
+
+        $option = $moduleOptions[0] ?? null;
+        if (!is_array($option)
+            || !isset($option['id'])
+            || !is_string($option['id'])
+            || $option['id'] === ''
+            || (($option['module_name'] ?? null) !== 'free_order')) {
+            return null;
+        }
+
+        return 'free_order:' . $option['id'];
     }
 }
