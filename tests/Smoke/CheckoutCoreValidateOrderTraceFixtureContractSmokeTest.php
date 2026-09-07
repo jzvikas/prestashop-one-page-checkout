@@ -21,6 +21,7 @@ $required = [
     "realpath(\$argv[1])",
     "/classes/PaymentModule.php",
     "Hook::exec('actionValidateOrder', [",
+    "'order_conf',",
     "'actionValidateOrderAfter',",
     'JZOPC_RUNTIME_CORE_VALIDATE phase=order_persisted',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=validate_hook_begin',
