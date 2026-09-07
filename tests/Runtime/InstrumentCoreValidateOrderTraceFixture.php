@@ -37,6 +37,7 @@ if (str_contains($source, 'JZOPC_RUNTIME_CORE_VALIDATE')) {
 
 $requiredCoreSemantics = [
     "Hook::exec('actionValidateOrder', [",
+    '$new_history->changeIdOrderState((int) $id_order_state, $order, true);',
     '$new_history->addWithemail(true, $extra_vars);',
     "'order_conf',",
     '$order->updateOrderDetailTax();',
@@ -59,8 +60,10 @@ $replacements = [
         "                'orderStatus' => \$order_status,\n            ]);\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=validate_hook_end');\n\n            if (\$order_status->logable)",
     "            // Set the order status\n            \$new_history = new OrderHistory();" =>
         "            // Set the order status\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_begin');\n            \$new_history = new OrderHistory();",
+    "            \$new_history->changeIdOrderState((int) \$id_order_state, \$order, true);" =>
+        "            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_change_state_begin');\n            \$new_history->changeIdOrderState((int) \$id_order_state, \$order, true);\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_change_state_end');",
     "            \$new_history->addWithemail(true, \$extra_vars);\n\n            // Switch to back order if needed" =>
-        "            \$new_history->addWithemail(true, \$extra_vars);\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_end');\n\n            // Switch to back order if needed",
+        "            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_add_with_email_begin');\n            \$new_history->addWithemail(true, \$extra_vars);\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_add_with_email_end');\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=history_end');\n\n            // Switch to back order if needed",
     "            // Send an e-mail to customer (one order = one email)\n            if (\$id_order_state != Configuration::get('PS_OS_ERROR')" =>
         "            // Send an e-mail to customer (one order = one email)\n            error_log('JZOPC_RUNTIME_CORE_VALIDATE phase=confirmation_mail_section_begin');\n            if (\$id_order_state != Configuration::get('PS_OS_ERROR')",
     "            \$order->updateOrderDetailTax();" =>
@@ -93,6 +96,10 @@ foreach ([
     'phase=validate_hook_begin',
     'phase=validate_hook_end',
     'phase=history_begin',
+    'phase=history_change_state_begin',
+    'phase=history_change_state_end',
+    'phase=history_add_with_email_begin',
+    'phase=history_add_with_email_end',
     'phase=history_end',
     'phase=confirmation_mail_section_begin',
     'phase=confirmation_mail_section_end',
