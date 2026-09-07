@@ -14,6 +14,7 @@ $required = [
     "parse_url((string) (\$_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH)",
     'register_shutdown_function',
     'http_response_code()',
+    'error_log(sprintf(',
     'JZOPC_RUNTIME_HTTP method=%s path=%s status=%d',
     "preg_replace('/[^A-Z]/', '', \$method)",
     "preg_replace('/[^A-Za-z0-9._~-]/', '_', \$segment)",
@@ -33,11 +34,12 @@ $forbiddenLogInputs = [
     "\$_GET",
     "QUERY_STRING",
     'getallheaders(',
+    'fwrite(STDERR',
 ];
 
 foreach ($forbiddenLogInputs as $needle) {
     if (str_contains($source, $needle)) {
-        fwrite(STDERR, "Runtime HTTP diagnostics must not consume sensitive request material: {$needle}\n");
+        fwrite(STDERR, "Runtime HTTP diagnostics must not consume sensitive material or use a CLI-only sink: {$needle}\n");
         exit(1);
     }
 }
