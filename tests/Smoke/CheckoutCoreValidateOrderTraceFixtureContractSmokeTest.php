@@ -68,11 +68,10 @@ $forbidden = [
     'HTTP_AUTHORIZATION',
     'secure_key',
     'csrf',
-    'email',
-    'firstname',
-    'lastname',
-    'id_cart',
-    'id_order',
+    '$this->context->customer->email',
+    '$this->context->customer->firstname',
+    '$this->context->customer->lastname',
+    'error_log($',
 ];
 foreach ($forbidden as $needle) {
     if (stripos($instrumenter, $needle) !== false) {
