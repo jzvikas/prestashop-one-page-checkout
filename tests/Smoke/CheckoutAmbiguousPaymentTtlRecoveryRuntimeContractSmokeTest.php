@@ -28,14 +28,14 @@ foreach ($requiredBrowser as $needle) {
     }
 }
 
-if (!str_contains($ambiguous, "context.storageState({ path: storageStatePath })")
+if (!str_contains($ambiguous, 'context.storageState({ path: storageStatePath })')
     || !str_contains($ambiguous, 'chmod(storageStatePath, 0o600)')) {
     throw new RuntimeException('Ambiguity browser state is not persisted with an explicit 0600 boundary.');
 }
 
 $requiredControl = [
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
-    "$shopRoot !== '/tmp/prestashop'",
+    '$shopRoot !== \'/tmp/prestashop\'',
     "str_starts_with($modulePath, '/tmp/jzopc-active-fixture-')",
     'SELECT COUNT(*) FROM `%sorders` WHERE id_cart = ?',
     'SET expires_at = UNIX_TIMESTAMP() - 1',
