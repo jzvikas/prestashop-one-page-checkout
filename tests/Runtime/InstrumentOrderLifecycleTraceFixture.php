@@ -12,8 +12,8 @@ if (getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1') {
     exit(2);
 }
 
-if ($argc !== 2) {
-    fwrite(STDERR, "Usage: InstrumentOrderLifecycleTraceFixture.php <active-fixture-root>\n");
+if ($argc !== 3) {
+    fwrite(STDERR, "Usage: InstrumentOrderLifecycleTraceFixture.php <active-fixture-root> <repository-root>\n");
     exit(2);
 }
 
@@ -24,18 +24,27 @@ if (!is_string($targetRoot)
     exit(2);
 }
 
-$sourceRoot = realpath(dirname(__DIR__, 2));
-if (!is_string($sourceRoot) || $sourceRoot === $targetRoot) {
+$sourceRoot = realpath($argv[2]);
+if (!is_string($sourceRoot) || $sourceRoot === $targetRoot
+    || str_starts_with($sourceRoot, '/tmp/jzopc-active-fixture')) {
     fwrite(STDERR, "Order lifecycle trace source/target isolation is invalid.\n");
     exit(2);
 }
 
 $sourceModule = $sourceRoot . '/jzonepagecheckout.php';
 $targetModule = $targetRoot . '/jzonepagecheckout.php';
+$sourceText = is_file($sourceModule) ? file_get_contents($sourceModule) : false;
 $sourceHashBefore = is_file($sourceModule) ? hash_file('sha256', $sourceModule) : false;
 $targetSource = is_file($targetModule) ? file_get_contents($targetModule) : false;
-if (!is_string($sourceHashBefore) || !is_string($targetSource) || $targetSource === '') {
+if (!is_string($sourceText) || !is_string($sourceHashBefore)
+    || !is_string($targetSource) || $targetSource === '') {
     fwrite(STDERR, "Order lifecycle trace module source is unavailable.\n");
+    exit(3);
+}
+
+if (!str_contains($sourceText, 'private const INTEGRATION_SHELL_READY = false;')
+    || str_contains($sourceText, 'JZOPC_RUNTIME_ORDER_HOOK')) {
+    fwrite(STDERR, "Repository module source is not the expected closed, uninstrumented production source.\n");
     exit(3);
 }
 

@@ -82,7 +82,8 @@ JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php \
 
 JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php \
   "$target_root/tests/Runtime/InstrumentOrderLifecycleTraceFixture.php" \
-  "$target_root"
+  "$target_root" \
+  "$source_root"
 
 if ! grep -Fq "$opened" "$target_module"; then
   echo "Temporary fixture readiness gate was not opened." >&2

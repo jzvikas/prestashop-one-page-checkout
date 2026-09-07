@@ -17,7 +17,10 @@ if (!is_string($instrumenter) || $instrumenter === ''
 $requiredInstrumentation = [
     "PHP_SAPI !== 'cli'",
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
+    "\$argc !== 3",
+    "realpath(\$argv[2])",
     "/tmp/jzopc-active-fixture",
+    "private const INTEGRATION_SHELL_READY = false;",
     "private const INTEGRATION_SHELL_READY = true;",
     "hash_file('sha256', \$sourceModule)",
     "hash_equals(\$sourceHashBefore, \$sourceHashAfter)",
@@ -40,6 +43,7 @@ $requiredBuilder = [
     'JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php',
     'InstrumentOrderLifecycleTraceFixture.php',
     '$target_root',
+    '$source_root',
 ];
 foreach ($requiredBuilder as $needle) {
     if (!str_contains($builder, $needle)) {
