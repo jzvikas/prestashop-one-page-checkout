@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented with source/smoke coverage and a required PrestaShop 9.1.5 Chromium/runtime gate. Runtime execution is pending; this milestone is not release-verified until that exact-head gate succeeds.
+Implemented with source/smoke coverage and a required PrestaShop 9.1.5 Chromium/runtime gate. The first executed runtime gate reached the zero-total checkout and final-submit request but timed out before Core order-confirmation navigation; this milestone remains unverified until the exact browser/runtime path succeeds.
 
 ## Context
 
@@ -36,10 +36,12 @@ Zero-total carts continue through the same OPC finalization safety boundary and 
 
 `CheckoutFreeOrderCoreHandoffContractSmokeTest.php` locks the Core finder use, exact single-option requirement, preflight reuse, reservation-backed handoff and prohibition on OPC-owned order creation.
 
-The Native Payment Runtime now also contains a PrestaShop 9.1.5 zero-total gate. It creates a separate zero-price Core product only in the disposable runtime shop, then Chromium must complete guest identity, Core address/carrier state and agreements through normal OPC mutations. The browser requires one server-selected `free_order` option, a same-origin Core `order-confirmation?free_order=1` POST action, successful OPC finalization reservation, normal payment-handoff lifecycle, Core confirmation with `id_module=-1`, and stable cart/order identity after confirmation reload.
+The Native Payment Runtime contains a PrestaShop 9.1.5 zero-total gate. It creates a separate zero-price Core product only in the disposable runtime shop, then Chromium must complete guest identity, Core address/carrier state and agreements through normal OPC mutations. The browser requires one server-selected `free_order` option, a same-origin Core `order-confirmation?free_order=1` POST action, successful OPC finalization reservation, normal payment-handoff lifecycle, Core confirmation with `id_module=-1`, and stable cart/order identity after confirmation reload.
 
-A separate read-only completion probe then requires a loadable Core order with module `free_order`, zero paid totals, exactly one order for the cart, matching `Order::getIdByCartId()`, and zero remaining rows in both OPC finalization and selection tables. Neither fixture nor probe calls `PaymentFree`, `validateOrder()` or inserts an order.
+Executed Native Payment Runtime `34078730795` on commit `93da0e830dba9a17b1fd7ad251ab3e72d8d29228` passed the existing ambiguous-handoff, TTL-recovery and ordinary `ps_checkpayment` Core-order cleanup gates, then failed only in the new free-order Chromium step. The browser reached final submit and received the finalization HTTP response, but `page.waitForURL()` timed out after 30 seconds before any Core order-confirmation navigation was observed. The gate therefore remains red; the result must not be described as free-order completion evidence.
 
-Until that exact-head browser/runtime execution succeeds, the gate is wired but not green and zero-total completion remains a release blocker.
+A separate read-only completion probe requires a loadable Core order with module `free_order`, zero paid totals, exactly one order for the cart, matching `Order::getIdByCartId()`, and zero remaining rows in both OPC finalization and selection tables. Neither fixture nor probe calls `PaymentFree`, `validateOrder()` or inserts an order.
+
+Until the browser/runtime execution succeeds, zero-total completion remains a release blocker.
 
 `INTEGRATION_SHELL_READY` remains `false` until this and the remaining representative payment/runtime gates are genuinely executed.
