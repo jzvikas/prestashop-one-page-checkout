@@ -161,6 +161,7 @@ jobs:
         working-directory: tests/Browser
         env:
           JZOPC_BROWSER_BASE_URL: http://localhost:8080
+          JZOPC_AMBIGUOUS_STORAGE_STATE_PATH: /tmp/jzopc-ambiguous-browser-state.json
         run: |
           output="$(node native-payment-ambiguous-handoff-browser-contract.mjs)"
           printf '%s\n' "$output"
@@ -169,6 +170,7 @@ jobs:
             echo "Ambiguous-handoff browser contract did not return a valid Core cart ID." >&2
             exit 1
           fi
+          test "$(stat -c '%a' /tmp/jzopc-ambiguous-browser-state.json)" = "600"
           echo "JZOPC_AMBIGUOUS_CART_ID=$cart_id" >> "$GITHUB_ENV"
 
       - name: Verify ambiguous handoff preserved reservation
@@ -177,6 +179,40 @@ jobs:
             /tmp/prestashop \
             9.1 \
             "$JZOPC_AMBIGUOUS_CART_ID"
+
+      - name: Expire ambiguous reservation using database time
+        env:
+          JZOPC_RUNTIME_ACTIVE_FIXTURE: '1'
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/AmbiguousPaymentReservationExpiryControl.php \
+            /tmp/prestashop \
+            9.1 \
+            "$JZOPC_AMBIGUOUS_CART_ID"
+
+      - name: Recover same cart and complete native payment after TTL expiry
+        working-directory: tests/Browser
+        env:
+          JZOPC_BROWSER_BASE_URL: http://localhost:8080
+          JZOPC_AMBIGUOUS_STORAGE_STATE_PATH: /tmp/jzopc-ambiguous-browser-state.json
+        run: |
+          output="$(node native-payment-ttl-recovery-browser-contract.mjs)"
+          printf '%s\n' "$output"
+          cart_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_RECOVERED_ORDER_CART_ID=//p' | tail -n 1)"
+          order_id="$(printf '%s\n' "$output" | sed -n 's/^JZOPC_RECOVERED_ORDER_ID=//p' | tail -n 1)"
+          if ! [[ "$cart_id" == "$JZOPC_AMBIGUOUS_CART_ID" && "$order_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "TTL recovery browser contract did not return the expected Core cart/order IDs." >&2
+            exit 1
+          fi
+          echo "JZOPC_RECOVERED_ORDER_CART_ID=$cart_id" >> "$GITHUB_ENV"
+          echo "JZOPC_RECOVERED_ORDER_ID=$order_id" >> "$GITHUB_ENV"
+
+      - name: Verify recovered Core order ownership and OPC cleanup
+        run: |
+          php /tmp/jzopc-active-fixture/tests/Runtime/CompletedOrderCleanupContract.php \
+            /tmp/prestashop \
+            9.1 \
+            "$JZOPC_RECOVERED_ORDER_CART_ID" \
+            "$JZOPC_RECOVERED_ORDER_ID"
 
       - name: Execute native payment order completion Chromium contract
         working-directory: tests/Browser
@@ -201,6 +237,10 @@ jobs:
             9.1 \
             "$JZOPC_NATIVE_ORDER_CART_ID" \
             "$JZOPC_NATIVE_ORDER_ID"
+
+      - name: Remove ephemeral browser session state
+        if: always()
+        run: rm -f /tmp/jzopc-ambiguous-browser-state.json
 
       - name: Show Front Office logs on failure
         if: failure()
