@@ -28,6 +28,14 @@ $assert(str_contains($browser, 'paymentHandoffShape()'), 'browser contract must 
 $assert(str_contains($browser, 'form.evaluate((node, evaluatedOptionId) => {'), 'browser form-shape diagnostics must explicitly pass the selected option identity into the browser realm');
 $assert(str_contains($browser, 'optionId: evaluatedOptionId,'), 'browser form-shape diagnostics must not depend on an unserialized Node-side closure');
 $assert(str_contains($browser, '}, optionId);'), 'browser form-shape diagnostics must transport the selected option identity as the evaluate argument');
+$assert(str_contains($browser, 'waitForBlockedTrace'), 'browser contract must await the pre-reservation submit rejection outside payment navigation');
+$assert(str_contains($browser, 'directValidationRequestPromise'), 'browser contract must prove a direct pre-reservation payment submit does not reach the module validation endpoint');
+$assert(str_contains($browser, 'node.requestSubmit();'), 'browser contract must exercise a real observable native form requestSubmit before reservation');
+$assert(str_contains($browser, 'preReservationTrace.blocked < 1'), 'browser contract must require the ordinary payment submit guard to reject direct pre-reservation submission');
+$assert(str_contains($browser, 'preReservationTrace.preflight !== 0'), 'direct pre-reservation submission must not trigger finalization preflight');
+$assert(str_contains($browser, 'preReservationTrace.handoff !== 0'), 'direct pre-reservation submission must not cross the native payment handoff boundary');
+$assert(str_contains($browser, 'safePath(page.url()) !== beforeDirectSubmitPath'), 'blocked direct submission must keep Chromium on the same checkout path');
+$assert(str_contains($browser, 'handoffTrace.blocked !== preReservationBlocked'), 'authorized final handoff must not incur an additional submit-guard rejection');
 $assert(str_contains($browser, 'waitForSafeHandoffTrace'), 'browser contract must await lifecycle evidence outside the navigating page execution context');
 $assert(str_contains($browser, 'new Promise((resolve) => setTimeout(resolve, 20))'), 'navigation-safe lifecycle wait must yield through the Node event loop');
 $assert(!str_contains($browser, 'page.waitForFunction(() => true'), 'post-handoff synchronization must not depend on a page execution context destroyed by native navigation');
