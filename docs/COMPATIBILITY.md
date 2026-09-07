@@ -63,25 +63,25 @@ Implemented architecture:
 
 Executed browser/runtime evidence:
 
-- exact-head Native Payment Runtime `34065668822` on commit `7f9a652cadb1c68bdc799c214445c2fc76603e37` completed successfully on PrestaShop 9.1.5;
-- Chromium prepared a real orderable checkout through normal OPC mutations and selected official `PrestaShop/ps_checkpayment` pinned to commit `163eea350e29616f7cff343285d8c4bcc2b6cc44`;
-- the OPC final-submit path completed server finalization preflight/reservation and handed the untouched Core-presented form back to the payment module;
-- the payment module/Core created exactly one order for the original OPC cart and reached Core order confirmation;
-- the post-order probe verified payment-module ownership and confirmed both `jzopc_checkout_finalization` and `jzopc_checkout_selection` transient state were removed after the real Core order;
-- the fully orderable two-tab gate separately verifies one reservation winner, `finalization_in_progress` for the competing attempt, exact idempotent replay, losing-release rejection and exact winning release before native payment activation.
+- Native Payment Runtime has completed the official pinned `PrestaShop/ps_checkpayment` path on PrestaShop 9.1.5: Chromium prepares a real orderable checkout through normal OPC mutations, finalization preflight/reservation succeeds, the untouched Core-presented form is handed to the payment module, Core/payment-module code creates exactly one order and `actionValidateOrderAfter` removes both OPC transient rows;
+- the real browser direct-submit barrier blocks a Core-presented ordinary payment form before reservation, produces no premature payment validation request, and the same checkout can then complete through normal OPC finalization and the Core-owned payment path;
+- ambiguous native handoff preserves the reservation and blocks repeat handoff/final-submit rather than reopening payment after an uncertain module-owned activation;
+- the same-cart TTL recovery gate expires an ambiguous reservation using database time, acquires a new finalization attempt, completes through official `ps_checkpayment`, and verifies Core order ownership plus transient-state cleanup;
+- the fully orderable two-tab gate verifies one reservation winner, `finalization_in_progress` for the competing attempt, exact idempotent replay, losing-release rejection and exact winning release before native payment activation.
 
-Current exact-head delta adds a browser-authoritative pre-reservation direct-submit barrier check: before normal final submit, Chromium calls observable `requestSubmit()` on the selected Core-presented `ps_checkpayment` form. The gate requires no payment-module validation request, one `payment-submit-blocked` event, no preflight/handoff/ambiguity event and no navigation change; the same checkout must then still complete through the normal Core-owned payment/order path. This delta is not considered verified until its exact-head workflow completes successfully.
+Zero-total runtime status is deliberately not green. Exact-head Native Payment Runtime `34103551955` on commit `45ad3672ce7a319e71432b6e88457ba354894943` reached the canonical Core `POST /order-confirmation?free_order=1`. The request entered Core but did not exit before the bounded Chromium timeout. Failure-only server evidence then found exactly one Core-created order for the cart while both `jzopc_checkout_finalization` and `jzopc_checkout_selection` still contained one row. This proves the current blocker is after Core order persistence and before the free-order request completes; it does not justify OPC-created orders or a synthetic confirmation redirect.
+
+The current exact-head diagnostic delta adds only failure-path, read-only aggregate database process evidence so the next executed run can distinguish an OPC cleanup DELETE waiting on a lock from a stall before cleanup is attempted. Raw SQL/process rows, connection identities and customer/request data are not emitted. No production payment/order/cleanup semantics were changed by that diagnostic delta.
 
 Still requiring real browser verification:
 
+- successful end-to-end zero-total Core free-order completion, confirmation identity/refresh stability and OPC cleanup;
 - representative redirect payment module beyond the check-payment fixture;
 - representative embedded/tokenization payment form;
 - visible submit and Enter-key attempts plus representative jQuery/native third-party handlers;
 - payment additional-information JavaScript reinitialization after section refresh;
 - binary click and binary form-submit paths;
-- thrown/partial third-party handlers and proof that post-activation ambiguity cannot reopen handoff;
-- payment failure/retry and abandoned reservation recovery after TTL expiry;
-- zero-total free order and duplicate refresh behavior.
+- broader payment failure/retry variants beyond the already-executed ambiguous-handoff TTL recovery scenario.
 
 The ordinary browser guard is defense in depth around observable submit events. It does not claim authority over hostile low-level submission that deliberately bypasses the native submit event.
 
@@ -116,6 +116,6 @@ Integration failures must fail closed to Core checkout. The Chromium fallback ma
 
 GitHub Actions quota is currently available and exact-head CI/runtime results must be read from executed workflows rather than inferred from source.
 
-On `7f9a652cadb1c68bdc799c214445c2fc76603e37`, CI run `34065668806` completed successfully and Native Payment Runtime `34065668822` completed successfully, including real official payment-module submission, Core order creation and OPC post-order cleanup. The current pre-reservation direct-submit browser delta is newer than that verified head and remains unverified until its own workflow result is complete.
+The latest completed Native Payment Runtime inspected for the zero-total blocker is `34103551955` on `45ad3672ce7a319e71432b6e88457ba354894943`. All preceding payment/idempotency steps in that run completed successfully; the run failed only at the Core free-order completion Chromium contract. The new post-order database-wait diagnostic is newer than that executed head and must not be described as runtime-verified until its own exact-head workflow executes.
 
-Production readiness remains closed. `INTEGRATION_SHELL_READY=false` must not change until the remaining representative payment/carrier, identity/address, multistore, accessibility/performance and release gates are genuinely executed and green.
+Production readiness remains closed. `INTEGRATION_SHELL_READY=false` must not change until the zero-total blocker and the remaining representative payment/carrier, identity/address, multistore, accessibility/performance and release gates are genuinely executed and green.
