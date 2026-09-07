@@ -29,6 +29,14 @@ The instrumenter:
 
 The normal `ps_checkpayment` path remains the control sample and must continue through all phase markers and OPC cleanup. The zero-total path will identify the first Core phase that starts without completing.
 
+## Runtime fixture boundary correction
+
+Exact-head Native Payment Runtime `34115319984` on commit `b1192be532e46febdc2cc277ff2f326dc3023989` did not reach Chromium or any payment scenario. The disposable fixture build failed closed with `Unexpected PrestaShop 9.1.5 validateOrder source boundary`.
+
+Source comparison against the pinned PrestaShop 9.1.5 `classes/PaymentModule.php` showed that the preflight incorrectly required the broad `Mail::Send(` token to occur exactly once in the entire Core class. PrestaShop 9.1.5 legitimately contains more than one mail send in `PaymentModule.php`, including the order-confirmation mail and voucher mail paths. The trace replacement itself never depended on a globally unique `Mail::Send(` token.
+
+The corrected preflight now requires the specific `'order_conf',` semantic landmark exactly once instead. This keeps the instrumenter fail-closed around the intended order-confirmation lifecycle without assuming unrelated Core mail calls are absent. The smoke contract also locks this specific landmark. No production OPC or Core order/payment behavior changes as part of this correction.
+
 ## Security and compatibility consequences
 
 No production PrestaShop Core file is changed by the repository. The only Core file mutation is inside the disposable `/tmp/prestashop` CI checkout. Repository production OPC source remains closed and does not contain Core trace markers.
