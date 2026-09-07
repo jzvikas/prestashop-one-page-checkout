@@ -85,6 +85,10 @@ JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php \
   "$target_root" \
   "$source_root"
 
+JZOPC_RUNTIME_ACTIVE_FIXTURE=1 php \
+  "$target_root/tests/Runtime/InstrumentCoreValidateOrderTraceFixture.php" \
+  /tmp/prestashop
+
 if ! grep -Fq "$opened" "$target_module"; then
   echo "Temporary fixture readiness gate was not opened." >&2
   exit 3
