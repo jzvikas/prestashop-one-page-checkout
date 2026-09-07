@@ -20,11 +20,21 @@ $required = [
     "\$argv[1] !== '/tmp/prestashop'",
     "realpath(\$argv[1])",
     "/classes/PaymentModule.php",
+    "/classes/order/OrderHistory.php",
     "Hook::exec('actionValidateOrder', [",
     '$new_history->changeIdOrderState((int) $id_order_state, $order, true);',
     '$new_history->addWithemail(true, $extra_vars);',
     "'order_conf',",
     "'actionValidateOrderAfter',",
+    'public function addWithemail($autodate = true, $template_vars = false, ?Context $context = null)',
+    'if (!$this->add($autodate)) {',
+    'Order::cleanHistoryCache();',
+    'if (!$this->sendEmail($order, $template_vars)) {',
+    'public function sendEmail($order, $template_vars = false)',
+    '$result = Db::getInstance()->getRow(',
+    'if (!Mail::Send(',
+    'public function add($autodate = true, $null_values = false)',
+    'if (!parent::add($autodate)) {',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=order_persisted',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=validate_hook_begin',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=validate_hook_end',
@@ -42,10 +52,30 @@ $required = [
     'JZOPC_RUNTIME_CORE_VALIDATE phase=stock_sync_end',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=after_hook_begin',
     'JZOPC_RUNTIME_CORE_VALIDATE phase=after_hook_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=add_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=add_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=cache_clean_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=cache_clean_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=send_email_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=send_email_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=email_lookup_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=email_lookup_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=email_prepare_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=attachment_prepare_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=status_mail_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=status_mail_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=history_row_persist_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=history_row_persist_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=order_state_update_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=order_state_update_end',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=history_hook_begin',
+    'JZOPC_RUNTIME_CORE_HISTORY phase=history_hook_end',
 ];
 foreach ($required as $needle) {
     if (!str_contains($instrumenter, $needle)) {
-        fwrite(STDERR, "Core validateOrder trace fixture is missing required boundary: {$needle}\n");
+        fwrite(STDERR, "Core validateOrder/OrderHistory trace fixture is missing required boundary: {$needle}\n");
         exit(1);
     }
 }
@@ -82,15 +112,16 @@ $forbidden = [
 ];
 foreach ($forbidden as $needle) {
     if (stripos($instrumenter, $needle) !== false) {
-        fwrite(STDERR, "Core validateOrder trace fixture crossed a write/sensitive-data boundary: {$needle}\n");
+        fwrite(STDERR, "Core validateOrder/OrderHistory trace fixture crossed a write/sensitive-data boundary: {$needle}\n");
         exit(1);
     }
 }
 
 if (!str_contains($productionModule, 'private const INTEGRATION_SHELL_READY = false;')
-    || str_contains($productionModule, 'JZOPC_RUNTIME_CORE_VALIDATE')) {
-    fwrite(STDERR, "Production module must remain closed and free of Core validateOrder tracing.\n");
+    || str_contains($productionModule, 'JZOPC_RUNTIME_CORE_VALIDATE')
+    || str_contains($productionModule, 'JZOPC_RUNTIME_CORE_HISTORY')) {
+    fwrite(STDERR, "Production module must remain closed and free of Core runtime tracing.\n");
     exit(1);
 }
 
-echo "Checkout Core validateOrder trace fixture contract smoke test OK.\n";
+echo "Checkout Core validateOrder/OrderHistory trace fixture contract smoke test OK.\n";
