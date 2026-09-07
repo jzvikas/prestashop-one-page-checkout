@@ -25,9 +25,16 @@ $required = [
     "jzopc_checkout_finalization",
     "jzopc_checkout_selection",
     "selected_payment_option",
+    "information_schema`.`PROCESSLIST",
+    "`ID` <> CONNECTION_ID()",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_ORDER_COUNT",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_FREE_ORDER",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_DB_ACTIVE",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_DB_LOCK_WAIT",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_FINALIZATION_DELETE_ACTIVE",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_SELECTION_DELETE_ACTIVE",
+    "JZOPC_FREE_ORDER_DIAGNOSTIC_DB_PROCESS_AVAILABLE=0",
     "JZOPC_FREE_ORDER_DIAGNOSTIC_TOTAL_AVAILABLE",
     "catch (Throwable)",
 ];
@@ -43,15 +50,16 @@ $contextBinding = strpos($source, '$context->cart = $cart');
 $currencyBinding = strpos($source, '$context->currency = $currency');
 $orderEvidence = strpos($source, 'JZOPC_FREE_ORDER_DIAGNOSTIC_ORDER_COUNT');
 $reservationEvidence = strpos($source, 'JZOPC_FREE_ORDER_DIAGNOSTIC_RESERVATION_COUNT');
+$processEvidence = strpos($source, 'JZOPC_FREE_ORDER_DIAGNOSTIC_DB_ACTIVE');
 $totalRead = strpos($source, '$cart->getOrderTotal(true, Cart::BOTH)');
 if ($contextBinding === false || $currencyBinding === false || $totalRead === false
     || $contextBinding >= $totalRead || $currencyBinding >= $totalRead) {
     fwrite(STDERR, "Free-order diagnostic must bind the loaded Core cart and currency before calculating the Core total.\n");
     exit(1);
 }
-if ($orderEvidence === false || $reservationEvidence === false
-    || $orderEvidence >= $totalRead || $reservationEvidence >= $totalRead) {
-    fwrite(STDERR, "Free-order diagnostic must emit order/reservation evidence before optional Core pricing.\n");
+if ($orderEvidence === false || $reservationEvidence === false || $processEvidence === false
+    || $orderEvidence >= $totalRead || $reservationEvidence >= $totalRead || $processEvidence >= $totalRead) {
+    fwrite(STDERR, "Free-order diagnostic must emit order/reservation/database-wait evidence before optional Core pricing.\n");
     exit(1);
 }
 
@@ -88,6 +96,11 @@ $forbidden = [
     'INSERT INTO',
     'UPDATE `' . "' . bqSQL",
     'DELETE FROM',
+    'SHOW FULL PROCESSLIST',
+    'SHOW PROCESSLIST',
+    "print_r(\$processSummary",
+    "var_dump(\$processSummary",
+    "json_encode(\$processSummary",
     'cookie',
     'csrf',
     'secure_key',
