@@ -139,9 +139,119 @@ foreach ([
     }
 }
 
+$generatorFile = $coreRoot . '/classes/pdf/PDFGenerator.php';
+$generatorSource = is_file($generatorFile) ? file_get_contents($generatorFile) : false;
+if (!is_string($generatorSource) || $generatorSource === '') {
+    fwrite(STDERR, "PrestaShop PDFGenerator.php is unavailable.\n");
+    exit(3);
+}
+
+if (str_contains($generatorSource, 'JZOPC_RUNTIME_CORE_PDF_GENERATOR')) {
+    fwrite(STDERR, "PrestaShop PDFGenerator fixture is already instrumented.\n");
+    exit(3);
+}
+
+$generatorMethods = [
+    'header' => [
+        'start' => "    public function Header()\n    {",
+        'end' => "    public function Footer()\n    {",
+        'semantics' => [
+            '        $this->writeHTML($this->header);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=header_html_begin');\n        \$this->writeHTML(\$this->header);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=header_html_end');",
+        ],
+    ],
+    'footer' => [
+        'start' => "    public function Footer()\n    {",
+        'end' => "    public function render(\$filename, \$display = true)\n    {",
+        'semantics' => [
+            '        $this->writeHTML($this->footer);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_html_begin');\n        \$this->writeHTML(\$this->footer);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_html_end');",
+            '        $this->FontFamily = self::DEFAULT_FONT;' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_font_reset_begin');\n        \$this->FontFamily = self::DEFAULT_FONT;\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_font_reset_end');",
+            '        $this->writeHTML($this->pagination);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=pagination_html_begin');\n        \$this->writeHTML(\$this->pagination);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=pagination_html_end');",
+        ],
+    ],
+    'write_page' => [
+        'start' => "    public function writePage()\n    {",
+        'end' => "    protected function getRandomSeed(\$seed = '')\n    {",
+        'semantics' => [
+            '        $this->SetHeaderMargin(5);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=header_margin_begin');\n        \$this->SetHeaderMargin(5);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=header_margin_end');",
+            '        $this->SetFooterMargin(21);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_margin_begin');\n        \$this->SetFooterMargin(21);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=footer_margin_end');",
+            '        $this->setMargins(10, 40, 10);' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=body_margins_begin');\n        \$this->setMargins(10, 40, 10);\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=body_margins_end');",
+            '        $this->AddPage();' => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=add_page_begin');\n        \$this->AddPage();\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=add_page_end');",
+            "        \$this->writeHTML(\$this->content, true, false, true, false, '');" => "        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=content_html_begin');\n        \$this->writeHTML(\$this->content, true, false, true, false, '');\n        error_log('JZOPC_RUNTIME_CORE_PDF_GENERATOR phase=content_html_end');",
+        ],
+    ],
+];
+
+$instrumentedGenerator = $generatorSource;
+foreach ($generatorMethods as $methodName => $definition) {
+    $startNeedle = $definition['start'];
+    $endNeedle = $definition['end'];
+    if (substr_count($instrumentedGenerator, $startNeedle) !== 1 || substr_count($instrumentedGenerator, $endNeedle) !== 1) {
+        fwrite(STDERR, "Unexpected PrestaShop 9.1.5 PDFGenerator method boundary.\n");
+        exit(3);
+    }
+
+    $methodStart = strpos($instrumentedGenerator, $startNeedle);
+    $methodEnd = strpos($instrumentedGenerator, $endNeedle, is_int($methodStart) ? $methodStart + strlen($startNeedle) : 0);
+    if (!is_int($methodStart) || !is_int($methodEnd) || $methodEnd <= $methodStart) {
+        fwrite(STDERR, "Unable to isolate PrestaShop 9.1.5 PDFGenerator method.\n");
+        exit(3);
+    }
+
+    $methodSource = substr($instrumentedGenerator, $methodStart, $methodEnd - $methodStart);
+    if ($methodSource === '') {
+        fwrite(STDERR, "PrestaShop 9.1.5 PDFGenerator method is empty.\n");
+        exit(3);
+    }
+
+    foreach ($definition['semantics'] as $needle => $replacement) {
+        if (substr_count($methodSource, $needle) !== 1) {
+            fwrite(STDERR, "Unexpected PrestaShop 9.1.5 PDFGenerator source boundary.\n");
+            exit(3);
+        }
+        $methodSource = str_replace($needle, $replacement, $methodSource, $count);
+        if ($count !== 1) {
+            fwrite(STDERR, "Unable to instrument PrestaShop PDFGenerator boundary.\n");
+            exit(3);
+        }
+    }
+
+    $instrumentedGenerator = substr($instrumentedGenerator, 0, $methodStart) . $methodSource . substr($instrumentedGenerator, $methodEnd);
+}
+
+foreach ([
+    'phase=header_html_begin',
+    'phase=header_html_end',
+    'phase=footer_html_begin',
+    'phase=footer_html_end',
+    'phase=footer_font_reset_begin',
+    'phase=footer_font_reset_end',
+    'phase=pagination_html_begin',
+    'phase=pagination_html_end',
+    'phase=header_margin_begin',
+    'phase=header_margin_end',
+    'phase=footer_margin_begin',
+    'phase=footer_margin_end',
+    'phase=body_margins_begin',
+    'phase=body_margins_end',
+    'phase=add_page_begin',
+    'phase=add_page_end',
+    'phase=content_html_begin',
+    'phase=content_html_end',
+] as $marker) {
+    if (!str_contains($instrumentedGenerator, 'JZOPC_RUNTIME_CORE_PDF_GENERATOR ' . $marker)) {
+        fwrite(STDERR, "PrestaShop PDFGenerator trace is incomplete.\n");
+        exit(3);
+    }
+}
+
 if (file_put_contents($coreFile, $updated) === false) {
     fwrite(STDERR, "Unable to write disposable PrestaShop PDF trace fixture.\n");
     exit(3);
 }
 
-fwrite(STDOUT, "Disposable PrestaShop Core PDF render trace installed.\n");
+if (file_put_contents($generatorFile, $instrumentedGenerator) === false) {
+    fwrite(STDERR, "Unable to write disposable PrestaShop PDFGenerator trace fixture.\n");
+    exit(3);
+}
+
+fwrite(STDOUT, "Disposable PrestaShop Core PDF render and generator traces installed.\n");
