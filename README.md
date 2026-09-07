@@ -2,7 +2,7 @@
 
 Production-grade One Page Checkout module under active development for PrestaShop 9.x and PHP 8.4+.
 
-> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup and shop-scoped Back Office activation controls exist in source. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the deferred installed-runtime/browser matrix is executed successfully.
+> Current status: Core-backed identity, addresses, carrier, payment, agreements, finalization preflight, duplicate-handoff reservation, native ordinary/binary/free-order payment handoff, lifecycle cleanup and shop-scoped Back Office activation controls exist in source. A real PrestaShop 9.1.5 Chromium run has completed official `ps_checkpayment` submission, Core order creation and OPC post-order cleanup. Production checkout takeover intentionally remains disabled by `INTEGRATION_SHELL_READY=false` until the remaining representative payment/carrier, identity/address, multistore, accessibility/performance and release gates are executed successfully.
 
 ## Runtime targets
 
@@ -86,7 +86,9 @@ An explicit release can clear only its own customer/attempt reservation and refu
 
 Ordinary payment forms retain observable module handlers by preferring jQuery `submit`, then `requestSubmit()`, then raw `HTMLFormElement.prototype.submit.call()` only as the final compatibility fallback.
 
-Because Core-presented `PaymentOption::form` markup can contain its own submit control, `ordinary-payment-submit-guard.js` now captures ordinary native form submissions before third-party submit handlers. A direct submit is blocked until the server-backed finalization reservation has succeeded and the final-submit controller synchronously authorizes the exact selected option/form at the native handoff boundary. Authorization is one-shot and also expires after the current synchronous stack or any payment/section change. Payment form fields are not disabled or rewritten, preserving hidden successful controls, embedded fields and tokenization integrations.
+Because Core-presented `PaymentOption::form` markup can contain its own submit control, `ordinary-payment-submit-guard.js` captures ordinary native form submissions before third-party submit handlers. A direct submit is blocked until the server-backed finalization reservation has succeeded and the final-submit controller synchronously authorizes the exact selected option/form at the native handoff boundary. Authorization is one-shot and also expires after the current synchronous stack or any payment/section change. Payment form fields are not disabled or rewritten, preserving hidden successful controls, embedded fields and tokenization integrations.
+
+The native payment runtime now includes a browser-authoritative pre-reservation direct-submit gate. Chromium attempts observable `requestSubmit()` on the real Core-presented `ps_checkpayment` form before the OPC final-submit button. That attempt must produce the submit-blocked lifecycle event, must not reach the payment module validation endpoint, must not run preflight/handoff or navigate, and the same checkout must then complete normally through the authorized final-submit path. The current delta is not considered verified until its exact-head workflow finishes successfully.
 
 This ordinary-form guard is browser defense in depth, not server authority: low-level script-driven submission that intentionally avoids an observable submit event remains a third-party compatibility/browser-test concern and is not treated as production-proven.
 
@@ -98,9 +100,13 @@ Zero-total carts remain Core-owned through `free_order` and `OrderConfirmationCo
 
 `actionValidateOrderAfter` removes the module's selection/reservation state after a real Core order exists. Abandoned selection rows are also bounded by opportunistic 30-day/100-row GC; expired finalization reservations use their separate bounded cleanup path.
 
+### Executed native payment evidence
+
+Exact-head Native Payment Runtime `34065668822` on commit `7f9a652cadb1c68bdc799c214445c2fc76603e37` completed successfully on PrestaShop 9.1.5. Chromium used official pinned `ps_checkpayment`; the module/Core created exactly one order for the original OPC cart, Core order confirmation was reached, and the server-side cleanup probe confirmed both OPC transient tables were cleared after the real order. The OPC module itself did not call `validateOrder()` or create the order.
+
 ## Back Office activation
 
-The module configuration page exposes the existing `JZOPC_CHECKOUT_ENABLED` setting through PrestaShop `HelperForm`.
+The module configuration page exposes `JZOPC_CHECKOUT_ENABLED` through PrestaShop `HelperForm`.
 
 Safety rules:
 
@@ -136,21 +142,21 @@ find views/js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 for test in tests/Smoke/*Test.php; do php "$test"; done
 ```
 
-The repository contains a MariaDB-backed installed PrestaShop runtime workflow for the configured 9.0.3, 9.1.5 and 9.2 runtime families.
+The repository contains MariaDB-backed installed PrestaShop runtime workflows for the configured 9.0.3, 9.1.5 and 9.2 runtime families plus a dedicated PrestaShop 9.1.5 native-payment order/cleanup workflow.
 
-GitHub Actions execution is currently deferred because the repository's free Actions quota is exhausted. New PHP/JS/smoke/runtime contracts are still added, but they are not described as passing until they actually execute. The connected repository environment does not provide a local installed PrestaShop/browser runtime.
+GitHub Actions quota is currently available. CI/runtime results are treated as evidence only after the exact workflow execution completes; queued or unexecuted gates are never described as passed.
 
 ## Remaining release blockers
 
 - `INTEGRATION_SHELL_READY` remains `false`;
-- execute the latest PHP/Node/smoke/installed-runtime suite, including configured PrestaShop 9.0/9.1/9.2 jobs, after Actions quota resets and fix every failure;
-- execute controlled HTTP/browser takeover and native-fallback tests;
-- verify guest/account/login, CSRF rotation/cart restoration and native address flows in a real browser;
-- verify representative redirect, embedded and binary payment modules plus failure/retry paths;
-- verify direct ordinary-form visible submit/Enter-key blocking while preserving jQuery/native handlers and embedded/tokenization fields during the authorized handoff;
-- prove in a controlled browser that thrown/partial third-party handlers remain blocked behind the preserved reservation after native activation starts, and recover only through successful Core cleanup or TTL;
-- verify zero-total free order, concurrent-tab reservation, slow/abandoned-payment recovery and successful lifecycle cleanup;
-- verify representative carrier modules and no-carrier transitions;
+- complete the current exact-head pre-reservation direct-submit browser gate and fix any failure before treating it as verified;
+- verify representative redirect, embedded/tokenization and binary payment modules plus failure/retry paths;
+- verify visible submit/Enter-key and representative jQuery/native third-party handlers without weakening the one-shot authorization boundary;
+- prove thrown/partial third-party handlers remain blocked behind the preserved reservation after native activation starts and recover only through successful Core cleanup or TTL;
+- verify payment failure/retry, slow/abandoned-payment TTL recovery, zero-total free order and duplicate refresh behavior;
+- verify broader account/login, CSRF rotation/cart restoration and foreign-address/IDOR browser cases;
+- verify representative carrier modules, free/paid transitions and no-carrier/invalidation states;
+- complete multistore browser rollout verification;
 - complete responsive/accessibility/performance polish and final packaging/release matrix.
 
 These are explicit safety gates, not production-ready claims.
