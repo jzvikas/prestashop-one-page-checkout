@@ -13,7 +13,7 @@ if (!is_string($instrumenter) || !is_string($builder)) {
 
 $required = [
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
-    "$argv[1] !== '/tmp/prestashop'",
+    '$argv[1] !== \'/tmp/prestashop\'',
     "'/classes/pdf/PDF.php'",
     "'phase=set_font_begin'",
     "'phase=set_font_end'",
@@ -31,7 +31,7 @@ $required = [
     "'phase=footer_end'",
     "'phase=renderer_output_begin'",
     "'phase=renderer_output_end'",
-    "substr_count($source, $needle) !== 1",
+    'substr_count($source, $needle) !== 1',
 ];
 foreach ($required as $needle) {
     if (!str_contains($instrumenter, $needle)) {
