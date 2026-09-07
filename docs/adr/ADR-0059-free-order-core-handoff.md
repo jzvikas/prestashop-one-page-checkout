@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented with source/smoke coverage and a required PrestaShop 9.1.5 Chromium/runtime gate. The browser/runtime gate is still red: the latest executed run proves the zero-total native form POST enters PrestaShop Core but does not complete within the bounded browser wait. The milestone remains unverified until the exact browser/runtime path succeeds.
+Implemented with source/smoke coverage and a required PrestaShop 9.1.5 Chromium/runtime gate. The browser/runtime gate is still red: the latest executed runs prove the zero-total native form POST enters PrestaShop Core but does not complete within the bounded browser wait. The milestone remains unverified until the exact browser/runtime path succeeds.
 
 ## Context
 
@@ -43,7 +43,9 @@ Executed Native Payment Runtime `34078730795` on commit `93da0e830dba9a17b1fd7ad
 
 Executed Native Payment Runtime `34085518295` on commit `6be61c6f33dd5ba623d08261ea586e14eba5bd10` narrowed that failure boundary further. All existing ambiguity, same-cart TTL recovery and ordinary `ps_checkpayment` Core-order cleanup gates completed successfully. For the zero-total handoff the safe structural router recorded `phase=enter method=POST path=/order-confirmation content_length=0 content_type=form-urlencoded`, but no matching `phase=exit` was observed before Chromium's bounded 30-second navigation wait expired. This proves the browser reached the Core route and prevents misclassifying the blocker as an OPC native-form transport failure. It does not prove that Core created the free order.
 
-The runtime workflow now executes `ActiveCoreFreeOrderFailureDiagnostic.php` on failure after the free-order gate. The diagnostic is intentionally read-only and reports only whether the latest fixture cart remains zero-total/customer/address-bound, whether Core has already created an order, and whether the OPC reservation/canonical selection remain. This preserves the failing job while distinguishing a pre-order Core stall from a post-order hook/redirect stall on the next executed run.
+Executed Native Payment Runtime `34089396385` on commit `70ca6de732e9340ca31d0a692d80e48f6bfec2ea` reproduced the same Core-entry/no-exit boundary after all existing ambiguity, TTL-recovery and ordinary `ps_checkpayment` completion gates passed. The new failure-only DB diagnostic then exposed a test-infrastructure defect before it could report order state: its latest-cart lookup appended `LIMIT 1` even though PrestaShop `Db::getValue()` appends that bound itself, producing invalid `LIMIT 1 LIMIT 1` SQL. The diagnostic query is corrected and a smoke regression now forbids reintroducing that explicit limit. This run therefore does not establish whether Core had already persisted the free order.
+
+The runtime workflow executes `ActiveCoreFreeOrderFailureDiagnostic.php` on failure after the free-order gate. The diagnostic is intentionally read-only and reports only whether the latest fixture cart remains zero-total/customer/address-bound, whether Core has already created an order, and whether the OPC reservation/canonical selection remain. This preserves the failing job while distinguishing a pre-order Core stall from a post-order hook/redirect stall on the next executed run.
 
 A separate success-only completion probe still requires a loadable Core order with module `free_order`, zero paid totals, exactly one order for the cart, matching `Order::getIdByCartId()`, and zero remaining rows in both OPC finalization and selection tables. Neither fixture nor probe calls `PaymentFree`, `validateOrder()` or inserts an order.
 

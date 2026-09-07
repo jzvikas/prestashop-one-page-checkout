@@ -33,7 +33,7 @@ $cartId = (int) $db->getValue(
     . ' FROM `' . bqSQL($prefix) . 'cart_product` cp'
     . ' INNER JOIN `' . bqSQL($prefix) . 'cart` c ON c.`id_cart` = cp.`id_cart`'
     . ' WHERE cp.`id_product` = ' . (int) $productId
-    . ' ORDER BY c.`date_upd` DESC, cp.`id_cart` DESC LIMIT 1'
+    . ' ORDER BY c.`date_upd` DESC, cp.`id_cart` DESC'
 );
 
 if ($cartId <= 0) {
