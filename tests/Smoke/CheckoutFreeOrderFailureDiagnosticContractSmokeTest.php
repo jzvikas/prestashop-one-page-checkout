@@ -31,9 +31,15 @@ foreach ($required as $needle) {
     }
 }
 
-if (str_contains($source, "cp.`id_cart` DESC LIMIT 1")) {
-    fwrite(STDERR, "Free-order diagnostic must not append LIMIT 1 before Db::getValue(), which already bounds the query.\n");
-    exit(1);
+$forbiddenExplicitBounds = [
+    "cp.`id_cart` DESC LIMIT 1",
+    "jzopc_checkout_selection` WHERE `id_cart` = ' . (int) \$cartId . ' LIMIT 1",
+];
+foreach ($forbiddenExplicitBounds as $needle) {
+    if (str_contains($source, $needle)) {
+        fwrite(STDERR, "Free-order diagnostic must not append LIMIT 1 before Db::getValue()/Db::getRow(), which already bound the query: {$needle}\n");
+        exit(1);
+    }
 }
 
 $requiredWorkflow = [
