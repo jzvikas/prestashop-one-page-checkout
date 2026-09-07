@@ -1,11 +1,16 @@
+import { chmod } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const baseUrl = String(process.env.JZOPC_BROWSER_BASE_URL || '').replace(/\/$/, '');
 const productId = Number.parseInt(String(process.env.JZOPC_RUNTIME_PRODUCT_ID || ''), 10);
+const storageStatePath = String(process.env.JZOPC_AMBIGUOUS_STORAGE_STATE_PATH || '');
 
 function fail(message) { throw new Error(message); }
 if (!/^https?:\/\//i.test(baseUrl)) fail('JZOPC_BROWSER_BASE_URL must be an absolute HTTP(S) URL.');
 if (!Number.isInteger(productId) || productId <= 0) fail('JZOPC_RUNTIME_PRODUCT_ID must be a positive integer.');
+if (storageStatePath !== '/tmp/jzopc-ambiguous-browser-state.json') {
+  fail('JZOPC_AMBIGUOUS_STORAGE_STATE_PATH must use the fixed ephemeral runtime path.');
+}
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
@@ -208,6 +213,10 @@ try {
   if (await retryFinalize !== null) fail('ambiguous-handoff: locked checkout allowed a second finalization request.');
 
   if (pageErrors.length !== 0) fail(`ambiguous-handoff: browser JavaScript error: ${pageErrors.join(' | ')}`);
+
+  await context.storageState({ path: storageStatePath });
+  await chmod(storageStatePath, 0o600);
+
   process.stdout.write(`JZOPC_AMBIGUOUS_CART_ID=${cartId}\n`);
   process.stdout.write(`Ambiguous native payment handoff contract OK: cart=${cartId}, option=${optionId}, reservation retained for server verification\n`);
 } finally {
