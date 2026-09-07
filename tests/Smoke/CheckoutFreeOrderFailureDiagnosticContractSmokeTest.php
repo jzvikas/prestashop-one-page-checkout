@@ -17,6 +17,8 @@ $required = [
     "JZOPC_RUNTIME_ACTIVE_FIXTURE",
     "str_starts_with(\$root, '/tmp/prestashop')",
     "JZOPC_RUNTIME_FREE_PRODUCT_ID",
+    "Context::getContext()",
+    "\$context->cart = \$cart",
     "Order::getIdByCartId(\$cartId)",
     "jzopc_checkout_finalization",
     "jzopc_checkout_selection",
@@ -30,6 +32,13 @@ foreach ($required as $needle) {
         fwrite(STDERR, "Free-order diagnostic is missing required contract: {$needle}\n");
         exit(1);
     }
+}
+
+$contextBinding = strpos($source, '$context->cart = $cart');
+$totalRead = strpos($source, '$cart->getOrderTotal(true, Cart::BOTH)');
+if ($contextBinding === false || $totalRead === false || $contextBinding >= $totalRead) {
+    fwrite(STDERR, "Free-order diagnostic must bind the loaded Core cart into Context before calculating the Core total.\n");
+    exit(1);
 }
 
 $forbiddenExplicitBounds = [
