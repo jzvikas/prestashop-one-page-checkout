@@ -15,7 +15,12 @@ $required = [
     'register_shutdown_function',
     'http_response_code()',
     'error_log(sprintf(',
-    'JZOPC_RUNTIME_HTTP method=%s path=%s status=%d',
+    'JZOPC_RUNTIME_HTTP phase=enter method=%s path=%s content_length=%d content_type=%s',
+    'JZOPC_RUNTIME_HTTP phase=exit method=%s path=%s status=%d',
+    "\$_SERVER['CONTENT_LENGTH']",
+    "\$_SERVER['CONTENT_TYPE']",
+    "str_starts_with(\$contentTypeRaw, 'application/x-www-form-urlencoded')",
+    "str_starts_with(\$contentTypeRaw, 'multipart/form-data')",
     "preg_replace('/[^A-Z]/', '', \$method)",
     "preg_replace('/[^A-Za-z0-9._~-]/', '_', \$segment)",
 ];
@@ -34,6 +39,7 @@ $forbiddenLogInputs = [
     "\$_GET",
     "QUERY_STRING",
     'getallheaders(',
+    'php://input',
     'fwrite(STDERR',
 ];
 
@@ -42,6 +48,11 @@ foreach ($forbiddenLogInputs as $needle) {
         fwrite(STDERR, "Runtime HTTP diagnostics must not consume sensitive material or use a CLI-only sink: {$needle}\n");
         exit(1);
     }
+}
+
+if (!str_contains($source, "default => 'other'")) {
+    fwrite(STDERR, "Runtime HTTP diagnostics must classify unknown content types rather than logging the raw header.\n");
+    exit(1);
 }
 
 echo "Runtime HTTP router diagnostic contract smoke test OK.\n";
