@@ -26,8 +26,9 @@ if (!$hasTraversal && in_array($method, ['GET', 'HEAD'], true)) {
 }
 
 // Keep failure diagnostics structural only. Query strings may contain Core secure keys or module
-// parameters, while headers/cookies may contain authentication state. Recording only the method,
-// normalized path and final HTTP status is enough to prove whether a native handoff reached Core.
+// parameters, while headers/cookies may contain authentication state. Recording only request phase,
+// method, normalized path, numeric content length and a coarse content-type class is enough to prove
+// whether a native handoff reached Core without exposing request payloads or authentication material.
 $diagnosticPath = '/' . implode('/', array_map(
     static fn (string $segment): string => preg_replace('/[^A-Za-z0-9._~-]/', '_', $segment) ?? '_',
     $segments
@@ -35,14 +36,33 @@ $diagnosticPath = '/' . implode('/', array_map(
 if ($diagnosticPath === '/') {
     $diagnosticPath = '/';
 }
-register_shutdown_function(static function () use ($method, $diagnosticPath): void {
+$contentLengthRaw = (string) ($_SERVER['CONTENT_LENGTH'] ?? '');
+$contentLength = ctype_digit($contentLengthRaw) ? (int) $contentLengthRaw : -1;
+$contentTypeRaw = strtolower(trim((string) ($_SERVER['CONTENT_TYPE'] ?? '')));
+$contentType = match (true) {
+    str_starts_with($contentTypeRaw, 'application/x-www-form-urlencoded') => 'form-urlencoded',
+    str_starts_with($contentTypeRaw, 'multipart/form-data') => 'multipart-form',
+    $contentTypeRaw === '' => 'none',
+    default => 'other',
+};
+$safeMethod = preg_replace('/[^A-Z]/', '', $method) ?: 'UNKNOWN';
+
+error_log(sprintf(
+    'JZOPC_RUNTIME_HTTP phase=enter method=%s path=%s content_length=%d content_type=%s',
+    $safeMethod,
+    $diagnosticPath,
+    $contentLength,
+    $contentType
+));
+
+register_shutdown_function(static function () use ($safeMethod, $diagnosticPath): void {
     $status = http_response_code();
     if (!is_int($status) || $status < 100 || $status > 599) {
         $status = 0;
     }
     error_log(sprintf(
-        'JZOPC_RUNTIME_HTTP method=%s path=%s status=%d',
-        preg_replace('/[^A-Z]/', '', $method) ?: 'UNKNOWN',
+        'JZOPC_RUNTIME_HTTP phase=exit method=%s path=%s status=%d',
+        $safeMethod,
         $diagnosticPath,
         $status
     ));
