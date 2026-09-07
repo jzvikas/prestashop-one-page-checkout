@@ -49,6 +49,8 @@ foreach ($requiredFixture as $needle) {
 $requiredBrowser = [
     "data-module-name') !== 'free_order'",
     "formShape.freeOrder !== '1'",
+    "formShape.cartId === '' || formShape.cartId === initial.cartId",
+    '!actionIsOrderConfirmation',
     "formShape.method !== 'POST'",
     'trace.preflight < 1',
     'trace.handoff < 1',
@@ -62,6 +64,17 @@ $requiredBrowser = [
 foreach ($requiredBrowser as $needle) {
     if (!str_contains($browser, $needle)) {
         fwrite(STDERR, "Free-order Chromium contract is missing: {$needle}\n");
+        exit(1);
+    }
+}
+
+$forbiddenBrowserContracts = [
+    "formShape.cartId !== initial.cartId || formShape.method",
+    'cart_bound=',
+];
+foreach ($forbiddenBrowserContracts as $forbidden) {
+    if (str_contains($browser, $forbidden)) {
+        fwrite(STDERR, "Free-order Chromium contract must not require a non-Core id_cart action query: {$forbidden}\n");
         exit(1);
     }
 }
