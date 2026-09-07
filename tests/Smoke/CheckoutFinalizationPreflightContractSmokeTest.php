@@ -62,7 +62,8 @@ assertFinalizationContract(str_contains($mutation, '$this->reservationStore->rel
 assertFinalizationContract(str_contains($mutation, 'catch (CheckoutFinalizationReservationUnavailable)'), 'reservation storage uncertainty must be handled at the finalization application boundary');
 assertFinalizationContract(str_contains($mutation, "'finalization_unavailable'"), 'reservation uncertainty must produce a stable fail-closed checkout error code');
 assertFinalizationContract(str_contains($mutation, 'Order submission safety could not be verified. Please wait and try again.'), 'reservation uncertainty must not be described to the shopper as a successful release or handoff');
-assertFinalizationContract(str_contains($mutation, '$this->preflightService->validate($context, $currentSelections)'), 'preflight must execute inside the cart critical section');
+assertFinalizationContract(str_contains($mutation, '$finalizationSelections = $this->withCoreFreeOrderSelection($context, $currentSelections);'), 'free-order normalization must execute inside the cart critical section');
+assertFinalizationContract(str_contains($mutation, '$this->preflightService->validate($context, $finalizationSelections)'), 'preflight must execute inside the cart critical section against the final server-authoritative selections');
 assertFinalizationContract(str_contains($mutation, '$this->reservationStore->acquire('), 'successful preflight must acquire finalization reservation before returning');
 assertFinalizationContract(str_contains($orchestrator, 'CheckoutMutationBlockReason::FinalizationInProgress'), 'normal OPC writes must be frozen while native payment handoff is reserved');
 assertFinalizationContract(str_contains($orchestrator, '$mutation !== CheckoutMutation::FinalizationStarted'), 'idempotent finalization begin/release requests must be exempt from the generic mutation freeze');
