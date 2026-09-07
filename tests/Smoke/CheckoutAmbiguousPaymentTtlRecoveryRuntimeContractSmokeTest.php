@@ -36,7 +36,7 @@ if (!str_contains($ambiguous, 'context.storageState({ path: storageStatePath })'
 $requiredControl = [
     "getenv('JZOPC_RUNTIME_ACTIVE_FIXTURE') !== '1'",
     '$shopRoot !== \'/tmp/prestashop\'',
-    "str_starts_with($modulePath, '/tmp/jzopc-active-fixture-')",
+    "str_starts_with(\$modulePath, '/tmp/jzopc-active-fixture-')",
     'SELECT COUNT(*) FROM `%sorders` WHERE id_cart = ?',
     'SET expires_at = UNIX_TIMESTAMP() - 1',
     'expires_at > UNIX_TIMESTAMP()',
