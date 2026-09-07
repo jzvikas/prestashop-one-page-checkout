@@ -14,11 +14,15 @@ The fixed-only Core lifecycle trace progressed through `actionValidateOrder`, `O
 
 PrestaShop 9.1.5 `PDF::render(false)` is still a broad Core-owned operation. It sets the language font, starts the page group, resolves the PDF template object and module template hook, renders header/pagination/content, writes the TCPDF page, renders the footer, and finally delegates to the configured PDF renderer output. The outer `PDF::render(false)` marker therefore does not yet identify which Core PDF subphase stalls.
 
+Exact-head Native Payment Runtime `34141650613` on `fd37bdd07696887d0a740464d7af7ba72a075144` did not reach Chromium. The temporary active fixture failed closed while installing the PDF trace with `Unexpected PrestaShop 9.1.5 PDF render source boundary.` Source review against the exact PrestaShop 9.1.5 `classes/pdf/PDF.php` showed that `$template = $this->getTemplateObject($object);` is legitimately present both in `PDF::render()` and later in `PDF::setFilename()`. Requiring that render semantic to be globally unique across the entire class was therefore an instrumentation preflight defect, not checkout evidence.
+
 ## Decision
 
-Add a second test-only instrumenter, `tests/Runtime/InstrumentCorePdfRenderTraceFixture.php`, that may modify only `/tmp/prestashop/classes/pdf/PDF.php` when the explicit active-fixture environment guard is present.
+Use the test-only instrumenter `tests/Runtime/InstrumentCorePdfRenderTraceFixture.php`, which may modify only `/tmp/prestashop/classes/pdf/PDF.php` when the explicit active-fixture environment guard is present.
 
-The instrumenter fails closed unless the expected PrestaShop 9.1.5 source landmarks are unique. It emits fixed structural markers only for:
+The instrumenter now fails closed on unique method anchors for `PDF::render()` and the following `getTemplateObject()` method, isolates only that render-method source range, and then requires every traced semantic to be unique inside the isolated render range. Replacements are also performed only inside that range before the untouched prefix/suffix of Core `PDF.php` are reassembled. This preserves strict source drift detection without incorrectly rejecting a valid same semantic in another Core method such as `setFilename()`.
+
+It emits fixed structural markers only for:
 
 - language-font setup;
 - page-group start;
@@ -43,6 +47,8 @@ The existence of the Core order remains insufficient to synthesize an order-conf
 
 ## Consequences
 
-The next failed free-order run should identify the first Core PDF phase entered without a matching end marker. A successful run must still prove the real Core confirmation redirect, exactly one order for the trusted cart, and cleared OPC transient state.
+The corrected fixture must first prove that the disposable PrestaShop 9.1.5 PDF trace can be installed. The next failed free-order browser run should then identify the first Core PDF phase entered without a matching end marker. A successful run must still prove the real Core confirmation redirect, exactly one order for the trusted cart, and cleared OPC transient state.
+
+The smoke contract explicitly rejects a return to global render-semantic uniqueness and requires method-scoped extraction/replacement. This is a diagnostic regression guard only; no production checkout/payment/order behavior changed.
 
 `INTEGRATION_SHELL_READY=false` remains required until this and the remaining payment/carrier/browser/release gates are genuinely executed successfully.
